@@ -1,4 +1,12 @@
-# CDCgov GitHub Organization Open Source Project Template
+# Overview
+
+This repo contains statistical tools to predict the uptake of immunizations (primarily vaccines and boosters). The three primary steps are 1) import data sets on past uptake and cast them into a standardize format, 2) fit a variety of models that both capture past uptake as well as project future uptake, and 3) evaluate model projections against realized uptake. All three steps are currenty under development.
+
+Multiple sources of past data may be available and may disagree with one another. Thus, a secondary aim is to provide models that scale projections from one data source to another, so that multiple data sources can be integrated.
+
+This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
+
+## CDCgov GitHub Organization Open Source Project Template
 
 **Template for clearance: This project serves as a template to aid projects in starting up and moving through clearance procedures. To start, create a new repository and implement the required [open practices](open_practices.md), train on and agree to adhere to the organization's [rules of behavior](rules_of_behavior.md), and [send a request through the create repo form](https://forms.office.com/Pages/ResponsePage.aspx?id=aQjnnNtg_USr6NJ2cHf8j44WSiOI6uNOvdWse4I-C2NUNk43NzMwODJTRzA4NFpCUk1RRU83RTFNVi4u) using language from this template as a Guide.**
 
@@ -16,10 +24,6 @@
 * [Disclaimer](DISCLAIMER.md)
 * [Contribution Notice](CONTRIBUTING.md)
 * [Code of Conduct](code-of-conduct.md)
-
-## Overview
-
-Describe the purpose of your project. Add additional sections as necessary to help collaborators and potential collaborators understand and use your project.
   
 ## Public Domain Standard Notice
 This repository constitutes a work of the United States Government and is not
