@@ -77,6 +77,13 @@ def LinearCumulativeUptakeModel(Model):
         # return those results
         raise NotImplementedError
 
+def evaluate(model, score, training_data, eval_data) -> float:
+    # - fit the model on the training data
+    # - predict over the dates in the eval data
+    # - score the prediction vs. actual eval data
+    # - return that
+    # unclear if this should be an Evaluator object that takes multiple models
+    #   and scores
 
 def get_nis(path) -> CumulativeUptakeData:
     # pull from eg https://data.cdc.gov/Flu-Vaccinations/Weekly-Cumulative-Influenza-Vaccination-Coverage-A/2v3t-r3np/about_data
