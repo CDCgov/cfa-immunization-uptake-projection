@@ -1,6 +1,7 @@
 import polars as pl
 import abc
 import typing
+from collections.abc import Callable
 
 
 class Data(pl.DataFrame, metaclass=abc.ABCMeta):
@@ -77,10 +78,11 @@ def LinearCumulativeUptakeModel(Model):
         # return those results
         raise NotImplementedError
 
-def evaluate(model, score, training_data, eval_data) -> float:
+def evaluate(model, score_fun: Callable[[Data, Data], float], training_data, eval_data) -> float:
     # - fit the model on the training data
     # - predict over the dates in the eval data
     # - score the prediction vs. actual eval data
+    #    (a score function takes empirical and predicted data, and returns a score)
     # - return that
     # unclear if this should be an Evaluator object that takes multiple models
     #   and scores
