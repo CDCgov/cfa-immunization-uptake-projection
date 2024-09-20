@@ -53,6 +53,31 @@ class Model(abc.ABC):
         pass
 
 
+def LinearCumulativeUptakeModel(Model):
+    def __init__(self):
+        # probably wants self.model = scikit learn regression model
+        pass
+
+    def fit(self, data: CumulativeUptakeData) -> typing.Self:
+        # check that we have the kind of data this model can accept
+        assert isinstance(data, CumulativeUptakeData)
+        data.validate()
+
+        # convert dates to time, pass that and estimates to scikit learn
+        # regression object
+        # self.model.fit(time, estimate)
+        raise NotImplementedError
+        return self
+
+    def predict(self, dates):
+        # convert dates to time? -- this might need to be a class or package
+        #  method, to make sure you're doing the date->time and time->date
+        #  conversions all the same way
+        # then use the scikit learn objects .predict() method
+        # return those results
+        raise NotImplementedError
+
+
 def get_nis(path) -> CumulativeUptakeData:
     # pull from eg https://data.cdc.gov/Flu-Vaccinations/Weekly-Cumulative-Influenza-Vaccination-Coverage-A/2v3t-r3np/about_data
     # maybe using pl.read_csv so you immediately get a pl.DataFrame
