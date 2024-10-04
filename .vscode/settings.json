@@ -1,8 +1,4 @@
 {
-    "cSpell.words": [
-        "ATSDR",
-        "CFPB",
-        "ISSO",
-        "cybersecurity"
-    ]
+  "cSpell.words": ["ATSDR", "CFPB", "ISSO", "cybersecurity"],
+  "python.REPL.enableREPLSmartSend": false
 }

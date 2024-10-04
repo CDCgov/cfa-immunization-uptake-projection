@@ -31,8 +31,7 @@
 #'
 #' @export
 #'
-build_projection_model <- function(data, drop_first = NULL) {
-
+build_projection_model2 <- function(data, drop_first = NULL, output = F) {
   if (is.null(drop_first)) {
     intervals <- diff(data$elapsed)
     if (abs(data$elapsed[1] - mean(intervals)) > (sd(intervals) + 1)) {
@@ -47,18 +46,15 @@ build_projection_model <- function(data, drop_first = NULL) {
     data <- data[-1, ]
   }
 
-  data$previous <- c(NA, data$daily[-nrow(data)])
-  data <- data[-1, ]
-  data$previous_std <- (data$previous - mean(data$previous)) / sd(data$previous)
-  data$elapsed_std <- (data$elapsed - mean(data$elapsed)) / sd(data$elapsed)
-  data$daily_std <- (data$daily - mean(data$daily)) / sd(data$daily)
-
   model <- brms::brm(daily_std ~ previous_std * elapsed_std,
-                     data = data,
-                     family = gaussian())
+    data = data,
+    family = gaussian()
+  )
 
-  print(summary(model))
-  plot(model)
+  if (output) {
+    print(summary(model))
+    plot(model)
+  }
 
   return(model)
 }
