@@ -1,5 +1,5 @@
-from function_development import get_nis
-from function_development import ProjectionSettings
+from all_objects import get_nis
+from all_objects import ProjectionSettings
 
 # https://data.cdc.gov/Flu-Vaccinations/Weekly-Cumulative-Influenza-Vaccination-Coverage-A/2v3t-r3np/about_data
 flu_2023 = get_nis(
