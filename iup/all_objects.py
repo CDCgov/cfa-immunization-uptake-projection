@@ -11,20 +11,37 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
     def validate(self) -> None:
         pass
 
+    def assert_columns_is_superset(self, columns: [str]):
+        """Assert this dataframe's columns is a superset of some set
+
+        Args:
+            columns (str]): Set of columns this dataframe should include
+
+        Raises:
+            RuntimeError: if a column is not found
+        """
+        for col in columns:
+            assert (
+                col in self.columns
+            ), f"Column {col} expected, not found among columns {self.columns}"
+
+    def assert_columns_type(self, columns: [str], dtype: pl.DataType):
+        for col in columns:
+            assert (
+                self[col].dtype == dtype
+            ), f"Column {col} should be type {dtype}, instead is {self[col].dtype}"
+
 
 class IncidentUptakeData(UptakeData):
     def validate(self):
-        assert set(self.columns).issuperset(
-            {"region", "date", "season", "elapsed", "interval", "estimate", "previous"}
-        ), "At least one essential column is missing."
-        assert self["date"].dtype.is_temporal(), "Column 'date' is not temporal."
-        assert all(
-            self[x].dtype == pl.Utf8 for x in ["region", "season"]
-        ), "Column 'region' and/or 'season' is not a string."
-        assert all(
-            self[x].dtype.is_numeric()
-            for x in ["elapsed", "interval", "estimate", "previous"]
-        ), "Column 'elapsed', 'interval', 'estimate' and/or 'previous' is not numeric."
+        self.assert_columns_is_superset(
+            ["region", "date", "season", "elapsed", "interval", "estimate", "previous"]
+        )
+        self.assert_columns_type(["date"], pl.Date)
+        self.assert_columns_type(["region", "season"], pl.Utf8)
+        self.assert_columns_type(
+            ["elapsed", "interval", "estimate", "previous"], pl.Float64
+        )
 
 
 class IncidentUptakeProjection(UptakeData):
