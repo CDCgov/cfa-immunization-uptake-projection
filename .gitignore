@@ -1,0 +1,38 @@
+# Data
+*.csv
+*.tsv
+*.parquet
+*.dat
+*.bin
+*.xls
+*.xlsx
+
+# Documents
+*.doc
+*.docx
+*.htm
+*.html
+*.ppt
+*.pptx
+*.pdf
+
+# Images
+*.bmp
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.png
+
+# Compressed archives
+*.gz
+*.tar
+*.tgz
+*.rar
+*.zip
+
+# Nuisance files
+*.json
+*.Identifier
+*.pyc
+
