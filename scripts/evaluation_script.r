@@ -49,8 +49,10 @@ mspe_df %>%
     mutate(forecast_date = forecast_date + as.Date("1970-01-01")) %>%
     filter(mspe < 1) %>%
     ggplot() +
-    geom_line(aes(x = forecast_date, y = mspe)) +
+    geom_point(aes(x = forecast_date, y = mspe)) +
+    xlab("Forecast date") +
+    ylab("MSPE") +
     theme_bw()
-
+ggsave("mspe.jpeg", width = 4, height = 3, units = "in")
 # Note for future upgrade: seperate model fitting from plotting and evaluation.
 # Repeatedly fitting the model to plot and evaluate is not time-efficient.
