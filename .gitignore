@@ -33,6 +33,6 @@
 
 # Nuisance files
 *.json
-*.Identifier
+* Zone.Identifier
 *.pyc
 
