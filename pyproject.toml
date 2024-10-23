@@ -10,6 +10,7 @@ python = "^3.10"
 polars = "^1.7.1"
 numpy = "^2.1.1"
 datetime = "^5.5"
+scikit-learn = "^1.5.2"
 
 
 [build-system]
