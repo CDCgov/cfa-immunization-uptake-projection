@@ -12,6 +12,7 @@ numpy = "^2.1.1"
 datetime = "^5.5"
 scikit-learn = "^1.5.2"
 altair = "^5.4.1"
+vl-convert-python = "^1.7.0"
 
 
 [build-system]
