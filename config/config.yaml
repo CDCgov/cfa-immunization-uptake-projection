@@ -1,0 +1,19 @@
+# The data sets to load and how to interpret them
+data:
+  data_set_1:
+    path: NIS_Flu_2023.csv
+    region_col: Geographic_Name
+    date_col: Current_Season_Week_Ending
+    estimate_col: ND_Weekly_Estimate
+    rollout: 2023-09-01
+    filters:
+        Geographic_Name: National
+        Demographic_Level: Overall
+        Demographic_Name: 18+ years
+        Indicator_Category_Label: Received a vaccination
+
+# The timeframe over which to generate projections
+timeframe:
+  start: 2024-02-01
+  end: 2024-04-30
+  interval: 7d
