@@ -1,8 +1,6 @@
-
 from iup.get_uptake_data import get_uptake_data
-from iup.get_projections import z_scale
-from iup.get_projections import inv_z_scale
-from iup.get_projections import get_projection
+from iup.get_projections import get_projections
+from iup.plot_projections import plot_projections
 
 # Load 2022 NIS data for USA
 nis_usa_2022 = get_uptake_data(
@@ -30,21 +28,23 @@ nis_usa_2023 = get_uptake_data(
     filters={"time_type": "Weekly", "group_name": "Overall"},
 )
 
-# 2022 NIS data as training, to sequentially predict 2023 uptake #
+# 2022 NIS data as training, to sequentially (by 1 day) predict 2023 uptake #
 rt_pred_2023 = []
 
-for i in range(3):
+for i in range(len(nis_usa_2023) - 1):
+    pred_2023 = get_projections(
+        train_data=nis_usa_2022,
+        data_to_initiate=nis_usa_2023[i],
+        end_date=nis_usa_2023["date"][len(nis_usa_2023) - 1],
+    )
 
-    pred_2023 = get_projection(
-        train_data = nis_usa_2022, 
-        data_to_initiate = nis_usa_2023[i], 
-        end_date = nis_usa_2023['date'][len(nis_usa_2023)-1])
-    
     rt_pred_2023.append(pred_2023)
 
-
-
-
-
-
-
+# plot the weekly-initiated projections with observed data #
+plot_projections(
+    obs_data=nis_usa_2023,
+    pred_data_list=rt_pred_2023,
+    n_columns=6,
+    pic_loc="output/",
+    pic_name="weekly_predicted_uptake.png",
+)

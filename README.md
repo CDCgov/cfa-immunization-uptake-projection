@@ -15,6 +15,10 @@ This approach is applicable to seasonal adult immunizations. Each year, the upta
 
   - `udsf-9v7b` - 2022/2023 NIS
   - `pakc-hru3` - 2023/2024 NIS
+  
+## Getting started
+
+- `scripts/evaluation_script.py` will download data, fit models, and produce `output/weekly_predicted_uptake.png`
 
 ## CDCgov GitHub Organization Open Source Project Template
 

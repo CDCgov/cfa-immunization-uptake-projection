@@ -89,7 +89,7 @@ def inv_z_scale(
 
 
 # real-time projection 
-def get_projection(
+def get_projections(
         train_data, 
         data_to_initiate, 
         end_date,
@@ -198,12 +198,17 @@ def get_projection(
 
         raw_data = raw_data.with_columns(
                 daily = pl.lit(fitted_daily)
+        ).with_columns(
+            cumulative = pl.col('cumulative') + pl.col('previous')
         )
 
         pred_data = pl.concat([pred_data, 
                             raw_data],
                                 how = 'vertical')
 
+    pred_data = pred_data.select(
+        'state','date','elapsed','cumulative','daily','previous'
+    )
     return(pred_data)
     
 
