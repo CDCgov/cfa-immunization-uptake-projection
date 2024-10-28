@@ -1,6 +1,7 @@
+from iup.get_uptake_data import get_uptake_data
+from iup.build_projection_model import build_projection_model
+from iup.make_projections import make_projections
 
-
-# %%
 # Load 2022 IIS data for USA
 iis_usa_2022 = get_uptake_data(
     file_name="https://data.cdc.gov/api/views/unsk-b7fc/rows.csv?accessType=DOWNLOAD",
@@ -12,7 +13,6 @@ iis_usa_2022 = get_uptake_data(
     start_date="9/2/2022",
 )
 
-# %%
 # Load 2022 NIS data for USA
 nis_usa_2022 = get_uptake_data(
     file_name="https://data.cdc.gov/api/views/akkj-j5ru/rows.csv?accessType=DOWNLOAD",
@@ -27,8 +27,6 @@ nis_usa_2022 = get_uptake_data(
     },
 )
 
-# %%
-
 # Load 2023 NIS data for USA
 nis_usa_2023 = get_uptake_data(
     file_name="data/NIS_2023-24.csv",
@@ -41,7 +39,6 @@ nis_usa_2023 = get_uptake_data(
     filters={"time_type": "Weekly", "group_name": "Overall"},
 )
 
-# %%
 # Build and use a forward projection model for the IIS 2022 data
 iis_usa_2022_model = build_projection_model(iis_usa_2022)
 iis_usa_2022_proj = make_projections(

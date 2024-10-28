@@ -10,7 +10,22 @@ All three steps are currently under development.
 
 Multiple sources of past data may be available and may disagree with one another. Thus, a secondary aim is to provide models that scale projections from one data source to another, so that multiple data sources can be integrated.
 
+## Data sources
+
+### Public Data
+
+- Weekly cumulatve COVID-19 vaccination coverage and intent among adults 18 years and older
+  [Dictionary](https://data.cdc.gov/Vaccinations/Weekly-Intent-for-Vaccination-and-Cumulative-Perce/pakc-hru3/about_data)
+
+  - `udsf-9v7b` - 2022/2023 NIS
+  - `pakc-hru3` - 2023/2024 NIS
+  
+## Getting started
+
+- `scripts/evaluation_script.py` will download data, fit models, and produce `output/weekly_predicted_uptake.png`
+
 This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
+
 
 ## Project admins
 
