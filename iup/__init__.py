@@ -25,28 +25,14 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
                 self[col].dtype == dtype
             ), f"Column {col} should be {dtype} but is {self[col].dtype}"
 
-    @staticmethod
-    @abc.abstractmethod
-    def split_train_test(uptake_data_list, start_date, side):
-        pass
-
     def with_columns(self, *args, **kwargs):
         orig_class = type(self)
         result = super().with_columns(*args, **kwargs)
         return orig_class(result)
 
-
-class IncidentUptakeData(UptakeData):
-    def validate(self):
-        self.assert_columns_found(
-            ["region", "season", "date", "elapsed", "interval", "estimate"]
-        )
-        self.assert_columns_type(["date"], pl.Date)
-        self.assert_columns_type(["region", "season"], pl.Utf8)
-        self.assert_columns_type(["elapsed", "interval", "estimate"], pl.Float64)
-
     @staticmethod
     def split_train_test(uptake_data_list, start_date, side):
+        orig_class = type(uptake_data_list[0])
         if side == "train":
             out = (
                 pl.concat(uptake_data_list)
@@ -60,9 +46,19 @@ class IncidentUptakeData(UptakeData):
                 .filter(pl.col("date") >= start_date)
             )
 
-        out = IncidentUptakeData(out)
+        out = orig_class(out)
 
         return out
+
+
+class IncidentUptakeData(UptakeData):
+    def validate(self):
+        self.assert_columns_found(
+            ["region", "season", "date", "elapsed", "interval", "estimate"]
+        )
+        self.assert_columns_type(["date"], pl.Date)
+        self.assert_columns_type(["region", "season"], pl.Utf8)
+        self.assert_columns_type(["elapsed", "interval", "estimate"], pl.Float64)
 
     def get_previous_uptake(self) -> Self:
         self = self.with_columns(previous=pl.col("estimate").shift(1).over("region"))
@@ -140,25 +136,6 @@ class CumulativeUptakeData(UptakeData):
         self = IncidentUptakeData(self)
 
         return self
-
-    @staticmethod
-    def split_train_test(uptake_data_list, start_date, side):
-        if side == "train":
-            out = (
-                pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") < start_date)
-            )
-        if side == "test":
-            out = (
-                pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") >= start_date)
-            )
-
-        out = CumulativeUptakeData(out)
-
-        return out
 
 
 def get_nis(
