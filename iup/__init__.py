@@ -30,6 +30,11 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
     def split_train_test(uptake_data_list, start_date, side):
         pass
 
+    def with_columns(self, *args, **kwargs):
+        orig_class = type(self)
+        result = super().with_columns(*args, **kwargs)
+        return orig_class(result)
+
 
 class IncidentUptakeData(UptakeData):
     def validate(self):
