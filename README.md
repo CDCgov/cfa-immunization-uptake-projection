@@ -1,10 +1,14 @@
-# Overview
+# Immunization uptake projections
 
-This repo contains statistical tools to predict the uptake of immunizations (primarily vaccines and boosters). The three primary steps are 1) import data sets on past uptake and cast them into a standardize format, 2) fit a variety of models that both capture past uptake as well as project future uptake, and 3) evaluate model projections against realized uptake. All three steps are currenty under development.
+This repo contains statistical tools to predict the uptake of immunizations (primarily vaccines and boosters). The three primary steps are:
+
+1. Import data sets on past uptake and cast them into a standardize format
+2. Fit a variety of models that both capture past uptake as well as project future uptake, and
+3. Evaluate model projections against realized uptake.
+
+All three steps are currently under development.
 
 Multiple sources of past data may be available and may disagree with one another. Thus, a secondary aim is to provide models that scale projections from one data source to another, so that multiple data sources can be integrated.
-
-This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
 
 ## Data sources
 
@@ -20,24 +24,16 @@ This approach is applicable to seasonal adult immunizations. Each year, the upta
 
 - `scripts/evaluation_script.py` will download data, fit models, and produce `output/weekly_predicted_uptake.png`
 
-## CDCgov GitHub Organization Open Source Project Template
+This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
 
-**Template for clearance: This project serves as a template to aid projects in starting up and moving through clearance procedures. To start, create a new repository and implement the required [open practices](open_practices.md), train on and agree to adhere to the organization's [rules of behavior](rules_of_behavior.md), and [send a request through the create repo form](https://forms.office.com/Pages/ResponsePage.aspx?id=aQjnnNtg_USr6NJ2cHf8j44WSiOI6uNOvdWse4I-C2NUNk43NzMwODJTRzA4NFpCUk1RRU83RTFNVi4u) using language from this template as a Guide.**
 
-**General disclaimer** This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm). GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
+## Project admins
 
-## Access Request, Repo Creation Request
+- Edward Schrom (CDC/CFA/Predict) <tec0@cdc.gov>
 
-- [CDC GitHub Open Project Request Form](https://forms.office.com/Pages/ResponsePage.aspx?id=aQjnnNtg_USr6NJ2cHf8j44WSiOI6uNOvdWse4I-C2NUNk43NzMwODJTRzA4NFpCUk1RRU83RTFNVi4u) _[Requires a CDC Office365 login, if you do not have a CDC Office365 please ask a friend who does to submit the request on your behalf. If you're looking for access to the CDCEnt private organization, please use the [GitHub Enterprise Cloud Access Request form](https://forms.office.com/Pages/ResponsePage.aspx?id=aQjnnNtg_USr6NJ2cHf8j44WSiOI6uNOvdWse4I-C2NUQjVJVDlKS1c0SlhQSUxLNVBaOEZCNUczVS4u).]_
+## General Disclaimer
 
-## Related documents
-
-- [Open Practices](open_practices.md)
-- [Rules of Behavior](rules_of_behavior.md)
-- [Thanks and Acknowledgements](thanks.md)
-- [Disclaimer](DISCLAIMER.md)
-- [Contribution Notice](CONTRIBUTING.md)
-- [Code of Conduct](code-of-conduct.md)
+This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm). GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
 
 ## Public Domain Standard Notice
 
@@ -51,8 +47,7 @@ copyright interest.
 
 ## License Standard Notice
 
-The repository utilizes code licensed under the terms of the Apache Software
-License and therefore is licensed under ASL v2 or later.
+This repository is licensed under ASL v2 or later.
 
 This source code in this repository is free: you can redistribute it and/or modify it under
 the terms of the Apache Software License version 2, or (at your option) any
@@ -71,8 +66,8 @@ The source code forked from other open source projects will inherit its license.
 
 This repository contains only non-sensitive, publicly available data and
 information. All material and community participation is covered by the
-[Disclaimer](DISCLAIMER.md)
-and [Code of Conduct](code-of-conduct.md).
+[Disclaimer](https://github.com/CDCgov/template/blob/master/DISCLAIMER.md)
+and [Code of Conduct](https://github.com/CDCgov/template/blob/master/code-of-conduct.md).
 For more information about CDC's privacy policy, please visit [http://www.cdc.gov/other/privacy.html](https://www.cdc.gov/other/privacy.html).
 
 ## Contributing Standard Notice
@@ -90,10 +85,6 @@ CDC including this GitHub page may be subject to applicable federal law, includi
 
 ## Records Management Standard Notice
 
-This repository is not a source of government records, but is a copy to increase
+This repository is not a source of government records but is a copy to increase
 collaboration and collaborative potential. All government records will be
 published through the [CDC web site](http://www.cdc.gov).
-
-## Additional Standard Notices
-
-Please refer to [CDC's Template Repository](https://github.com/CDCgov/template) for more information about [contributing to this repository](https://github.com/CDCgov/template/blob/main/CONTRIBUTING.md), [public domain notices and disclaimers](https://github.com/CDCgov/template/blob/main/DISCLAIMER.md), and [code of conduct](https://github.com/CDCgov/template/blob/main/code-of-conduct.md).
