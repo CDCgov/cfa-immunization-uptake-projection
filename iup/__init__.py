@@ -34,13 +34,11 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
 class IncidentUptakeData(UptakeData):
     def validate(self):
         self.assert_columns_found(
-            ["region", "season", "date", "elapsed", "interval", "estimate", "previous"]
+            ["region", "season", "date", "elapsed", "interval", "estimate"]
         )
         self.assert_columns_type(["date"], pl.Date)
         self.assert_columns_type(["region", "season"], pl.Utf8)
-        self.assert_columns_type(
-            ["elapsed", "interval", "estimate", "previous"], pl.Float64
-        )
+        self.assert_columns_type(["elapsed", "interval", "estimate"], pl.Float64)
 
     @staticmethod
     def split_train_test(uptake_data_list, start_date, side):
@@ -60,6 +58,11 @@ class IncidentUptakeData(UptakeData):
         out = IncidentUptakeData(out)
 
         return out
+
+    def get_previous_uptake(self) -> Self:
+        self = self.with_columns(previous=pl.col("estimate").shift(1).over("region"))
+
+        return self
 
     def trim_outlier_intervals(self) -> Self:
         self = self.sort("date").with_row_count("index")
@@ -127,7 +130,6 @@ class CumulativeUptakeData(UptakeData):
                 .over("region")
             )
             .with_columns(estimate=(pl.col("estimate") / pl.col("interval")))
-            .with_columns(previous=pl.col("estimate").shift(1).over("region"))
         )
 
         self = IncidentUptakeData(self)
@@ -237,6 +239,8 @@ class LinearIncidentUptakeModel(UptakeModel):
                 .alias("last_cumulative"),
             ]
         )
+
+        data = data.get_previous_uptake()
 
         data = IncidentUptakeData(  # Not sure why I must reinforce type here
             data.trim_outlier_intervals().with_columns(
