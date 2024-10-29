@@ -31,6 +31,18 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
         return orig_class(result)
 
     @staticmethod
+    def date_to_season(date_col: pl.Expr) -> pl.Expr:
+        year1 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(-1).otherwise(0)
+        ).cast(pl.Utf8)
+        year2 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(0).otherwise(1)
+        ).cast(pl.Utf8)
+        season = pl.concat_str([year1, year2], separator="/")
+
+        return season
+
+    @staticmethod
     def split_train_test(uptake_data_list, start_date, side):
         orig_class = type(uptake_data_list[0])
         if side == "train":
@@ -109,10 +121,7 @@ class CumulativeUptakeData(UptakeData):
     def to_incident(self) -> IncidentUptakeData:
         out = (
             self.with_columns(
-                season=(
-                    pl.col("date").dt.year()
-                    + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
-                ).cast(pl.Utf8),
+                season=pl.col("date").pipe(self.date_to_season),
                 estimate=pl.col("estimate").diff().over("region"),
                 elapsed=(pl.col("date") - pl.col("date").first())
                 .over("region")
