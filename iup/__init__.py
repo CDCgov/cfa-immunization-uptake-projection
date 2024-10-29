@@ -82,7 +82,7 @@ class IncidentUptakeData(UptakeData):
         return self
 
     def to_cumulative(self, last_cumulative):
-        self = (
+        out = (
             self.select(["region", "date", "estimate"])
             .sort("date")
             .with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
@@ -91,9 +91,9 @@ class IncidentUptakeData(UptakeData):
             .drop("last_cumulative")
         )
 
-        self = CumulativeUptakeData(self)
+        out = CumulativeUptakeData(out)
 
-        return self
+        return out
 
 
 class CumulativeUptakeData(UptakeData):
@@ -107,7 +107,7 @@ class CumulativeUptakeData(UptakeData):
         ).all(), "Cumulative uptake estimates cannot be negative."
 
     def to_incident(self) -> IncidentUptakeData:
-        self = (
+        out = (
             self.with_columns(
                 season=(
                     pl.col("date").dt.year()
@@ -133,9 +133,9 @@ class CumulativeUptakeData(UptakeData):
             .with_columns(estimate=(pl.col("estimate") / pl.col("interval")))
         )
 
-        self = IncidentUptakeData(self)
+        out = IncidentUptakeData(out)
 
-        return self
+        return out
 
 
 def get_nis(
