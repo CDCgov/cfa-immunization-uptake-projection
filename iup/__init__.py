@@ -58,7 +58,6 @@ class IncidentUptakeData(UptakeData):
             )
 
         out = IncidentUptakeData(out)
-        out.validate()
 
         return out
 
