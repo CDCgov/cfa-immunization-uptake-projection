@@ -1,5 +1,86 @@
+import polars as pl
 import altair as alt
 
+# get mspe #
+def get_mspe(
+        data_df,
+        pred_df,
+        var
+):
+    """
+    Calculate the mean squared prediction error between the observed
+    data and prediction when both are available. 
+
+    Parameters:
+    --------------
+    data_df: polars.DataFrame
+        The observed vaccine uptake. Must include `date` and the variable-
+        of-interest (var).
+    pred_df: polars.DataFrame
+        The predicted daily uptake. Must include `date` and the variable-
+        of-interest (var).
+    var: string
+        The name of the variable-of-interest.
+    
+    Return:
+    -------------
+    A polars.DataFrame with the MSPE and the date of initializing forecast. 
+    
+    """
+    
+    
+    mspe = data_df.join(
+            pred_df, 
+            on = 'date',
+            how = 'inner'
+        ).with_columns(
+            spe = (pl.col(var) - pl.col(f"{var}_right"))**2
+        ).with_columns(
+            mspe = pl.col('spe').mean(),
+        ).filter(
+            pl.col('date') == pl.col('date').min(),
+        ).select(
+            'date','mspe'
+        )
+    
+    return mspe
+
+
+# get end-of-season total uptake #
+
+def get_eos(
+        pred_df,
+        var = 'cumulative'
+):
+    """
+    Get the `var` on the last date in the `pred_df`. In this function, 
+    it is to get the predicted total uptake at the end of the season.
+    
+    Parameters:
+    --------------
+
+    pred_df: polars.DataFrame
+        The predicted daily uptake. Must include `date` and the variable-
+        of-interest (var).
+    var: string
+        The name of the variable-of-interest.
+    
+    Return:
+    -------------
+    A polars.DataFrame with the variable-of-interest (end-of-season uptake)
+    on the last date and the last date. 
+    
+    """
+    
+    eos = pred_df.filter(
+        pl.col('date') == pl.col('date').max()
+    ).rename(
+        {'date':'end_date'}
+    ).select(var,'end_date')
+    
+    return eos
+
+# plot projections #
 def plot_projections(
         obs_data, 
         pred_data_list,
