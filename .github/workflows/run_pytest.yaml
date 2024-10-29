@@ -24,4 +24,5 @@ jobs:
 
       - name: Test
         run: |
+          poetry install
           poetry run pytest -v
