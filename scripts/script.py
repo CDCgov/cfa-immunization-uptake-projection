@@ -1,8 +1,13 @@
 import yaml
+import sys
+
+sys.path.append("/home/tec0/cfa-immunization-uptake-projection")
 import iup
 
 # Access the YAML config file
-with open("config.yaml", "r") as file:
+with open(
+    "/home/tec0/cfa-immunization-uptake-projection/config/config.yaml", "r"
+) as file:
     config = yaml.safe_load(file)
 
 # List of the cumulative data sets described in the yaml

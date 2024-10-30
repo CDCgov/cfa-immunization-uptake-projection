@@ -94,14 +94,14 @@ class IncidentUptakeData(UptakeData):
 
         return self
 
-    def to_cumulative(self, init_cumulative=None):
+    def to_cumulative(self, last_cumulative=None):
         out = self.with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
 
-        if init_cumulative is not None:
+        if last_cumulative is not None:
             out = (
-                out.join(init_cumulative, on="region")
-                .with_columns(estimate=pl.col("estimate") + pl.col("init_cumulative"))
-                .drop("init_cumulative")
+                out.join(last_cumulative, on="region")
+                .with_columns(estimate=pl.col("estimate") + pl.col("last_cumulative"))
+                .drop("last_cumulative")
             )
 
         out = CumulativeUptakeData(out)
@@ -311,6 +311,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 interval=pl.when(pl.col("interval").is_null())
                 .then(pl.col("last_interval"))
                 .otherwise(pl.col("interval")),
+                daily=pl.lit(0),
                 estimate=pl.lit(0),
                 previous=pl.lit(0),
             )
@@ -362,6 +363,6 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         self.cumulative_projections = self.incident_projection.to_cumulative(
             self.start.select(["region", "last_cumulative"])
-        )
+        ).select(["region", "date", "estimate"])
 
         return self

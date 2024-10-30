@@ -1,17 +1,16 @@
 # The data sets to load and how to interpret them
 data:
   data_set_1:
-    path: NIS_Flu_2023.csv
-    region_col: Geographic_Name
-    date_col: Current_Season_Week_Ending
-    estimate_col: ND_Weekly_Estimate
-    date_format: "%m/%d/%Y %H:%M"
+    path: /home/tec0/cfa-immunization-uptake-projection/data/NIS_2023-24.csv
+    region_col: geography
+    date_col: date
+    estimate_col: estimate
+    date_format: "%m/%d/%Y" # For example flu data, use "%m/%d/%Y %H:%M"
     rollout: 2023-09-01
     filters:
-        Geographic_Name: National
-        Demographic_Level: Overall
-        Demographic_Name: 18+ years
-        Indicator_Category_Label: Received a vaccination
+        geography: National
+        group_name: Overall
+        indicator: booster
 
 # The timeframe over which to generate projections
 timeframe:
