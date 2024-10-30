@@ -247,12 +247,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             daily_std=pl.col("daily").pipe(standardize),
         )
 
-        self.previous_mean = data["previous"].mean()
-        self.previous_sdev = data["previous"].std()
-        self.elapsed_mean = data["elapsed"].mean()
-        self.elapsed_sdev = data["elapsed"].std()
-        self.daily_mean = data["daily"].mean()
-        self.daily_sdev = data["daily"].std()
+        self.standards = {
+            "previous": {
+                "mean": data["previous"].mean(),
+                "std": data["previous"].std(),
+            },
+            "elapsed": {"mean": data["elapsed"].mean(), "std": data["elapsed"].std()},
+            "daily": {"mean": data["daily"].mean(), "std": data["daily"].std()},
+        }
 
         self.x = (
             data.select(["previous_std", "elapsed_std"])
@@ -326,17 +328,25 @@ class LinearIncidentUptakeModel(UptakeModel):
             for i in range(proj.shape[0] - 1):
                 x = np.column_stack(
                     (
-                        standardize(proj[i], self.previous_mean, self.previous_sdev),
+                        standardize(
+                            proj[i],
+                            self.standards["previous"]["mean"],
+                            self.standards["previous"]["std"],
+                        ),
                         standardize(
                             self.incident_projection["elapsed"][i],
-                            self.elapsed_mean,
-                            self.elapsed_sdev,
+                            self.standards["elapsed"]["mean"],
+                            self.standards["elapsed"]["mean"],
                         ),
                     )
                 )
                 x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
                 y = self.model.predict(x)
-                proj[i + 1] = unstandardize(y[(0, 0)], self.daily_mean, self.daily_sdev)
+                proj[i + 1] = unstandardize(
+                    y[(0, 0)],
+                    self.standards["daily"]["mean"],
+                    self.standards["daily"]["std"],
+                )
 
             self.incident_projection = self.incident_projection.with_columns(
                 daily=pl.when(pl.col("region") == self.start["region"][r])
