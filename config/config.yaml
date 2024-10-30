@@ -5,6 +5,7 @@ data:
     region_col: Geographic_Name
     date_col: Current_Season_Week_Ending
     estimate_col: ND_Weekly_Estimate
+    date_format: "%m/%d/%Y %H:%M"
     rollout: 2023-09-01
     filters:
         Geographic_Name: National

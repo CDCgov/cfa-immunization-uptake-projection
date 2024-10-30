@@ -147,50 +147,75 @@ class CumulativeUptakeData(UptakeData):
         return out
 
 
-def get_nis(
-    data_path,
-    region_col,
-    date_col,
-    estimate_col,
-    rollout,
+def parse_nis(
+    path: str,
+    region_col: str,
+    date_col: str,
+    estimate_col: str,
+    date_format: str,
+    rollout: dt.date,
     filters=None,
 ) -> CumulativeUptakeData:
-    out = (
-        (pl.read_csv(data_path))
-        .with_columns(estimate=pl.col(estimate_col).cast(pl.Float64, strict=False))
-        .drop_nulls(subset=["estimate"])
-    )
+    frame = fetch_nis(path)
 
     if filters is not None:
-        filter_expr = pl.lit(True)
-        for k, v in filters.items():
-            filter_expr &= pl.col(k).is_in(pl.lit(v))
-        out = out.filter(filter_expr)
+        frame = apply_filters(frame, filters)
 
-    out = (
-        out.with_columns(
+    frame = select_columns(frame, region_col, date_col, estimate_col, date_format)
+
+    frame = insert_rollout(frame, rollout)
+
+    frame = CumulativeUptakeData(frame)
+
+    return frame
+
+
+def fetch_nis(path) -> pl.DataFrame:
+    return pl.read_csv(path)
+
+
+def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
+    filter_expr = pl.lit(True)
+    for k, v in filters.items():
+        filter_expr &= pl.col(k).is_in(pl.lit(v))
+    frame = frame.filter(filter_expr)
+
+    return frame
+
+
+def select_columns(
+    frame: pl.DataFrame,
+    region_col: str,
+    date_col: str,
+    estimate_col: str,
+    date_format: str,
+) -> pl.DataFrame:
+    frame = (
+        frame.with_columns(
+            estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
             region=pl.col(region_col),
-            date=pl.col(date_col).str.to_date(
-                "%m/%d/%Y %H:%M"
-            ),  # "%m/%d/%Y %I:%M:%S %p"
+            date=pl.col(date_col).str.to_date(date_format),
         )
+        .drop_nulls(subset=["estimate"])
         .select(["region", "date", "estimate"])
         .sort("region", "date")
     )
 
-    unique_regions = out["region"].unique()
+    return frame
+
+
+def insert_rollout(frame: pl.DataFrame, rollout: dt.date) -> pl.DataFrame:
+    unique_regions = frame["region"].unique()
     rollout_rows = pl.DataFrame(
         {
             "region": unique_regions,
-            "date": [rollout for _ in range(len(unique_regions))],
-            "estimate": [0.0 for _ in range(len(unique_regions))],
+            "date": rollout,
+            "estimate": 0.0,
         }
     )
-    out = out.vstack(rollout_rows).unique(maintain_order=True).sort("date")
+    frame = frame.vstack(rollout_rows).unique(maintain_order=True).sort("date")
 
-    out = CumulativeUptakeData(out)  # rollout.str.to_datetime("%Y-%m-%d"))
-
-    return out
+    return frame
 
 
 def standardize(x, mn=None, sd=None):
