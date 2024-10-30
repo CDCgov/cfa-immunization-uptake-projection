@@ -5,7 +5,7 @@ data:
     region_col: geography
     date_col: date
     estimate_col: estimate
-    date_format: "%m/%d/%Y" # For example flu data, use "%m/%d/%Y %H:%M"
+    date_format: "%m/%d/%Y"
     rollout: 2023-09-01
     filters:
         geography: National

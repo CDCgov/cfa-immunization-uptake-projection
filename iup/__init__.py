@@ -7,33 +7,58 @@ from typing_extensions import Self
 
 
 class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
+    """
+    Abstract class for different forms of uptake data.
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize an UptakeData object as a polars data frame,
+        plus validation.
+        """
         super().__init__(*args, **kwargs)
         self.validate()
 
     def validate(self):
-        self.assert_columns_found(["region", "date", "estimate"])
+        """
+        Validate that an UptakeData object has the three key columns:
+        date, grouping factors, and an uptake estimate (% of population).
+        """
+        self.assert_columns_found(["date", "region", "estimate"])
         self.assert_columns_type(["date"], pl.Date)
         self.assert_columns_type(["region"], pl.Utf8)
         self.assert_columns_type(["estimate"], pl.Float64)
 
     def assert_columns_found(self, columns):
+        """
+        Verify that expected columns are found.
+        """
         for col in columns:
             assert col in self.columns, f"Column {col} is expected but not found."
 
     def assert_columns_type(self, columns, dtype):
+        """
+        Verify that columns have the expected type.
+        """
         for col in columns:
             assert (
                 self[col].dtype == dtype
             ), f"Column {col} should be {dtype} but is {self[col].dtype}"
 
     def with_columns(self, *args, **kwargs):
+        """
+        Copy of polars with_columns that returns the same subclass as it's given.
+        """
         orig_class = type(self)
         result = super().with_columns(*args, **kwargs)
         return orig_class(result)
 
     @staticmethod
     def date_to_season(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract season column from a date column, as polars expressions.
+        Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
+        """
         year1 = (
             date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(-1).otherwise(0)
         ).cast(pl.Utf8)
@@ -46,18 +71,33 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
 
     @staticmethod
     def date_to_interval(date_col: pl.Expr) -> pl.Expr:
-        interval = date_col.sort().diff().dt.total_days().cast(pl.Float64)
+        """
+        Extract a time interval column from a date column, as polars expressions.
+        Input dates must be chronologically sorted. Get the number of days between each.
+        """
+        interval = date_col.diff().dt.total_days().cast(pl.Float64)
 
         return interval
 
     @staticmethod
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract a time elapsed column from a date column, as polars expressions.
+        Input dates must be chronologically sorted. Get the number of days since the first date.
+        """
         elapsed = (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
 
         return elapsed
 
     @staticmethod
-    def split_train_test(uptake_data_list, start_date, side):
+    def split_train_test(uptake_data_list, start_date: dt.date, side: str):
+        """
+        Concatenate a list of UptakeData objects in chronological order.
+        Then split it at the start date, when projections should begin.
+
+        Dates before the start date are used for model training.
+        Dates after the start date (if any) are used for testing vs. projections.
+        """
         orig_class = type(uptake_data_list[0])
         if side == "train":
             out = (
@@ -78,7 +118,27 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
 
 
 class IncidentUptakeData(UptakeData):
+    """
+    Subclass of UptakeData for incident uptake.
+    """
+
     def trim_outlier_intervals(self) -> Self:
+        """
+        Remove report dates with intervals that are too large,
+        which can create problematic outliers.
+        This occurs between rollout and the first report.
+
+        The first date (index 0) is always rollout.
+        The first report is the second date (index 1).
+
+        If the first report's interval is 1+ std dev bigger than the avg interval,
+        remove the first three dates (rollout, first report, and second report).
+        (The second report is removed because its previous report is the first, so
+        the impact of the first report being an outlier impacts the second report).
+
+        If the first report is not an outlier, it still must be removed,
+        because its previous report is 0 from rollout, which itself is an outlier.
+        """
         self = self.sort("date")
         unique_regions = self["region"].unique()
         sub_frames = []
@@ -95,6 +155,12 @@ class IncidentUptakeData(UptakeData):
         return self
 
     def to_cumulative(self, last_cumulative=None):
+        """
+        Convert incident uptake to cumulative via cumulative sums.
+        Because the first few dates of incident uptake may have been removed,
+        the cumulative sum may not reflect the entire cumulative uptake.
+        To fix this, the last cumulative uptake before truncation may be supplied.
+        """
         out = self.with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
 
         if last_cumulative is not None:
@@ -110,7 +176,14 @@ class IncidentUptakeData(UptakeData):
 
 
 class CumulativeUptakeData(UptakeData):
+    """
+    Subclass of UptakeData for cumulative uptake.
+    """
+
     def to_incident(self) -> IncidentUptakeData:
+        """
+        Convert cumulative uptake to incident via successive differences.
+        """
         out = self.with_columns(
             estimate=pl.col("estimate").diff().over("region").fill_null(0)
         )
@@ -129,6 +202,18 @@ def parse_nis(
     rollout: dt.date,
     filters=None,
 ) -> CumulativeUptakeData:
+    """
+    Load and parse NIS data from a source file or address.
+
+    Filters can be applied to extract only relevant rows.
+    Filters are in a dictionary, with column names as keys,
+    and a list of the acceptable entries in those columns as values.
+
+    The crucial columns (date, grouping factors, and uptake estimate)
+    are selected and the remaining columns are dropped.
+
+    An initial entry of 0 uptake on the report date is inserted.
+    """
     frame = fetch_nis(path)
 
     if filters is not None:
@@ -144,10 +229,16 @@ def parse_nis(
 
 
 def fetch_nis(path) -> pl.DataFrame:
+    """
+    Get NIS data from its file path or address.
+    """
     return pl.read_csv(path)
 
 
 def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
+    """
+    Apply filters, specified via a dictionary.
+    """
     filter_expr = pl.lit(True)
     for k, v in filters.items():
         filter_expr &= pl.col(k).is_in(pl.lit(v))
@@ -163,6 +254,9 @@ def select_columns(
     estimate_col: str,
     date_format: str,
 ) -> pl.DataFrame:
+    """
+    Select the date, grouping factor, and uptake estimate columns.
+    """
     frame = (
         frame.with_columns(
             estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
@@ -178,6 +272,9 @@ def select_columns(
 
 
 def insert_rollout(frame: pl.DataFrame, rollout: dt.date) -> pl.DataFrame:
+    """
+    Insert rows with 0 uptake on the rollout date(s).
+    """
     unique_regions = frame["region"].unique()
     rollout_rows = pl.DataFrame(
         {
@@ -192,6 +289,9 @@ def insert_rollout(frame: pl.DataFrame, rollout: dt.date) -> pl.DataFrame:
 
 
 def standardize(x, mn=None, sd=None):
+    """
+    Standardize: subtract mean and divide by standard deviation.
+    """
     if mn is not None:
         return (x - mn) / sd
     else:
@@ -199,10 +299,18 @@ def standardize(x, mn=None, sd=None):
 
 
 def unstandardize(x, mn, sd):
+    """
+    Unstandardize: add standard deviation and multiply by mean.
+    """
     return x * sd + mn
 
 
 class UptakeModel(abc.ABC):
+    """
+    Abstract class for different types of models,
+    in anticipation of having more than one type of model.
+    """
+
     @abc.abstractmethod
     def fit(self, data: UptakeData) -> Self:
         pass
@@ -213,10 +321,47 @@ class UptakeModel(abc.ABC):
 
 
 class LinearIncidentUptakeModel(UptakeModel):
+    """
+    Subclass of UptakeModel for a linear model that relates
+    incident uptake to the absolute time elapsed since rollout,
+    the incident uptake from the previous report, and their interaction.
+    """
+
     def __init__(self):
+        """
+        Initialize the model as a scikit-learn linear regression.
+        """
         self.model = LinearRegression()
 
     def fit(self, data: IncidentUptakeData) -> Self:
+        """
+        Fit a linear incident uptake model on training data.
+
+        If the training data spans seasons, regions, or other grouping factors,
+        complete pooling will be used to recognize the groups as distinct
+        but to assume that they all behave identically except for initial conditions.
+
+        Necessary columns for fitting this model are added to the incident data.
+
+        To account for slight variations in the intervals between report dates
+        (e.g. 6 vs. 7 vs. 8 days), the daily average incident uptake is modeled.
+
+        Some starting conditions must be recorded to enable prediction later:
+        - the last incident uptake in the training data
+        - the last date in the training data
+        - the last days-elapsed-since-rollout in the training data
+        - the cumulative uptake at the end of the training data
+
+        Standardization constants must also be recorded for the key model variables:
+        - previous daily-avg incident uptake (predictor)
+        - days-elapsed-since rollout (predictor)
+        - daily-avg incident uptake (outcome) *NOT exactly the same as "previous"
+
+        A linear model regresses daily-avg incident uptake from each report on
+        - daily-avg incident uptake from the previous report
+        - days-elapsed since rollout
+        - interaction of the aforementioned predictors
+        """
         data = (
             data.with_columns(
                 season=pl.col("date").pipe(UptakeData.date_to_season),
@@ -274,6 +419,17 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date,
         interval,
     ) -> Self:
+        """
+        Make projections from a fit model, and store them as a model attribute.
+
+        Record the interval between the training report date and
+        the first projection date, to enable projection for this date.
+
+        Set up a data frame to house the incident projections over the
+        desired time frame with desired time intervals.
+
+        INSERT EXPLANATION OF THE STEPWISE PROJECTION PROCESS.
+        """
         self.start = self.start.with_columns(
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
