@@ -25,7 +25,7 @@ incident_test_data = iup.IncidentUptakeData.split_train_test(
     incident_data, config["timeframe"]["start"], "test"
 )
 
-# Figure out how to initialize and fit models using the training data
+# Fit models using the training data and make projections
 incident_model = (
     iup.LinearIncidentUptakeModel()
     .fit(incident_train_data)
@@ -35,3 +35,4 @@ incident_model = (
         config["timeframe"]["interval"],
     )
 )
+print(incident_model.cumulative_projections)
