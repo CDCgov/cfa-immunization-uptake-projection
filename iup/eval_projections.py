@@ -82,15 +82,15 @@ def get_eos(
 
 # plot projections #
 def plot_projections(
-        obs_data, 
+        obs_data,
         pred_data_list,
         n_columns,
         pic_loc,
         pic_name
 ):
-    
+
     """
-    Save a multiple-grid graph with the comparison between the observed uptake and the prediction, 
+    Save a multiple-grid graph with the comparison between the observed uptake and the prediction,
     initiated over the season.
 
     Parameters:
@@ -103,22 +103,22 @@ def plot_projections(
         The number of columns in the graph.
     pic_loc:
         The directory to save the graph.
-    pic_name: 
+    pic_name:
         The name of the graph.
-    
+
     Return:
     -------------
-    None. The graph is saved. 
+    None. The graph is saved.
 
     """
-    
+
     # input check #
     if 'date' not in obs_data.columns or 'cumulative' not in obs_data.columns:
         ValueError("'date' or 'cumulative' is missing from obs_data.")
-    
+
     if not isinstance(pred_data_list,list):
         ValueError("pred_data_list must be a list.")
-    
+
     if 'date' not in pred_data_list[0].columns or 'cumulative' not in pred_data_list[0].columns:
         ValueError("'date' or 'cumulative' is missing from pred_data_list.")
 
@@ -170,8 +170,3 @@ def plot_projections(
     ).configure_title(
         fontSize=30
     ).save(f'{pic_loc}{pic_name}')
-
-    
-
-
-

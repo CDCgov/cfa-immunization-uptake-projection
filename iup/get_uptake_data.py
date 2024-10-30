@@ -71,7 +71,7 @@ def get_uptake_data(
         state=pl.col(state_col).replace(state_key["Full"], state_key["Abbr"])
     ).filter(pl.col("state").is_in(state_key["Abbr"]))
 
-    if type(date_col) is list:
+    if isinstance(date_col, list):
         data = data.with_columns(
             pl.col(date_col).cast(pl.String),
             date=pl.concat_str(pl.col(date_col), separator=" "),
