@@ -11,9 +11,11 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
         super().__init__(*args, **kwargs)
         self.validate()
 
-    @abc.abstractmethod
-    def validate(self) -> None:
-        pass
+    def validate(self):
+        self.assert_columns_found(["region", "date", "estimate"])
+        self.assert_columns_type(["date"], pl.Date)
+        self.assert_columns_type(["region"], pl.Utf8)
+        self.assert_columns_type(["estimate"], pl.Float64)
 
     def assert_columns_found(self, columns):
         for col in columns:
@@ -43,6 +45,18 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
         return season
 
     @staticmethod
+    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
+        interval = date_col.sort().diff().dt.total_days().cast(pl.Float64)
+
+        return interval
+
+    @staticmethod
+    def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
+        elapsed = (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
+
+        return elapsed
+
+    @staticmethod
     def split_train_test(uptake_data_list, start_date, side):
         orig_class = type(uptake_data_list[0])
         if side == "train":
@@ -64,21 +78,8 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
 
 
 class IncidentUptakeData(UptakeData):
-    def validate(self):
-        self.assert_columns_found(
-            ["region", "season", "date", "elapsed", "interval", "estimate"]
-        )
-        self.assert_columns_type(["date"], pl.Date)
-        self.assert_columns_type(["region", "season"], pl.Utf8)
-        self.assert_columns_type(["elapsed", "interval", "estimate"], pl.Float64)
-
-    def get_previous_uptake(self) -> Self:
-        self = self.with_columns(previous=pl.col("estimate").shift(1).over("region"))
-
-        return self
-
     def trim_outlier_intervals(self) -> Self:
-        self = self.sort("date").with_row_count("index")
+        self = self.sort("date")
         unique_regions = self["region"].unique()
         sub_frames = []
 
@@ -93,15 +94,15 @@ class IncidentUptakeData(UptakeData):
 
         return self
 
-    def to_cumulative(self, last_cumulative):
-        out = (
-            self.select(["region", "date", "estimate"])
-            .sort("date")
-            .with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
-            .join(last_cumulative, on="region")
-            .with_columns(estimate=pl.col("estimate") + pl.col("last_cumulative"))
-            .drop("last_cumulative")
-        )
+    def to_cumulative(self, init_cumulative=None):
+        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
+
+        if init_cumulative is not None:
+            out = (
+                out.join(init_cumulative, on="region")
+                .with_columns(estimate=pl.col("estimate") + pl.col("init_cumulative"))
+                .drop("init_cumulative")
+            )
 
         out = CumulativeUptakeData(out)
 
@@ -109,37 +110,9 @@ class IncidentUptakeData(UptakeData):
 
 
 class CumulativeUptakeData(UptakeData):
-    def validate(self):
-        self.assert_columns_found(["region", "date", "estimate"])
-        self.assert_columns_type(["date"], pl.Date)
-        self.assert_columns_type(["region"], pl.Utf8)
-        self.assert_columns_type(["estimate"], pl.Float64)
-        assert (
-            self["estimate"] >= 0.0
-        ).all(), "Cumulative uptake estimates cannot be negative."
-
     def to_incident(self) -> IncidentUptakeData:
-        out = (
-            self.with_columns(
-                season=pl.col("date").pipe(self.date_to_season),
-                estimate=pl.col("estimate").diff().over("region"),
-                elapsed=(pl.col("date") - pl.col("date").first())
-                .over("region")
-                .dt.total_days()
-                .cast(pl.Float64),
-            )
-            .with_columns(
-                estimate=pl.col("estimate")
-                .fill_null(pl.col("estimate").first())
-                .over("region"),
-                interval=pl.col("elapsed").diff().over("region"),
-            )
-            .with_columns(
-                interval=pl.col("interval")
-                .fill_null(pl.col("elapsed").first())
-                .over("region")
-            )
-            .with_columns(estimate=(pl.col("estimate") / pl.col("interval")))
+        out = self.with_columns(
+            estimate=pl.col("estimate").diff().over("region").fill_null(0)
         )
 
         out = IncidentUptakeData(out)
@@ -244,34 +217,42 @@ class LinearIncidentUptakeModel(UptakeModel):
         self.model = LinearRegression()
 
     def fit(self, data: IncidentUptakeData) -> Self:
+        data = (
+            data.with_columns(
+                season=pl.col("date").pipe(UptakeData.date_to_season),
+                elapsed=pl.col("date").pipe(UptakeData.date_to_elapsed).over("region"),
+                interval=pl.col("date")
+                .pipe(UptakeData.date_to_interval)
+                .over("region"),
+            )
+            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+            .with_columns(previous=pl.col("daily").shift(1).over("region"))
+        )
+
         self.start = data.group_by("region").agg(
             [
-                pl.col("estimate").last().alias("last_estimate"),
+                pl.col("daily").last().alias("last_daily"),
                 pl.col("date").last().alias("last_date"),
                 pl.col("elapsed").last().alias("last_elapsed"),
-                (pl.col("estimate") * pl.col("interval"))
+                (pl.col("estimate"))
                 .filter(pl.col("season") == pl.col("season").max())
                 .sum()
                 .alias("last_cumulative"),
             ]
         )
 
-        data = data.get_previous_uptake()
-
-        data = IncidentUptakeData(  # Not sure why I must reinforce type here
-            data.trim_outlier_intervals().with_columns(
-                previous_std=pl.col("previous").pipe(standardize),
-                elapsed_std=pl.col("elapsed").pipe(standardize),
-                estimate_std=pl.col("estimate").pipe(standardize),
-            )
+        data = data.trim_outlier_intervals().with_columns(
+            previous_std=pl.col("previous").pipe(standardize),
+            elapsed_std=pl.col("elapsed").pipe(standardize),
+            daily_std=pl.col("daily").pipe(standardize),
         )
 
         self.previous_mean = data["previous"].mean()
         self.previous_sdev = data["previous"].std()
         self.elapsed_mean = data["elapsed"].mean()
         self.elapsed_sdev = data["elapsed"].std()
-        self.estimate_mean = data["estimate"].mean()
-        self.estimate_sdev = data["estimate"].std()
+        self.daily_mean = data["daily"].mean()
+        self.daily_sdev = data["daily"].std()
 
         self.x = (
             data.select(["previous_std", "elapsed_std"])
@@ -279,7 +260,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             .to_numpy()
         )
 
-        self.y = data.select(["estimate_std"]).to_numpy()
+        self.y = data.select(["daily_std"]).to_numpy()
 
         self.model.fit(self.x, self.y)
 
@@ -339,7 +320,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         for r in range(regions.shape[0]):
             proj = np.zeros((regions["count"][r]) + 1)
             proj[0] = self.start.filter(pl.col("region") == regions["region"][r])[
-                "last_estimate"
+                "last_daily"
             ][0]
 
             for i in range(proj.shape[0] - 1):
@@ -355,21 +336,20 @@ class LinearIncidentUptakeModel(UptakeModel):
                 )
                 x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
                 y = self.model.predict(x)
-                proj[i + 1] = unstandardize(
-                    y[(0, 0)], self.estimate_mean, self.estimate_sdev
-                )
+                proj[i + 1] = unstandardize(y[(0, 0)], self.daily_mean, self.daily_sdev)
 
             self.incident_projection = self.incident_projection.with_columns(
-                estimate=pl.when(pl.col("region") == self.start["region"][r])
+                daily=pl.when(pl.col("region") == self.start["region"][r])
                 .then(pl.Series(np.delete(proj, 0)))
-                .otherwise(pl.col("estimate"))
+                .otherwise(pl.col("daily"))
             )
 
         self.incident_projection = self.incident_projection.with_columns(
-            estimate=pl.col("estimate") * pl.col("interval")
-        ).with_columns(previous=pl.col("estimate").shift(1).over("region"))
+            estimate=pl.col("daily") * pl.col("interval")
+        )
 
         self.incident_projection = IncidentUptakeData(self.incident_projection)
+
         self.cumulative_projections = self.incident_projection.to_cumulative(
             self.start.select(["region", "last_cumulative"])
         )
