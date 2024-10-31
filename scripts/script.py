@@ -40,4 +40,4 @@ incident_model = (
         config["timeframe"]["interval"],
     )
 )
-print(incident_model.cumulative_projections)
+print(incident_model.cumulative_projection)
