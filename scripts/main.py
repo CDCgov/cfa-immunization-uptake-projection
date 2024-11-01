@@ -1,7 +1,4 @@
 import yaml
-import sys
-
-sys.path.append("/home/tec0/cfa-immunization-uptake-projection")
 import iup
 
 # Access the YAML config file
