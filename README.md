@@ -10,6 +10,7 @@ This approach is applicable to seasonal adult immunizations. Each year, the upta
 
 1. Enable poetry
 1. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
+   - For now, the `path:` field needs to be set to the absolute path to `THIS_REPO/data/NIS_2023-24.csv`
 1. `python scripts/main.py --config=scripts/config.yaml`
 
 ## CDCgov GitHub Organization Open Source Project Template
