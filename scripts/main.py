@@ -39,7 +39,7 @@ def run(config):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", type=str, default="config/config.yaml")
+    p.add_argument("--config", type=str, default="config.yaml")
     args = p.add_argument()
 
     with open(args.config, "r") as f:

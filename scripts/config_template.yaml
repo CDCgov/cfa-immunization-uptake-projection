@@ -1,20 +1,19 @@
 # The data sets to load and how to interpret them
 data:
   data_set_1:
-    path: /home/tec0/cfa-immunization-uptake-projection/data/NIS_2023-24.csv
+    path: PATH_TO_DATA_GOES_HERE
     region_col: geography
     date_col: date
     estimate_col: estimate
     date_format: "%m/%d/%Y"
     rollout: 2023-09-01
     filters:
-        geography: National
-        group_name: Overall
-        indicator: booster
+      geography: National
+      group_name: Overall
+      indicator: booster
 
 # The timeframe over which to generate projections
 timeframe:
   start: 2024-02-01
   end: 2024-04-30
   interval: 7d
-  
