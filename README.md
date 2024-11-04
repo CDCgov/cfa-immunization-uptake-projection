@@ -92,4 +92,3 @@ CDC including this GitHub page may be subject to applicable federal law, includi
 This repository is not a source of government records but is a copy to increase
 collaboration and collaborative potential. All government records will be
 published through the [CDC web site](http://www.cdc.gov).
-
