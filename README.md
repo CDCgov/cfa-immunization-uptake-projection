@@ -8,11 +8,9 @@ This repo contains statistical tools to predict the uptake of immunizations (pri
 
 All three steps are currently under development.
 
-Multiple sources of past data may be available and may disagree with one another. Thus, a secondary aim is to provide models that scale projections from one data source to another, so that multiple data sources can be integrated.
+This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
 
 ## Data sources
-
-### Public Data
 
 - Weekly cumulatve COVID-19 vaccination coverage and intent among adults 18 years and older
   [Dictionary](https://data.cdc.gov/Vaccinations/Weekly-Intent-for-Vaccination-and-Cumulative-Perce/pakc-hru3/about_data)
@@ -24,8 +22,14 @@ Multiple sources of past data may be available and may disagree with one another
 
 - `scripts/evaluation_script.py` will download data, fit models, and produce `output/weekly_predicted_uptake.png`
 
-This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
+## Getting started
 
+1. Enable poetry
+2. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
+   - For now, the `path:` field needs to be set to the absolute path to `THIS_REPO/data/NIS_2023-24.csv`
+3. `python scripts/main.py --config=scripts/config.yaml`
+
+Alternatively (for now), `scripts/evaluation_script.py` will download data, fit models, and produce `output/weekly_predicted_uptake.png`
 
 ## Project admins
 
