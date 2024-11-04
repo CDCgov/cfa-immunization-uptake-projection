@@ -11,18 +11,18 @@ def run(config):
     incident_data = [x.to_incident() for x in cumulative_data]
 
     # Concatenate data sets and split into train and test subsets
-    cumulative_train_data = iup.CumulativeUptakeData.split_train_test(
-        cumulative_data, config["timeframe"]["start"], "train"
-    )
-    cumulative_test_data = iup.CumulativeUptakeData.split_train_test(
-        cumulative_data, config["timeframe"]["start"], "test"
-    )
+    # cumulative_train_data = iup.CumulativeUptakeData.split_train_test(
+    #    cumulative_data, config["timeframe"]["start"], "train"
+    # )
+    # cumulative_test_data = iup.CumulativeUptakeData.split_train_test(
+    #    cumulative_data, config["timeframe"]["start"], "test"
+    # )
     incident_train_data = iup.IncidentUptakeData.split_train_test(
         incident_data, config["timeframe"]["start"], "train"
     )
-    incident_test_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, config["timeframe"]["start"], "test"
-    )
+    # incident_test_data = iup.IncidentUptakeData.split_train_test(
+    #    incident_data, config["timeframe"]["start"], "test"
+    # )
 
     # Fit models using the training data and make projections
     incident_model = (
