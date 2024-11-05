@@ -27,6 +27,16 @@ def get_mspe(
     A polars.DataFrame with the MSPE and the date of initializing forecast. 
     
     """
+
+    if not any(data_df['date'].is_in(pred_df['date'])):
+        ValueError('No matched dates between data_df and pred_df.')
+
+    common_dates = data_df.filter(
+        pl.col('date').is_in(pred_df['date'])
+    ).select('date')
+
+    if len(common_dates)!= common_dates.n_unique():
+        ValueError('Duplicated dates are found in data_df or pred_df.')
     
     
     mspe = data_df.join(
