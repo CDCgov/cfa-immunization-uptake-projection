@@ -57,17 +57,10 @@ plot_projections(
 # evaluate time-varying MSPE #
 date_mspe = pl.DataFrame()
 
-for i in range(len(rt_pred_2023)):
-
-    mspe = get_mspe(
-        data_df = nis_usa_2023,
-        pred_df = rt_pred_2023[i],
-        var = 'daily'
-    )
-    date_mspe = pl.concat(
-        [date_mspe,mspe],
-        how = 'vertical'
-    )
+date_mspe = pl.concat([
+    get_mspe(nis_usa_2023, pred_df,var = 'daily')
+    for pred_df in rt_pred_2023
+])
 
 # plot MSPE #
 time_axis = alt.Axis(
@@ -83,30 +76,21 @@ alt.Chart(date_mspe).mark_circle(color='black').encode(
 # evaluate predicted end-of-season uptake #
 date_eos = pl.DataFrame()
 
-for i in range(len(rt_pred_2023)):
-    eos = get_eos(
-        rt_pred_2023[i],
+date_eos = pl.concat([
+    get_eos(
+        pred_df,
         var = 'cumulative'
     ).with_columns(
-        date = rt_pred_2023[i].filter(
+        date = pred_df.filter(
             pl.col('date') == pl.col('date').min()
         ).select('date')
     )
-
-    date_eos = pl.concat([date_eos, eos],how = 'vertical')
+    for pred_df in rt_pred_2023])
 
 
 # plot predicted end-of-season uptake with data #
 obs_vac = nis_usa_2023.filter(
     pl.col('date') == pl.col('date').max())
-
-vac_min = pl.concat([date_eos.select('cumulative'), 
-                     obs_vac.select('cumulative')]
-                     ).min()
-
-vac_max = pl.concat([date_eos.select('cumulative'), 
-                     obs_vac.select('cumulative')]
-                     ).max()
 
 obs = alt.Chart(obs_vac).mark_rule(color='red').encode(
     alt.Y('cumulative:Q',
