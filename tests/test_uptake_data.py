@@ -52,6 +52,38 @@ def test_inc_uptake_trim_outlier2():
     assert_frame_equal(df, expected, check_row_order=False)
 
 
+def test_inc_uptake_trim_outlier_other_groups():
+    """If all dates are equally spaced, drop the first two rows, but
+    now also show that we can have more groupings"""
+    dates = [
+        date(2020, 1, 1),
+        date(2020, 1, 2),
+        date(2020, 1, 3),
+        # note that dates cannot be exactly evenly spaced, because then
+        # standardization ends up with zero SD in the denominator
+        date(2020, 1, 5),
+    ]
+
+    input_df = IncidentUptakeData(
+        pl.DataFrame({"date": dates, "estimate": 0.0, "interval": "BOGUS"})
+        .join(pl.DataFrame({"region": ["TX", "CA"]}), how="cross")
+        .join(
+            pl.DataFrame({"age": ["infant", "child", "adult", "older_adult"]}),
+            how="cross",
+        )
+    )
+
+    grouping_vars = ("region", "age")
+    df = input_df.trim_outlier_intervals(grouping_vars)
+
+    # we should have dropped two dates per region (x2) and age (x4)
+    assert df.shape[0] == (len(dates) - 2) * 2 * 4
+
+    # check the actual values
+    expected = input_df.filter(pl.col("date") >= date(2020, 1, 3))
+    assert_frame_equal(df, expected, check_row_order=False)
+
+
 def test_inc_uptake_trim_outlier3():
     """If the first two dates are widely spaced, drop the first three rows"""
     dates = [
