@@ -1,6 +1,11 @@
+import polars as pl
+import altair as alt
+
 from iup.get_uptake_data import get_uptake_data
 from iup.get_projections import get_projections
-from iup.plot_projections import plot_projections
+from iup.eval_projections import plot_projections
+from iup.eval_projections import get_mspe
+from iup.eval_projections import get_eos
 
 # Load 2022 NIS data for USA
 nis_usa_2022 = get_uptake_data(
@@ -48,3 +53,55 @@ plot_projections(
     pic_loc="output/",
     pic_name="weekly_predicted_uptake.png",
 )
+
+# evaluate time-varying MSPE #
+date_mspe = pl.DataFrame()
+
+date_mspe = pl.concat([
+    get_mspe(nis_usa_2023, pred_df,var = 'daily')
+    for pred_df in rt_pred_2023
+])
+
+# plot MSPE #
+time_axis = alt.Axis(
+    format = '%Y-%m',tickCount='month'
+)
+alt.Chart(date_mspe).mark_circle(color='black').encode(
+    x=alt.X('date:T',title='Date',axis=time_axis),
+    y=alt.Y('mspe',title='MSPE')
+).save(
+    'output/MSPE.png'
+)
+
+# evaluate predicted end-of-season uptake #
+date_eos = pl.DataFrame()
+
+date_eos = pl.concat([
+    get_eos(
+        pred_df,
+        var = 'cumulative'
+    ).with_columns(
+        date = pred_df.filter(
+            pl.col('date') == pl.col('date').min()
+        ).select('date')
+    )
+    for pred_df in rt_pred_2023])
+
+
+# plot predicted end-of-season uptake with data #
+obs_vac = nis_usa_2023.filter(
+    pl.col('date') == pl.col('date').max())
+
+obs = alt.Chart(obs_vac).mark_rule(color='red').encode(
+    alt.Y('cumulative:Q',
+          scale=alt.Scale(domain=[20,40]))
+)
+
+pred = alt.Chart(date_eos).mark_circle().encode(
+    alt.X('date:T',title = 'Date',axis=time_axis),
+    alt.Y('cumulative:Q',
+          title = 'Cumulative vaccine uptake',
+          scale=alt.Scale(domain=[20,40]))
+)
+
+(obs + pred).save('output/end_of_season_uptake.png')
