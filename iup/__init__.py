@@ -175,9 +175,17 @@ class IncidentUptakeData(UptakeData):
     Subclass of UptakeData for incident uptake.
     """
 
-    def trim_outlier_intervals(self) -> Self:
+    def trim_outlier_intervals(
+        self, grouping_vars: tuple[str,] = ("region",), threshold: float = 1.0
+    ) -> Self:
         """
         Remove rows from incident uptake data with intervals that are too large.
+
+        Args:
+          grouping_vars (tuple): string names of columns to group by, before
+            doing the trimming
+          threshold (float): if standardized interval between first and second dates
+            is above this value, drop the second date
 
         Returns
         IncidentUptakeData
@@ -202,20 +210,31 @@ class IncidentUptakeData(UptakeData):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        self = self.sort("date")
-        unique_regions = self["region"].unique()
-        sub_frames = []
+        # check that grouping variables are present
+        assert set(grouping_vars).issubset(self.columns)
 
-        for x in range(len(unique_regions)):
-            this_region = pl.col("region") == unique_regions[x]
-            if (standardize(self.filter(this_region)["interval"]))[1] > 1:
-                sub_frames.append(self.filter(this_region).slice(3))
-            else:
-                sub_frames.append(self.filter(this_region).slice(2))
+        # rank and standardized interval, to be computed within each group
+        rank = pl.col("date").rank().over(grouping_vars)
+        shifted_standard_interval = (
+            pl.col("date")
+            .pipe(self.date_to_interval)
+            .pipe(standardize)
+            .shift(1)
+            .over(grouping_vars)
+        )
 
-        self = pl.concat(sub_frames).sort("date")
+        # ensure we are sorted by date, within the grouping vars
+        # (use a tuple in the argument list to avoid pass-by-reference conundrums)
+        df = self.sort(list(grouping_vars) + ["date"])
 
-        return self
+        # Note that rank is 1-indexed: rank 1 means first row.
+        # Always drop rows 1 and 2.
+        # Always keep rows 4 and above.
+        # Keep row 3 only if the standardized interval in the row before is
+        #   below the threshold.
+        return df.filter(
+            (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
+        )
 
     def to_cumulative(self, last_cumulative=None):
         """
