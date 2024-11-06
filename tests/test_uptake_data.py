@@ -6,19 +6,19 @@ import polars as pl
 
 def test_inc_uptake_minimum_4_data_points():
     """If there are only 3 data points, drop all of them"""
-    assert (
-        IncidentUptakeData(
-            {
-                "region": "TX",
-                "date": [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3)],
-                "estimate": 0.0,
-                "interval": "BOGUS",
-            }
-        )
-        .trim_outlier_intervals()
-        .shape[0]
-        == 0
+    # make a minimal data frame, with the columns that are required by the data class
+    input_df = IncidentUptakeData(
+        {
+            "region": "TX",
+            "date": [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3)],
+            "estimate": 0.0,
+            "interval": "BOGUS",
+        }
     )
+    # this data frame only has 3 rows...
+    assert input_df.shape[0] == 3
+    # ...so trimming will throw all of them out
+    assert input_df.trim_outlier_intervals().shape[0] == 0
 
 
 def test_inc_uptake_trim_outlier2():
@@ -32,6 +32,7 @@ def test_inc_uptake_trim_outlier2():
         date(2020, 1, 5),
     ]
 
+    # include 2 regions, so we can check that the grouping works
     input_df = IncidentUptakeData(
         {
             "region": ["TX"] * len(dates) + ["CA"] * len(dates),
@@ -41,10 +42,11 @@ def test_inc_uptake_trim_outlier2():
         }
     )
 
+    # be explicit about what we are grouping over
     grouping_vars = ("region",)
     df = input_df.trim_outlier_intervals(grouping_vars)
 
-    # we should have dropped two dates per region
+    # we should have dropped two dates per (2x) region
     assert df.shape[0] == (len(dates) - 2) * 2
 
     # check the actual values
@@ -64,20 +66,21 @@ def test_inc_uptake_trim_outlier_other_groups():
         date(2020, 1, 5),
     ]
 
+    regions = ["TX", "CA"]
+    age_groups = ["infant", "child", "adult", "older_adult"]
+
+    # replicate these dates (and bogus values) over 2x regions and 4x age groups
     input_df = IncidentUptakeData(
         pl.DataFrame({"date": dates, "estimate": 0.0, "interval": "BOGUS"})
-        .join(pl.DataFrame({"region": ["TX", "CA"]}), how="cross")
-        .join(
-            pl.DataFrame({"age": ["infant", "child", "adult", "older_adult"]}),
-            how="cross",
-        )
+        .join(pl.DataFrame({"region": regions}), how="cross")
+        .join(pl.DataFrame({"age": age_groups}), how="cross")
     )
 
     grouping_vars = ("region", "age")
     df = input_df.trim_outlier_intervals(grouping_vars)
 
-    # we should have dropped two dates per region (x2) and age (x4)
-    assert df.shape[0] == (len(dates) - 2) * 2 * 4
+    # we should have dropped two dates per region and age
+    assert df.shape[0] == (len(dates) - 2) * len(regions) * len(age_groups)
 
     # check the actual values
     expected = input_df.filter(pl.col("date") >= date(2020, 1, 3))
