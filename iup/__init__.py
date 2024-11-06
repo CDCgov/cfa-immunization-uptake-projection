@@ -737,3 +737,117 @@ class LinearIncidentUptakeModel(UptakeModel):
         ).select(["region", "date", "estimate"])
 
         return self
+
+
+#### evaluation metrics #####
+
+class Metrics(pl.DataFrame):
+
+    def __init__(self, *args, **kwargs):
+
+        """"
+        Initialize a Metrics object as a polars.DataFrame in addition to validate
+        """
+        super().__init__(*args, **kwargs)
+        self.validate()
+
+    def validate():
+        pass
+
+
+    def get_mspe(
+        data_df:IncidentUptakeData,
+        pred_df:IncidentUptakeData,
+        var:str
+    ):
+        """
+        Calculate the mean squared prediction error between the observed
+        data and prediction when both are available. 
+
+        Parameters:
+        --------------
+        data_df: IncidentUptakeData object
+            The observed vaccine uptake. Must include `date` and the 
+            response variable (var).
+        pred_df: polars.DataFrame
+            The predicted daily uptake. Must include `date` and the
+            response variable (var).
+        var: string
+            The name of the response variable.
+    
+        Return:
+        -------------
+        A polars.DataFrame with the MSPE and the date of initializing forecast. 
+    
+        """
+
+        if not any(data_df['date'].is_in(pred_df['date'])):
+            ValueError('No matched dates between data_df and pred_df.')
+
+        common_dates = data_df.filter(
+            pl.col('date').is_in(pred_df['date'])
+        ).select('date')
+
+        if len(common_dates)!= common_dates.n_unique():
+            ValueError('Duplicated dates are found in data_df or pred_df.')
+        
+        mspe = data_df.join(
+                pred_df, 
+                on = 'date',
+                how = 'inner'
+            ).with_columns(
+                spe = (pl.col(var) - pl.col(f"{var}_right"))**2
+            ).with_columns(
+                mspe = pl.col('spe').mean(),
+            ).filter(
+                pl.col('date') == pl.col('date').min(),
+            ).rename(
+                {'date':'forecast_date'}
+            ).select(
+                'forecast_date','mspe'
+            )
+        
+        return mspe
+    
+
+    def get_eos_mae(
+        data_df:CumulativeUptakeData,
+        pred_df:CumulativeUptakeData, 
+        var:str
+    ):
+        """
+        Get the `var` on the last date in the `pred_df`. In this function, 
+        it is to get the predicted total uptake at the end of the season.
+        
+        Parameters:
+        --------------
+        data_df: CumulativeUptakeData
+            The observed cumulative uptake. Must include `date` and the cumulative
+            response variable.
+        pred_df: CumulativeUptakeData 
+            The predicted cumulative uptake. Must include `date` and the cumulative
+            response variable.
+        var: string
+            The name of the cumulative response variable.
+        
+        Return:
+        -------------
+        A polars.DataFrame with the absolute error between the observed and the 
+        predicted cumulative uptake on the forecast end date and the 
+        forecast end date. 
+        
+        """
+        data_eos = data_df.filter(
+            pl.col('date') == pl.col('date').max()
+        ).select(var, 'date')
+
+        pred_eos = pred_df.filter(
+            pl.col('date') == pl.col('date').max()
+        ).select(var,'date')
+
+        
+        
+        return eos
+        
+
+
