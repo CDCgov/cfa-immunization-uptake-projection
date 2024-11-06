@@ -9,7 +9,7 @@ def get_mspe(
 ):
     """
     Calculate the mean squared prediction error between the observed
-    data and prediction when both are available. 
+    data and prediction when both are available.
 
     Parameters:
     --------------
@@ -21,12 +21,12 @@ def get_mspe(
         of-interest (var).
     var: string
         The name of the variable-of-interest.
-    
+
     Return:
     -------------
 
-    A polars.DataFrame with the MSPE and the date of initializing forecast. 
-    
+    A polars.DataFrame with the MSPE and the date of initializing forecast.
+
     """
 
     if not any(data_df['date'].is_in(pred_df['date'])):
@@ -38,10 +38,10 @@ def get_mspe(
 
     if len(common_dates)!= common_dates.n_unique():
         ValueError('Duplicated dates are found in data_df or pred_df.')
-    
-    
+
+
     mspe = data_df.join(
-            pred_df, 
+            pred_df,
             on = 'date',
             how = 'inner'
         ).with_columns(
@@ -53,7 +53,7 @@ def get_mspe(
         ).select(
             'date','mspe'
         )
-    
+
 
     return mspe
 
@@ -66,9 +66,9 @@ def get_eos(
 ):
     """
 
-    Get the `var` on the last date in the `pred_df`. In this function, 
+    Get the `var` on the last date in the `pred_df`. In this function,
     it is to get the predicted total uptake at the end of the season.
-    
+
     Parameters:
     --------------
 
@@ -77,21 +77,21 @@ def get_eos(
         of-interest (var).
     var: string
         The name of the variable-of-interest.
-    
+
     Return:
     -------------
     A polars.DataFrame with the variable-of-interest (end-of-season uptake)
-    
-    on the last date and the last date. 
-    
+
+    on the last date and the last date.
+
     """
-    
+
     eos = pred_df.filter(
         pl.col('date') == pl.col('date').max()
     ).rename(
         {'date':'end_date'}
     ).select(var,'end_date')
-    
+
     return eos
 
 # plot projections #
