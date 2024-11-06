@@ -24,6 +24,7 @@ def get_mspe(
     
     Return:
     -------------
+
     A polars.DataFrame with the MSPE and the date of initializing forecast. 
     
     """
@@ -53,6 +54,7 @@ def get_mspe(
             'date','mspe'
         )
     
+
     return mspe
 
 
@@ -63,6 +65,7 @@ def get_eos(
         var = 'cumulative'
 ):
     """
+
     Get the `var` on the last date in the `pred_df`. In this function, 
     it is to get the predicted total uptake at the end of the season.
     
@@ -78,6 +81,7 @@ def get_eos(
     Return:
     -------------
     A polars.DataFrame with the variable-of-interest (end-of-season uptake)
+    
     on the last date and the last date. 
     
     """
