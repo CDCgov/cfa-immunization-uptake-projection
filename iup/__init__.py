@@ -618,6 +618,11 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         self.y = data.select(["daily_std"]).to_numpy()
 
+        # linear model is fit on inputs:
+        # 1. previous uptake rate ("last daily")
+        # 2. time from rollout to end of this predicted uptake period ("elapsed")
+        # 3. interaction between the two terms
+        # and it returns: uptake rate ("daily") in this period
         self.model.fit(self.x, self.y)
 
         return self
