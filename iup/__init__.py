@@ -512,13 +512,28 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         self.model = LinearRegression()
 
-    def fit(self, data: IncidentUptakeData) -> Self:
+    @staticmethod
+    def _augment_df(df: pl.DataFrame) -> pl.DataFrame:
+        """Add columns to data"""
+        return (
+            df.with_columns(
+                season=pl.col("date").pipe(UptakeData.date_to_season),
+                elapsed=pl.col("date").pipe(UptakeData.date_to_elapsed),
+                interval=pl.col("date").pipe(UptakeData.date_to_interval),
+            )
+            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+            .with_columns(previous=pl.col("daily").shift(1))
+        )
+
+    def fit(self, data: IncidentUptakeData, group_vars=("region",)) -> Self:
         """
         Fit a linear incident uptake model on training data.
 
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
+        group_vars: sequence of strings
+            columns in `data` representing separate times or populations
 
         Returns
         LinearIncidentUptakeModel
@@ -553,19 +568,12 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using the scikit-learn module.
         """
-        data = (
-            data.with_columns(
-                season=pl.col("date").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("date").pipe(UptakeData.date_to_elapsed).over("region"),
-                interval=pl.col("date")
-                .pipe(UptakeData.date_to_interval)
-                .over("region"),
-            )
-            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-            .with_columns(previous=pl.col("daily").shift(1).over("region"))
-        )
+        assert set(group_vars).issubset(data.columns)
+        self.group_vars = group_vars
 
-        self.start = data.group_by("region").agg(
+        data = data.group_by(group_vars).map_groups(self._augment_df)
+
+        self.start = data.group_by(group_vars).agg(
             [
                 pl.col("daily").last().alias("last_daily"),
                 pl.col("date").last().alias("last_date"),
@@ -577,10 +585,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             ]
         )
 
-        data = data.trim_outlier_intervals().with_columns(
-            previous_std=pl.col("previous").pipe(standardize),
-            elapsed_std=pl.col("elapsed").pipe(standardize),
-            daily_std=pl.col("daily").pipe(standardize),
+        data = (
+            data.group_by(group_vars)
+            .map_groups(lambda df: UptakeData(df).trim_outlier_intervals())
+            .with_columns(
+                previous_std=pl.col("previous").pipe(standardize),
+                elapsed_std=pl.col("elapsed").pipe(standardize),
+                daily_std=pl.col("daily").pipe(standardize),
+            )
         )
 
         self.standards = {
@@ -659,7 +671,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 )
                 .alias("date")
                 .to_frame()
-                .join(self.start.select("region"), how="cross")
+                .join(self.start.select(self.group_vars), how="cross")
                 .with_columns(
                     elapsed=(
                         (pl.col("date") - start_date).dt.total_days().cast(pl.Float64)
@@ -669,11 +681,11 @@ class LinearIncidentUptakeModel(UptakeModel):
                         + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
                     ).cast(pl.Utf8),
                 )
-                .with_columns(interval=pl.col("elapsed").diff().over("region"))
+                .with_columns(interval=pl.col("elapsed").diff().over(self.group_vars))
             )
             .join(
-                self.start.select(["region", "last_elapsed", "last_interval"]),
-                on="region",
+                self.start.select(self.group_vars + ["last_elapsed", "last_interval"]),
+                on=self.group_vars,
             )
             .with_columns(
                 elapsed=pl.col("elapsed")
@@ -733,7 +745,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         self.incident_projection = IncidentUptakeData(self.incident_projection)
 
         self.cumulative_projection = self.incident_projection.to_cumulative(
-            self.start.select(["region", "last_cumulative"])
-        ).select(["region", "date", "estimate"])
+            self.start.select(self.group_vars + ["last_cumulative"])
+        ).select(self.group_vars + ["date", "estimate"])
 
         return self
