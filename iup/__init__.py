@@ -18,15 +18,15 @@ class UptakeData(pl.DataFrame, metaclass=abc.ABCMeta):
         """
         super().__init__(*args, **kwargs)
         self.validate()
+        self.sort("date")
 
     def validate(self):
         """
-        Validate that an UptakeData object has the three key columns:
-        date, grouping factors, and uptake estimate (% of population).
+        Validate that an UptakeData object has the two key columns:
+        date and uptake estimate (% of population). There may be others.
         """
-        self.assert_columns_found(["date", "region", "estimate"])
+        self.assert_columns_found(["date", "estimate"])
         self.assert_columns_type(["date"], pl.Date)
-        self.assert_columns_type(["region"], pl.Utf8)
         self.assert_columns_type(["estimate"], pl.Float64)
 
     def assert_columns_found(self, columns: List[str]):
@@ -175,17 +175,13 @@ class IncidentUptakeData(UptakeData):
     Subclass of UptakeData for incident uptake.
     """
 
-    def trim_outlier_intervals(
-        self, grouping_vars: tuple[str,] = ("region",), threshold: float = 1.0
-    ) -> Self:
+    def trim_outlier_intervals(self, group_cols: tuple[str,], threshold: float = 1.0):
         """
         Remove rows from incident uptake data with intervals that are too large.
 
-        Args:
-          grouping_vars (tuple): string names of columns to group by, before
-            doing the trimming
-          threshold (float): if standardized interval between first and second dates
-            is above this value, drop the second date
+        Parameters
+          group_cols (tuple): names of grouping factor columns
+          threshold (float): maximum standardized interval between first two dates
 
         Returns
         IncidentUptakeData
@@ -210,39 +206,34 @@ class IncidentUptakeData(UptakeData):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        # check that grouping variables are present
-        assert set(grouping_vars).issubset(self.columns)
+        # assert set(group_cols).issubset(self.columns)
 
-        # rank and standardized interval, to be computed within each group
-        rank = pl.col("date").rank().over(grouping_vars)
+        rank = pl.col("date").rank().over(group_cols)
         shifted_standard_interval = (
             pl.col("date")
             .pipe(self.date_to_interval)
             .pipe(standardize)
             .shift(1)
-            .over(grouping_vars)
+            .over(group_cols)
         )
 
-        # ensure we are sorted by date, within the grouping vars
-        # (use a tuple in the argument list to avoid pass-by-reference conundrums)
-        df = self.sort(list(grouping_vars) + ["date"])
+        df = self.sort("date")
 
-        # Note that rank is 1-indexed: rank 1 means first row.
-        # Always drop rows 1 and 2.
-        # Always keep rows 4 and above.
-        # Keep row 3 only if the standardized interval in the row before is
-        #   below the threshold.
-        return df.filter(
+        df = df.filter(
             (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
         )
 
-    def to_cumulative(self, last_cumulative=None):
+        return IncidentUptakeData(df)
+
+    def to_cumulative(self, group_cols: tuple[str,], last_cumulative=None):
         """
         Convert incident to cumulative uptake data.
 
         Parameters
+        group_cols: (str,)
+            name(s) of the columns of grouping factors
         last_cumulative: pl.DataFrame
-            additional cumulative uptake for each region absent from the incident data
+            additional cumulative uptake absent from the incident data, for each group
 
         Returns
         CumulativeUptakeData
@@ -253,11 +244,11 @@ class IncidentUptakeData(UptakeData):
         such that the sum of incident does not reflect the entire cumulative uptake.
         To fix this, cumulative uptake from the removed rows may be supplied separately.
         """
-        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over("region"))
+        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
 
         if last_cumulative is not None:
             out = (
-                out.join(last_cumulative, on="region")
+                out.join(last_cumulative, on=group_cols)
                 .with_columns(estimate=pl.col("estimate") + pl.col("last_cumulative"))
                 .drop("last_cumulative")
             )
@@ -272,19 +263,23 @@ class CumulativeUptakeData(UptakeData):
     Subclass of UptakeData for cumulative uptake.
     """
 
-    def to_incident(self) -> IncidentUptakeData:
+    def to_incident(self, group_cols: tuple[str,]) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
+
+        Parameters
+        group_cols: (str,)
+            name(s) of the columns of grouping factors
 
         Returns
         IncidentUptakeData
             incident uptake on each date in the input cumulative uptake data
 
         Details
-        Because the first date for each region is rollout, incident uptake is 0.
+        Because the first date for each group is rollout, incident uptake is 0.
         """
         out = self.with_columns(
-            estimate=pl.col("estimate").diff().over("region").fill_null(0)
+            estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
         )
 
         out = IncidentUptakeData(out)
@@ -294,9 +289,9 @@ class CumulativeUptakeData(UptakeData):
 
 def parse_nis(
     path: str,
-    region_col: str,
-    date_col: str,
     estimate_col: str,
+    date_col: str,
+    group_cols: tuple[str,],
     date_format: str,
     rollout: dt.date,
     filters=None,
@@ -307,12 +302,12 @@ def parse_nis(
     Parameters
     path: str
         file path or url address for NIS data to import
-    region_col: str
-        name of the NIS column for the geographic region
-    date_col: str
-        name of the NIS column for the date
     estimate_col: str
         name of the NIS column for the uptake estimate (population %)
+    date_col: str
+        name of the NIS column for the date
+    group_cols: (str,)
+        name(s) of the NIS columns for the grouping factors
     date_format: str
         format of the dates in the NIS date column
     rollout: dt.date
@@ -329,7 +324,7 @@ def parse_nis(
     Parsing includes the following steps:
     - import NIS data from source
     - apply filters if any are supplied
-    - isolate the region, date, and estimate columns
+    - isolate the estimate, date, and any grouping factor columns
     - insert an initial entry of 0 uptake on the rollout date
     """
     frame = fetch_nis(path)
@@ -337,9 +332,9 @@ def parse_nis(
     if filters is not None:
         frame = apply_filters(frame, filters)
 
-    frame = select_columns(frame, region_col, date_col, estimate_col, date_format)
+    frame = select_columns(frame, estimate_col, date_col, group_cols, date_format)
 
-    frame = insert_rollout(frame, rollout)
+    frame = insert_rollout(frame, rollout, group_cols)
 
     frame = CumulativeUptakeData(frame)
 
@@ -390,9 +385,9 @@ def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
 
 def select_columns(
     frame: pl.DataFrame,
-    region_col: str,
-    date_col: str,
     estimate_col: str,
+    date_col: str,
+    group_cols: tuple[str,],
     date_format: str,
 ) -> pl.DataFrame:
     """
@@ -401,12 +396,12 @@ def select_columns(
     Parameters
     frame: pl.DataFrame
         NIS data in the midst of parsing
-    region_col: str
-        name of the NIS column for the geographic region
-    date_col: str
-        name of the NIS column for the date
     estimate_col: str
         name of the NIS column for the uptake estimate (population %)
+    date_col: str
+        name of the NIS column for the date
+    group_cols: (str,)
+        name(s) of the NIS columns for the grouping factors
     date_format: str
         format of the dates in the NIS date column
 
@@ -414,24 +409,24 @@ def select_columns(
         NIS cumulative uptake data with only the necessary columns
 
     Details
-        Only the date, region, and uptake estimate are necessary for
-        cumulative uptake data. Region is a stand-in for any grouping factor.
+        Only the estimate, date, and grouping factor columns are kept.
     """
     frame = (
         frame.with_columns(
             estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
-            region=pl.col(region_col),
             date=pl.col(date_col).str.to_date(date_format),
         )
         .drop_nulls(subset=["estimate"])
-        .select(["region", "date", "estimate"])
-        .sort("region", "date")
+        .select(["date", "estimate"] + [group_cols])
+        .sort("date")
     )
 
     return frame
 
 
-def insert_rollout(frame: pl.DataFrame, rollout: dt.date) -> pl.DataFrame:
+def insert_rollout(
+    frame: pl.DataFrame, rollout: dt.date, group_cols: tuple[str,]
+) -> pl.DataFrame:
     """
     Insert into NIS uptake data rows with 0 uptake on the rollout date.
 
@@ -440,22 +435,31 @@ def insert_rollout(frame: pl.DataFrame, rollout: dt.date) -> pl.DataFrame:
         NIS data in the midst of parsing
     rollout: dt.date
         rollout date
+    group_cols: (str,)
+        name(s) of the NIS columns for the grouping factors
 
     Returns
         NIS cumulative data with rollout rows included
 
     Details
-    A separate rollout row is added for every region.
+    A separate rollout row is added for every grouping factor combination.
     """
-    unique_regions = frame["region"].unique()
-    rollout_rows = pl.DataFrame(
-        {
-            "region": unique_regions,
-            "date": rollout,
-            "estimate": 0.0,
-        }
+    # unique_groups = frame[group_cols].unique()
+    # rollout_rows = pl.DataFrame(
+    #     {
+    #         "region": unique_groups,
+    #         "date": rollout,
+    #         "estimate": 0.0,
+    #     }
+    # )
+
+    rollout_rows = (
+        frame.select(pl.col(group_cols))
+        .unique()
+        .with_columns(date=rollout, estimate=0.0)
     )
-    frame = frame.vstack(rollout_rows).unique(maintain_order=True).sort("date")
+
+    frame = frame.vstack(rollout_rows.select(sorted(frame.columns))).sort("date")
 
     return frame
 
@@ -531,13 +535,15 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         self.model = LinearRegression()
 
-    def fit(self, data: IncidentUptakeData) -> Self:
+    def fit(self, data: IncidentUptakeData, group_cols: tuple[str,]) -> Self:
         """
         Fit a linear incident uptake model on training data.
 
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
+        group_cols: (str,)
+            name(s) of the columns for the grouping factors
 
         Returns
         LinearIncidentUptakeModel
@@ -561,9 +567,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - the last date in the training data
         - the last days-elapsed-since-rollout in the training data
         - the cumulative uptake at the end of the training data
-        These are recorded separately for each region in the training data.
+        These are recorded separately for each group in the training data.
 
-        If the training data spans seasons, regions, or other grouping factors,
+        If the training data spans multiple (combinations of) groups,
         complete pooling will be used to recognize the groups as distinct but
         to assume they behave identically except for initial conditions.
 
@@ -575,16 +581,18 @@ class LinearIncidentUptakeModel(UptakeModel):
         data = (
             data.with_columns(
                 season=pl.col("date").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("date").pipe(UptakeData.date_to_elapsed).over("region"),
+                elapsed=pl.col("date")
+                .pipe(UptakeData.date_to_elapsed)
+                .over(group_cols),
                 interval=pl.col("date")
                 .pipe(UptakeData.date_to_interval)
-                .over("region"),
+                .over(group_cols),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-            .with_columns(previous=pl.col("daily").shift(1).over("region"))
+            .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
         )
 
-        self.start = data.group_by("region").agg(
+        self.start = data.group_by(group_cols).agg(
             [
                 pl.col("daily").last().alias("last_daily"),
                 pl.col("date").last().alias("last_date"),
@@ -596,7 +604,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             ]
         )
 
-        data = data.trim_outlier_intervals().with_columns(
+        data = data.trim_outlier_intervals(group_cols).with_columns(
             previous_std=pl.col("previous").pipe(standardize),
             elapsed_std=pl.col("elapsed").pipe(standardize),
             daily_std=pl.col("daily").pipe(standardize),
@@ -628,6 +636,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
+        group_cols: tuple[str,],
     ) -> Self:
         """
         Make projections from a fit linear incident uptake model.
@@ -640,6 +649,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
+        group_cols: (str,)
+            name(s) of the columns for the grouping factors
 
         Returns
         LinearIncidentUptakeModel
@@ -678,7 +689,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 )
                 .alias("date")
                 .to_frame()
-                .join(self.start.select("region"), how="cross")
+                .join(self.start.select(group_cols), how="cross")
                 .with_columns(
                     elapsed=(
                         (pl.col("date") - start_date).dt.total_days().cast(pl.Float64)
@@ -688,11 +699,11 @@ class LinearIncidentUptakeModel(UptakeModel):
                         + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
                     ).cast(pl.Utf8),
                 )
-                .with_columns(interval=pl.col("elapsed").diff().over("region"))
+                .with_columns(interval=pl.col("elapsed").diff().over(group_cols))
             )
             .join(
-                self.start.select(["region", "last_elapsed", "last_interval"]),
-                on="region",
+                self.start.select([group_cols] + ["last_elapsed", "last_interval"]),
+                on=group_cols,
             )
             .with_columns(
                 elapsed=pl.col("elapsed")
@@ -708,11 +719,11 @@ class LinearIncidentUptakeModel(UptakeModel):
             .drop(["last_elapsed", "last_interval"])
         )
 
-        regions = self.incident_projection["region"].value_counts()
+        groups = self.incident_projection.partition_by(group_cols)
 
-        for r in range(regions.shape[0]):
-            proj = np.zeros((regions["count"][r]) + 1)
-            proj[0] = self.start.filter(pl.col("region") == regions["region"][r])[
+        for g in range(len(groups)):
+            proj = np.zeros(groups[g].shape[0] + 1)
+            proj[0] = self.start.join(groups[g], on=group_cols, how="semi")[
                 "last_daily"
             ][0]
 
@@ -725,7 +736,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                             self.standards["previous"]["std"],
                         ),
                         standardize(
-                            self.incident_projection["elapsed"][i],
+                            groups[g]["elapsed"][i],
                             self.standards["elapsed"]["mean"],
                             self.standards["elapsed"]["mean"],
                         ),
@@ -739,20 +750,18 @@ class LinearIncidentUptakeModel(UptakeModel):
                     self.standards["daily"]["std"],
                 )
 
-            self.incident_projection = self.incident_projection.with_columns(
-                daily=pl.when(pl.col("region") == self.start["region"][r])
-                .then(pl.Series(np.delete(proj, 0)))
-                .otherwise(pl.col("daily"))
-            )
+            groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
 
-        self.incident_projection = self.incident_projection.with_columns(
+        self.incident_projection = pl.concat(groups).with_columns(
             estimate=pl.col("daily") * pl.col("interval")
         )
 
         self.incident_projection = IncidentUptakeData(self.incident_projection)
 
         self.cumulative_projection = self.incident_projection.to_cumulative(
-            self.start.select(["region", "last_cumulative"])
-        ).select(["region", "date", "estimate"])
+            group_cols, self.start.select([group_cols] + ["last_cumulative"])
+        ).select([group_cols] + ["date", "estimate"])
+
+        self.cumulative_projection = CumulativeUptakeData(self.cumulative_projection)
 
         return self
