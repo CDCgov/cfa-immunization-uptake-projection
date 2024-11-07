@@ -701,17 +701,35 @@ class LinearIncidentUptakeModel(UptakeModel):
             .drop(["last_elapsed", "last_interval"])
         )
 
+        # `regions` is a data frame, one row per region, with columns `region` and `count`
         regions = self.incident_projection["region"].value_counts()
 
+        # `r` is an integer index over range of number of regions
         for r in range(regions.shape[0]):
+            # start with zeros, equal to number of rows that had region `r` in the original
+            # data, plus one (to undo trimming?)
             proj = np.zeros((regions["count"][r]) + 1)
+            # first projected value (the bonus one) is equal to the last value in
+            # the original data
             proj[0] = self.start.filter(pl.col("region") == regions["region"][r])[
                 "last_daily"
             ][0]
 
+            # iterate over index `i` for each place in the projection
             for i in range(proj.shape[0] - 1):
+                # x has three rows
+                # row 1 are "daily" values
+                # row 2 are "elapsed" values
+                # row 3 are interaction (daily*elapsed) values
+                # initialize column 1 with:
+                #  - row 1 is the "daily" value in the training data (does this assume
+                #    that the predictions are all after the training period?)
+                #  - row 2 is the time elapsed since the start date until the first date
+                #    to be predicted
+                #  - row 3 is the interaction
                 x = np.column_stack(
                     (
+                        # de-standardize the previous output value
                         standardize(
                             proj[i],
                             self.standards["previous"]["mean"],
@@ -725,19 +743,30 @@ class LinearIncidentUptakeModel(UptakeModel):
                     )
                 )
                 x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
+                # use the fitted linear model to predict the value for the next (i+1)
+                # forecast value, and then de-standardize
                 y = self.model.predict(x)
                 proj[i + 1] = unstandardize(
                     y[(0, 0)],
                     self.standards["daily"]["mean"],
                     self.standards["daily"]["std"],
                 )
+                # in the first iteration, the "daily" value to be fitted is the last
+                # value from the training data. in other iterations, it is the predicted
+                # value from the iteration before.
 
+            # after done iterating over the prediction times:
+            # assign the rows in the output data frame that are for this region
+            # but drop the last row(?) in `proj`, which was initialized with value
+            # zero but not updated
             self.incident_projection = self.incident_projection.with_columns(
                 daily=pl.when(pl.col("region") == self.start["region"][r])
                 .then(pl.Series(np.delete(proj, 0)))
                 .otherwise(pl.col("daily"))
             )
 
+        # add estimate, which is the estimated uptake rate times the duration of the
+        # uptake period
         self.incident_projection = self.incident_projection.with_columns(
             estimate=pl.col("daily") * pl.col("interval")
         )
