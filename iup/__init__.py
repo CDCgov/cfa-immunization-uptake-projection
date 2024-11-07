@@ -504,6 +504,12 @@ class LinearIncidentUptakeModel(UptakeModel):
     - number of days "elapsed" between rollout and the report date
     - daily-average uptake for the interval preceding the "previous" report date
     - interaction of "elapsed" and "previous"
+
+    Let t_i be increasing time points and UR_i be the uptake rate (e.g., uptake
+    per day) between times t_i-1 and t_i (i.e., uptake up to time t_i). Then the
+    model is:
+
+    UR_i = beta0 + beta1*UR_i-1 + beta2*t_i + beta3*UR_i-1*t_i + error
     """
 
     def __init__(self):
