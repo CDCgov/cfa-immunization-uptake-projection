@@ -4,7 +4,8 @@ data:
     path: PATH_TO_DATA_GOES_HERE
     estimate_col: estimate
     date_col: date
-    group_cols: geography
+    group_cols:
+      geography: region
     date_format: "%m/%d/%Y"
     rollout: 2023-09-01
     filters:

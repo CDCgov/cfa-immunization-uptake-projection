@@ -8,7 +8,9 @@ def run(config):
     cumulative_data = [iup.parse_nis(**x) for x in config["data"].values()]
 
     # List of grouping factors used in each data set
-    grouping_factors = [x["group_cols"] for x in config["data"].values()]
+    grouping_factors = iup.extract_group_names(
+        [x["group_cols"] for x in config["data"].values()]
+    )
 
     # List of incident data sets from the cumulative data sets
     incident_data = [

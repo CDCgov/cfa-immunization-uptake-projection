@@ -206,8 +206,6 @@ class IncidentUptakeData(UptakeData):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        # assert set(group_cols).issubset(self.columns)
-
         rank = pl.col("date").rank().over(group_cols)
         shifted_standard_interval = (
             pl.col("date")
@@ -291,7 +289,7 @@ def parse_nis(
     path: str,
     estimate_col: str,
     date_col: str,
-    group_cols: tuple[str,],
+    group_cols: dict,
     date_format: str,
     rollout: dt.date,
     filters=None,
@@ -306,8 +304,9 @@ def parse_nis(
         name of the NIS column for the uptake estimate (population %)
     date_col: str
         name of the NIS column for the date
-    group_cols: (str,)
-        name(s) of the NIS columns for the grouping factors
+    group_cols: dict
+        dictionary of the NIS columns for the grouping factors
+        keys are the NIS column names and values are the desired column names
     date_format: str
         format of the dates in the NIS date column
     rollout: dt.date
@@ -387,7 +386,7 @@ def select_columns(
     frame: pl.DataFrame,
     estimate_col: str,
     date_col: str,
-    group_cols: tuple[str,],
+    group_cols: dict,
     date_format: str,
 ) -> pl.DataFrame:
     """
@@ -400,8 +399,9 @@ def select_columns(
         name of the NIS column for the uptake estimate (population %)
     date_col: str
         name of the NIS column for the date
-    group_cols: (str,)
-        name(s) of the NIS columns for the grouping factors
+    group_cols: dict
+        dictionary of the NIS columns for the grouping factors
+        keys are the NIS column names and values are the desired column names
     date_format: str
         format of the dates in the NIS date column
 
@@ -412,12 +412,15 @@ def select_columns(
         Only the estimate, date, and grouping factor columns are kept.
     """
     frame = (
-        frame.with_columns(
+        frame.select(
+            [estimate_col] + [date_col] + [pl.col(k) for k in group_cols.keys()]
+        )
+        .with_columns(
             estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
             date=pl.col(date_col).str.to_date(date_format),
         )
+        .rename(group_cols)
         .drop_nulls(subset=["estimate"])
-        .select(["date", "estimate"] + [group_cols])
         .sort("date")
     )
 
@@ -425,7 +428,7 @@ def select_columns(
 
 
 def insert_rollout(
-    frame: pl.DataFrame, rollout: dt.date, group_cols: tuple[str,]
+    frame: pl.DataFrame, rollout: dt.date, group_cols: dict
 ) -> pl.DataFrame:
     """
     Insert into NIS uptake data rows with 0 uptake on the rollout date.
@@ -435,8 +438,9 @@ def insert_rollout(
         NIS data in the midst of parsing
     rollout: dt.date
         rollout date
-    group_cols: (str,)
-        name(s) of the NIS columns for the grouping factors
+    group_cols: dict
+        dictionary of the NIS columns for the grouping factors
+        keys are the NIS column names and values are the desired column names
 
     Returns
         NIS cumulative data with rollout rows included
@@ -444,24 +448,47 @@ def insert_rollout(
     Details
     A separate rollout row is added for every grouping factor combination.
     """
-    # unique_groups = frame[group_cols].unique()
-    # rollout_rows = pl.DataFrame(
-    #     {
-    #         "region": unique_groups,
-    #         "date": rollout,
-    #         "estimate": 0.0,
-    #     }
-    # )
-
     rollout_rows = (
-        frame.select(pl.col(group_cols))
+        frame.select(pl.col(v) for v in group_cols.values())
         .unique()
         .with_columns(date=rollout, estimate=0.0)
     )
 
-    frame = frame.vstack(rollout_rows.select(sorted(frame.columns))).sort("date")
+    frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
 
     return frame
+
+
+def extract_group_names(
+    group_cols=[
+        dict,
+    ],
+):
+    """
+    Insure that the column names for grouping factors match across data sets.
+
+    Parameters
+    group_cols: [dict,]
+        List of dictionaries of grouping factor column names, where
+        keys are the NIS column names and values are the desired column names
+
+    Returns
+        (str,)
+        The desired column names
+
+    Details
+    Before returning a single tuple of the desired column names,
+    check that they are identical for every entry in the dictionary,
+    where each entry represents one data set.
+    """
+    assert all([len(g) == len(group_cols[0]) for g in group_cols])
+    assert all(
+        [g.get(v) == group_cols[0].get(v) for g, v in zip(group_cols, group_cols[0])]
+    )
+
+    group_names = [v for v in group_cols[0].values()]
+
+    return group_names
 
 
 def standardize(x, mn=None, sd=None):
