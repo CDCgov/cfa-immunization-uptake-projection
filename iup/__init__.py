@@ -486,7 +486,7 @@ def extract_group_names(
         [g.get(v) == group_cols[0].get(v) for g, v in zip(group_cols, group_cols[0])]
     )
 
-    group_names = [v for v in group_cols[0].values()]
+    group_names = tuple([v for v in group_cols[0].values()])
 
     return group_names
 
@@ -729,7 +729,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 .with_columns(interval=pl.col("elapsed").diff().over(group_cols))
             )
             .join(
-                self.start.select([group_cols] + ["last_elapsed", "last_interval"]),
+                self.start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
                 on=group_cols,
             )
             .with_columns(
@@ -786,8 +786,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         self.incident_projection = IncidentUptakeData(self.incident_projection)
 
         self.cumulative_projection = self.incident_projection.to_cumulative(
-            group_cols, self.start.select([group_cols] + ["last_cumulative"])
-        ).select([group_cols] + ["date", "estimate"])
+            group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
+        ).select(list(group_cols) + ["date", "estimate"])
 
         self.cumulative_projection = CumulativeUptakeData(self.cumulative_projection)
 

@@ -13,9 +13,7 @@ def run(config):
     )
 
     # List of incident data sets from the cumulative data sets
-    incident_data = [
-        x.to_incident(y) for x, y in zip(cumulative_data, grouping_factors)
-    ]
+    incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]
 
     # Concatenate data sets and split into train and test subsets
     incident_train_data = iup.IncidentUptakeData.split_train_test(
@@ -25,12 +23,12 @@ def run(config):
     # Fit models using the training data and make projections
     incident_model = (
         iup.LinearIncidentUptakeModel()
-        .fit(incident_train_data, grouping_factors[0])
+        .fit(incident_train_data, grouping_factors)
         .predict(
             config["timeframe"]["start"],
             config["timeframe"]["end"],
             config["timeframe"]["interval"],
-            grouping_factors[0],
+            grouping_factors,
         )
     )
     print(incident_model.cumulative_projection)
