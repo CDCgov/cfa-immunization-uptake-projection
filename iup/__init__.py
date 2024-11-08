@@ -737,7 +737,3 @@ class LinearIncidentUptakeModel(UptakeModel):
         ).select(["region", "date", "estimate"])
 
         return self
-
-
-
-
