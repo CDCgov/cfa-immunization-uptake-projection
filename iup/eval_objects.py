@@ -33,13 +33,35 @@ class PointForecast(Forecast):
     # TODO: make the response variable to be a variable not hardcoded #
     def validate(self):
 
-        check_column_names = ['date', 'estimate']
+        self.assert_columns_found(["date", "estimate"])
+        self.assert_columns_type(["date"], pl.Date)
+        self.assert_columns_type(["estimate"], pl.Float64)
+    
+    def assert_columns_found(self, columns: list[str]):
+        """
+        Verify that expected columns are found.
 
-        for name in check_column_names:
-            assert name in self.columns, f'{name} is not found in data'
+        Parameters
+        columns: List[str]
+            names of expected columns
+        """
+        for col in columns:
+            assert col in self.columns, f"Column {col} is expected but not found."
 
-        assert self['date'].dtype == pl.Date, "'date' is not pl.Date"
-        assert self['estimate'].dtype == pl.Float64, "'estimate' is not pl.Float64"
+    def assert_columns_type(self, columns: list[str], dtype):
+        """
+        Verify that columns have the expected type.
+
+        Parameters
+        columns: List[str]
+            names of columns for which to check type
+        dtype:
+            data type for each listed column
+        """
+        for col in columns:
+            assert (
+                self[col].dtype == dtype
+            ), f"Column {col} should be {dtype} but is {self[col].dtype}"
 
 
 class QuantileForecast(Forecast):
@@ -70,33 +92,7 @@ class PointMetric(pl.DataFrame, metaclass=abc.ABCMeta):
             data: PointForecast,
             pred: PointForecast
         ):
-        PointMetric.validate(data, pred)
         super().__init__(self.preprocess(data, pred))
-
-    """
-    Add the same validation method as in PointForecast,
-    guarantee the correct data format.
-
-    """
-    @staticmethod
-    def validate(data, pred):
-
-        # TODO: I need to include more validation rules.
-        # Same last date for data and pred?
-        # Alignment of the interval between data and pred?
-
-        check_column_names = ['date', 'estimate']
-
-        for name in check_column_names:
-            assert name in data.columns, f'{name} is not found in data'
-
-        for name in check_column_names:
-            assert name in pred.columns, f'{name} is not found in pred'
-
-        assert data['date'].dtype == pl.Date, "data['date'] is not pl.Date"
-        assert pred['date'].dtype == pl.Date, "pred['date'] is not pl.Date"
-        assert data['estimate'].dtype == pl.Float64, "data['estimate'] is not pl.Float64"
-        assert pred['estimate'].dtype == pl.Float64, "pred['estimate'] is not pl.Float64"
 
     """
     Combine data and prediction together, varied by metric type (time-wise or not)
@@ -125,13 +121,25 @@ class TimelessPointMetric(PointMetric):
 
 class TimewisePointMetric(PointMetric):
 
+    def __init__(
+            self, 
+            data: PointForecast,
+            pred: PointForecast
+    ):
+        self.validate(data,pred)
+        super().__init__(self.preprocess(data,pred))
+    
+    def validate(self, data, pred):
+        self.assert_date_match(data, pred)
+    
     """
     Check the conditions for date match:
     1. Mutual dates must exist between data and prediction.
     2. There should not be any duplicated date in either data or prediction.
     """
-    def validate(self, data, pred):
 
+    def assert_date_match(self, data, pred):
+        
         assert any(data['date'].is_in(pred['date'])), 'No matched dates between data and prediction.'
 
         common_dates = data.filter(
@@ -139,8 +147,7 @@ class TimewisePointMetric(PointMetric):
         ).select('date')
 
         assert len(common_dates) == common_dates.n_unique(), 'Duplicated dates are found in data or prediction.'
-
-
+    
     def preprocess(self, data, pred):
         """
         Join data and prediction with 1:1 validate
@@ -176,7 +183,7 @@ class TimewisePointMetric(PointMetric):
         Return: pl.DataFrame with MSPE and the forecast start date
 
         """
-        return self.with_columns(
+        start = self.with_columns(
             spe = (pl.col('estimate') - pl.col("estimate_right"))**2
             ).with_columns(
                 mspe = pl.col('spe').mean(),
@@ -187,6 +194,16 @@ class TimewisePointMetric(PointMetric):
             ).select(
                 'forecast_start','mspe'
             )
+        
+        end = self.filter(
+            pl.col('date') == pl.col('date').max()
+        ).rename(
+            {'date':'forecast_end'}
+        ).select(
+            'forecast_end'
+        )
+
+        return pl.concat([start,end],how ='horizontal')
 
     def get_mean_bias(self):
         """
@@ -209,8 +226,11 @@ class TimewisePointMetric(PointMetric):
                 .otherwise(1).alias('bias')
             )
 
-        m_bias = pl.DataFrame({'forecast_start':joined['date'].min(),
-                           'mbias':joined['bias'].sum()/joined.shape[0]})
+        m_bias = pl.DataFrame({
+                           'mbias':joined['bias'].sum()/joined.shape[0],
+                           'forecast_start':joined['date'].min(),
+                           'forecast_end':joined['date'].max()
+                           })
 
         return m_bias
 
