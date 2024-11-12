@@ -497,7 +497,6 @@ def extract_group_names(
     """
 
     if None in group_cols:
-        # group_names = tuple([])
         group_names = None
     else:
         assert all([len(g) == len(group_cols[0]) for g in group_cols])
