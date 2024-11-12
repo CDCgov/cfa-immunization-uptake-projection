@@ -175,12 +175,14 @@ class IncidentUptakeData(UptakeData):
     Subclass of UptakeData for incident uptake.
     """
 
-    def trim_outlier_intervals(self, group_cols: tuple[str,], threshold: float = 1.0):
+    def trim_outlier_intervals(
+        self, group_cols: tuple[str,] | None, threshold: float = 1.0
+    ):
         """
         Remove rows from incident uptake data with intervals that are too large.
 
         Parameters
-          group_cols (tuple): names of grouping factor columns
+          group_cols (tuple) | None: names of grouping factor columns
           threshold (float): maximum standardized interval between first two dates
 
         Returns
@@ -223,12 +225,12 @@ class IncidentUptakeData(UptakeData):
 
         return IncidentUptakeData(df)
 
-    def to_cumulative(self, group_cols: tuple[str,], last_cumulative=None):
+    def to_cumulative(self, group_cols: tuple[str,] | None, last_cumulative=None):
         """
         Convert incident to cumulative uptake data.
 
         Parameters
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns of grouping factors
         last_cumulative: pl.DataFrame
             additional cumulative uptake absent from the incident data, for each group
@@ -245,11 +247,16 @@ class IncidentUptakeData(UptakeData):
         out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
 
         if last_cumulative is not None:
-            out = (
-                out.join(last_cumulative, on=group_cols)
-                .with_columns(estimate=pl.col("estimate") + pl.col("last_cumulative"))
-                .drop("last_cumulative")
-            )
+            if group_cols is not None:
+                out = out.join(last_cumulative, on=group_cols)
+            else:
+                out = out.with_columns(
+                    last_cumulative=last_cumulative["last_cumulative"][0]
+                )
+
+            out = out.with_columns(
+                estimate=pl.col("estimate") + pl.col("last_cumulative")
+            ).drop("last_cumulative")
 
         out = CumulativeUptakeData(out)
 
@@ -261,12 +268,12 @@ class CumulativeUptakeData(UptakeData):
     Subclass of UptakeData for cumulative uptake.
     """
 
-    def to_incident(self, group_cols: tuple[str,]) -> IncidentUptakeData:
+    def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
 
         Parameters
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns of grouping factors
 
         Returns
@@ -411,15 +418,19 @@ def select_columns(
     Details
         Only the estimate, date, and grouping factor columns are kept.
     """
-    frame = (
-        frame.select(
+
+    if group_cols is not None:
+        frame = frame.select(
             [estimate_col] + [date_col] + [pl.col(k) for k in group_cols.keys()]
-        )
-        .with_columns(
+        ).rename(group_cols)
+    else:
+        frame = frame.select([estimate_col] + [date_col])
+
+    frame = (
+        frame.with_columns(
             estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
             date=pl.col(date_col).str.to_date(date_format),
         )
-        .rename(group_cols)
         .drop_nulls(subset=["estimate"])
         .sort("date")
     )
@@ -448,11 +459,14 @@ def insert_rollout(
     Details
     A separate rollout row is added for every grouping factor combination.
     """
-    rollout_rows = (
-        frame.select(pl.col(v) for v in group_cols.values())
-        .unique()
-        .with_columns(date=rollout, estimate=0.0)
-    )
+    if group_cols is not None:
+        rollout_rows = (
+            frame.select(pl.col(v) for v in group_cols.values())
+            .unique()
+            .with_columns(date=rollout, estimate=0.0)
+        )
+    else:
+        rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
 
     frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
 
@@ -481,12 +495,19 @@ def extract_group_names(
     check that they are identical for every entry in the dictionary,
     where each entry represents one data set.
     """
-    assert all([len(g) == len(group_cols[0]) for g in group_cols])
-    assert all(
-        [g.get(v) == group_cols[0].get(v) for g, v in zip(group_cols, group_cols[0])]
-    )
 
-    group_names = tuple([v for v in group_cols[0].values()])
+    if None in group_cols:
+        # group_names = tuple([])
+        group_names = None
+    else:
+        assert all([len(g) == len(group_cols[0]) for g in group_cols])
+        assert all(
+            [
+                g.get(v) == group_cols[0].get(v)
+                for g, v in zip(group_cols, group_cols[0])
+            ]
+        )
+        group_names = tuple([v for v in group_cols[0].values()])
 
     return group_names
 
@@ -562,14 +583,14 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         self.model = LinearRegression()
 
-    def fit(self, data: IncidentUptakeData, group_cols: tuple[str,]) -> Self:
+    def fit(self, data: IncidentUptakeData, group_cols: tuple[str,] | None) -> Self:
         """
         Fit a linear incident uptake model on training data.
 
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -663,7 +684,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        group_cols: tuple[str,],
+        group_cols: tuple[str,] | None,
     ) -> Self:
         """
         Make projections from a fit linear incident uptake model.
@@ -676,7 +697,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -707,52 +728,66 @@ class LinearIncidentUptakeModel(UptakeModel):
         )
 
         self.incident_projection = (
-            (
-                pl.date_range(
-                    start=start_date,
-                    end=end_date,
-                    interval=interval,
-                    eager=True,
-                )
-                .alias("date")
-                .to_frame()
-                .join(self.start.select(group_cols), how="cross")
-                .with_columns(
-                    elapsed=(
-                        (pl.col("date") - start_date).dt.total_days().cast(pl.Float64)
-                    ),
-                    season=(
-                        pl.col("date").dt.year()
-                        + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
-                    ).cast(pl.Utf8),
-                )
-                .with_columns(interval=pl.col("elapsed").diff().over(group_cols))
+            pl.date_range(
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                eager=True,
             )
-            .join(
+            .alias("date")
+            .to_frame()
+        )
+
+        if group_cols is not None:
+            self.incident_projection = self.incident_projection.join(
+                self.start.select(group_cols), how="cross"
+            )
+
+        self.incident_projection = self.incident_projection.with_columns(
+            elapsed=((pl.col("date") - start_date).dt.total_days().cast(pl.Float64)),
+            season=(
+                pl.col("date").dt.year()
+                + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
+            ).cast(pl.Utf8),
+        ).with_columns(interval=pl.col("elapsed").diff().over(group_cols))
+
+        if group_cols is not None:
+            self.incident_projection = self.incident_projection.join(
                 self.start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
                 on=group_cols,
             )
-            .with_columns(
-                elapsed=pl.col("elapsed")
-                + pl.col("last_elapsed")
-                + pl.col("last_interval"),
-                interval=pl.when(pl.col("interval").is_null())
-                .then(pl.col("last_interval"))
-                .otherwise(pl.col("interval")),
-                daily=pl.lit(0),
-                estimate=pl.lit(0),
-                previous=pl.lit(0),
+        else:
+            self.incident_projection = self.incident_projection.with_columns(
+                last_elapsed=self.start["last_elapsed"][0],
+                last_interval=self.start["last_interval"][0],
             )
-            .drop(["last_elapsed", "last_interval"])
-        )
 
-        groups = self.incident_projection.partition_by(group_cols)
+        self.incident_projection = self.incident_projection.with_columns(
+            elapsed=pl.col("elapsed")
+            + pl.col("last_elapsed")
+            + pl.col("last_interval"),
+            interval=pl.when(pl.col("interval").is_null())
+            .then(pl.col("last_interval"))
+            .otherwise(pl.col("interval")),
+            daily=pl.lit(0),
+            estimate=pl.lit(0),
+            previous=pl.lit(0),
+        ).drop(["last_elapsed", "last_interval"])
+
+        if group_cols is not None:
+            groups = self.incident_projection.partition_by(group_cols)
+        else:
+            groups = [self.incident_projection]
 
         for g in range(len(groups)):
             proj = np.zeros(groups[g].shape[0] + 1)
-            proj[0] = self.start.join(groups[g], on=group_cols, how="semi")[
-                "last_daily"
-            ][0]
+
+            if group_cols is not None:
+                proj[0] = self.start.join(groups[g], on=group_cols, how="semi")[
+                    "last_daily"
+                ][0]
+            else:
+                proj[0] = self.start["last_daily"][0]
 
             for i in range(proj.shape[0] - 1):
                 x = np.column_stack(
@@ -785,9 +820,14 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         self.incident_projection = IncidentUptakeData(self.incident_projection)
 
-        self.cumulative_projection = self.incident_projection.to_cumulative(
-            group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
-        ).select(list(group_cols) + ["date", "estimate"])
+        if group_cols is not None:
+            self.cumulative_projection = self.incident_projection.to_cumulative(
+                group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
+            ).select(list(group_cols) + ["date", "estimate"])
+        else:
+            self.cumulative_projection = self.incident_projection.to_cumulative(
+                group_cols, self.start.select(["last_cumulative"])
+            ).select(["date", "estimate"])
 
         self.cumulative_projection = CumulativeUptakeData(self.cumulative_projection)
 
