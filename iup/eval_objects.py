@@ -36,7 +36,7 @@ class PointForecast(Forecast):
         self.assert_columns_found(["date", "estimate"])
         self.assert_columns_type(["date"], pl.Date)
         self.assert_columns_type(["estimate"], pl.Float64)
-    
+
     def assert_columns_found(self, columns: list[str]):
         """
         Verify that expected columns are found.
@@ -122,16 +122,16 @@ class TimelessPointMetric(PointMetric):
 class TimewisePointMetric(PointMetric):
 
     def __init__(
-            self, 
+            self,
             data: PointForecast,
             pred: PointForecast
     ):
         self.validate(data,pred)
         super().__init__(self.preprocess(data,pred))
-    
+
     def validate(self, data, pred):
         self.assert_date_match(data, pred)
-    
+
     """
     Check the conditions for date match:
     1. Mutual dates must exist between data and prediction.
@@ -139,7 +139,7 @@ class TimewisePointMetric(PointMetric):
     """
 
     def assert_date_match(self, data, pred):
-        
+
         assert any(data['date'].is_in(pred['date'])), 'No matched dates between data and prediction.'
 
         common_dates = data.filter(
@@ -147,7 +147,7 @@ class TimewisePointMetric(PointMetric):
         ).select('date')
 
         assert len(common_dates) == common_dates.n_unique(), 'Duplicated dates are found in data or prediction.'
-    
+
     def preprocess(self, data, pred):
         """
         Join data and prediction with 1:1 validate
@@ -194,7 +194,7 @@ class TimewisePointMetric(PointMetric):
             ).select(
                 'forecast_start','mspe'
             )
-        
+
         end = self.filter(
             pl.col('date') == pl.col('date').max()
         ).rename(
