@@ -2,9 +2,10 @@
 data:
   data_set_1:
     path: PATH_TO_DATA_GOES_HERE
-    region_col: geography
-    date_col: date
     estimate_col: estimate
+    date_col: date
+    group_cols:
+      geography: region
     date_format: "%m/%d/%Y"
     rollout: 2023-09-01
     filters:
