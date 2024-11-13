@@ -394,11 +394,11 @@ def select_columns(
     frame: pl.DataFrame,
     estimate_col: str,
     date_col: str,
-    group_cols: dict,
+    group_cols: dict | None,
     date_format: str,
 ) -> pl.DataFrame:
     """
-    Select the date, region, and uptake estimate columns of NIS uptake data.
+    Select the date, uptake, and any grouping columns of NIS uptake data.
 
     Parameters
     frame: pl.DataFrame
@@ -407,7 +407,7 @@ def select_columns(
         name of the NIS column for the uptake estimate (population %)
     date_col: str
         name of the NIS column for the date
-    group_cols: dict
+    group_cols: dict | None
         dictionary of the NIS columns for the grouping factors
         keys are the NIS column names and values are the desired column names
     date_format: str
@@ -440,7 +440,7 @@ def select_columns(
 
 
 def insert_rollout(
-    frame: pl.DataFrame, rollout: dt.date, group_cols: dict
+    frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
 ) -> pl.DataFrame:
     """
     Insert into NIS uptake data rows with 0 uptake on the rollout date.
@@ -450,7 +450,7 @@ def insert_rollout(
         NIS data in the midst of parsing
     rollout: dt.date
         rollout date
-    group_cols: dict
+    group_cols: dict | None
         dictionary of the NIS columns for the grouping factors
         keys are the NIS column names and values are the desired column names
 
@@ -478,7 +478,7 @@ def extract_group_names(
     group_cols=[
         dict,
     ],
-):
+) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
 
@@ -501,12 +501,7 @@ def extract_group_names(
         group_names = None
     else:
         assert all([len(g) == len(group_cols[0]) for g in group_cols])
-        assert all(
-            [
-                g.get(v) == group_cols[0].get(v)
-                for g, v in zip(group_cols, group_cols[0])
-            ]
-        )
+        assert all([set(g.values()) == set(group_cols[0].values()) for g in group_cols])
         group_names = tuple([v for v in group_cols[0].values()])
 
     return group_names
