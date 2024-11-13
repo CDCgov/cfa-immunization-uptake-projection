@@ -318,7 +318,7 @@ def parse_nis(
         format of the dates in the NIS date column
     rollout: dt.date
         date of rollout
-    filters: dict
+    filters: dict | None
         filters to remove unnecessary rows from the NIS data
         keys are NIS column names and values are entries for rows to keep
 
@@ -362,14 +362,14 @@ def fetch_nis(path: str) -> pl.DataFrame:
     return pl.read_csv(path)
 
 
-def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
+def apply_filters(frame: pl.DataFrame, filters: dict | None) -> pl.DataFrame:
     """
     Apply filters to NIS data to remove unnecessary rows.
 
     Parameters
     frame: pl.DataFrame
         NIS data in the midst of parsing
-    filters: dict
+    filters: dict | None
         filters to remove unnecessary rows from the NIS data
         keys are NIS column names and values are entries for rows to keep
 
@@ -381,10 +381,11 @@ def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
         If multiple entries in a column indicate that a row should be kept,
         the dictionary value for that column may be a list of these entries.
     """
-    filter_expr = pl.lit(True)
-    for k, v in filters.items():
-        filter_expr &= pl.col(k).is_in(pl.lit(v))
-    frame = frame.filter(filter_expr)
+    if filters is not None:
+        filter_expr = pl.lit(True)
+        for k, v in filters.items():
+            filter_expr &= pl.col(k).is_in(pl.lit(v))
+        frame = frame.filter(filter_expr)
 
     return frame
 
