@@ -695,34 +695,22 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Returns
         LinearIncidentUptakeModel
-            the model with projection starting conditions, standardization
+            model object with projection starting conditions, standardization
             constants, predictor and outcome variables, and the model fit
             all stored as attributes
 
         Details
-        Extra columns for fitting this model are added to the incident data:
-        - the disease season that each date belongs to
-        - the interval of time in days between each successive date
-        - the number of days elapsed between rollout and each date
-        - the daily-average uptake in the interval preceding each date
-        - the daily-average uptake in the interval preceding the previous date
+        Extra columns for fitting this model are added to the incident data,
+        including daily-average uptake. This is modeled rather than total uptake
+        to account for slight variations in interval lengths (e.g. 6 vs. 7 days).
 
-        The daily-average uptake is modeled (rather than the total uptake) to
-        account for slight variations in interval lengths (e.g. 6 vs. 7 days).
-
-        Some starting conditions must be recorded to enable prediction later:
-        - the last incident uptake in the training data
-        - the last date in the training data
-        - the last days-elapsed-since-rollout in the training data
-        - the cumulative uptake at the end of the training data
-        These are recorded separately for each group in the training data.
+        To enable projections later on, some starting conditions as well as
+        standardization constants for the model's outcome and first-order predictors
+        are recorded and stored as model attributes.
 
         If the training data spans multiple (combinations of) groups,
         complete pooling will be used to recognize the groups as distinct but
         to assume they behave identically except for initial conditions.
-
-        Standardization constants must also be recorded for the model's outcome
-        and first-order predictors, to enable projection later.
 
         Finally, the model is fit using the scikit-learn module.
         """
@@ -780,11 +768,11 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Returns
         pl.DataFrame
-            scaffold to hold hold model projection
+            scaffold to hold model projections
 
         Details
-        A scaffold data frame is built to house the incident projections over the desired
-        time frame with the desired time intervals, for each group in the data.
+        The desired time frame for projections is repeated over grouping factors,
+        if any grouping factors exist.
         """
         scaffold = (
             pl.date_range(
@@ -838,7 +826,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Parameters
         scaffold: pl.DataFrame
-            data frame for which to fill in incident uptake projections
+            data frame to fill in with incident uptake projections
         start: pl.DataFrame
             starting conditions for the first projection
         standards: dict
@@ -848,13 +836,21 @@ class LinearIncidentUptakeModel(UptakeModel):
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
-
         Returns
         IncidentUptakeProjection
             Projections over the desired time frame from a linear incident uptake model
 
         Details
+        Because daily-average uptake (outcome) and previous daily-average
+        uptake (predictor) each contain one observation that the other
+        does not, the projection at each time point must be unstandardized
+        according to the former and restandardized according to the latter
+        before it can be used to project the next time point. This is what
+        necessitates the sequential nature of these projections.
 
+        Projections are made separately by group, if grouping factors exist.
+
+        This does not yet incorporate uncertainty, but it should in the future.
         """
         if group_cols is not None:
             groups = scaffold.partition_by(group_cols)
@@ -931,19 +927,12 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Details
         A data frame is set up to house the incident projectins over the
-        desired time frame with the desired time intervals.
+        desired time window with the desired intervals.
 
         The starting conditions derived from the last training data date
         are used to project for the first date. From there, projections
         are generated sequentially, because the projection for each date
         depends on the previous date, thanks to the model structure.
-
-        Note the each projection must be unstandardized using the mean/std
-        from the outcome variable in the training data, then restandardized
-        using the mean/std from the "previous" predictor in the training data.
-
-        The sequential projection loop does not yet incorporate uncertainty.
-        This must be included in the future.
 
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
