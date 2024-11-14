@@ -145,6 +145,17 @@ def test_trim_outlier_intervals_handles_below_threshold(frame):
     assert output.shape[0] == 4
 
 
+def test_expand_implicit_columns(frame):
+    """
+    Add 5 columns to the incident uptake data without losing any rows
+    """
+    frame = iup.IncidentUptakeData(frame)
+    frame = frame.expand_implicit_columns(group_cols=("geography",))
+
+    assert frame.shape[0] == 8
+    assert frame.shape[1] == 8
+
+
 def test_to_cumulative_handles_no_last(frame):
     """
     If last_cumulative is not given, then simple cumulative sums are performed
