@@ -550,7 +550,7 @@ def standardize(x, mn=None, sd=None):
     Standardize: subtract mean and divide by standard deviation.
 
     Parameters
-    x: pl.Expr | pl.DataFrame
+    x: pl.Expr | float64
         the numbers to standardize
     mn: float64
         the term to subtract, if not the mean of x
@@ -558,17 +558,23 @@ def standardize(x, mn=None, sd=None):
         the term to divide by, if not the standard deviation of x
 
     Returns
-    pl.Expr | pl.DataFrame
+    pl.Expr | float
         the standardized numbers
     """
-    if mn is not None:
-        return (x - mn) / sd
+    if type(x) is pl.Expr:
+        if mn is not None:
+            return (x - mn) / sd
+        else:
+            return (
+                pl.when(x.drop_nulls().n_unique() == 1)
+                .then(x * 0.0)
+                .otherwise((x - x.mean()) / x.std())
+            )
     else:
-        return (
-            pl.when(x.drop_nulls().n_unique() == 1)
-            .then(x * 0.0)
-            .otherwise((x - x.mean()) / x.std())
-        )
+        if mn is not None:
+            return (x - mn) / sd
+        else:
+            return (x - x.mean()) / x.std()
 
 
 def unstandardize(x, mn, sd):
@@ -576,7 +582,7 @@ def unstandardize(x, mn, sd):
     Unstandardize: add standard deviation and multiply by mean.
 
     Parameters
-    x: pl.Expr | pl.DataFrame
+    x: pl.Expr
         the numbers to unstandardize
     mn: float64
         the term to add
@@ -584,7 +590,7 @@ def unstandardize(x, mn, sd):
         the term to multiply by
 
     Returns
-    pl.Expr | pl.DataFrame
+    pl.Expr
         the unstandardized numbers
     """
     return x * sd + mn
@@ -872,19 +878,22 @@ class LinearIncidentUptakeModel(UptakeModel):
                 proj[0] = start["last_daily"][0]
 
             for i in range(proj.shape[0] - 1):
-                x = np.column_stack(
-                    (
-                        standardize(
-                            proj[i],
-                            standards["previous"]["mean"],
-                            standards["previous"]["std"],
-                        ),
-                        standardize(
-                            groups[g]["elapsed"][i],
-                            standards["elapsed"]["mean"],
-                            standards["elapsed"]["mean"],
-                        ),
-                    )
+                x = np.reshape(
+                    np.array(
+                        [
+                            standardize(
+                                proj[i],
+                                standards["previous"]["mean"],
+                                standards["previous"]["std"],
+                            ),
+                            standardize(
+                                groups[g]["elapsed"][i],
+                                standards["elapsed"]["mean"],
+                                standards["elapsed"]["mean"],
+                            ),
+                        ]
+                    ),
+                    (-1, 2),
                 )
                 x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
                 y = model.predict(x)
