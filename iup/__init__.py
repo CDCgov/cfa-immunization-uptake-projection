@@ -825,26 +825,20 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def project_sequentially(
-        scaffold: pl.DataFrame,
-        start: pl.DataFrame,
-        standards: dict,
-        model: LinearRegression,
-        group_cols: tuple[str,] | None,
-    ) -> IncidentUptakeData:
+        elapsed: tuple, start: float, standards: dict, model: LinearRegression
+    ) -> np.ndarray:
         """
         Perform sequential projections from a linear incident uptake model.
 
         Parameters
-        scaffold: pl.DataFrame
-            data frame to fill in with incident uptake projections
+        elapsed: tuple
+            days elapsed since rollout at each projection time point
         start: pl.DataFrame
-            starting conditions for the first projection
+            starting value for the first projection
         standards: dict
             means and standard deviations for the predictor and outcome variables
         model: LinearRegression
-            fit linear incident uptake model
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
+            model that predicts next daily-avg uptake from the current
 
         Returns
         IncidentUptakeProjection
@@ -859,59 +853,41 @@ class LinearIncidentUptakeModel(UptakeModel):
         necessitates the sequential nature of these projections.
 
         Projections are made separately by group, if grouping factors exist.
+        This function handles one group at a time.
 
         This does not yet incorporate uncertainty, but it should in the future.
         """
-        if group_cols is not None:
-            groups = scaffold.partition_by(group_cols)
-        else:
-            groups = [scaffold]
+        proj = np.zeros(len(elapsed) + 1)
 
-        for g in range(len(groups)):
-            proj = np.zeros(groups[g].shape[0] + 1)
+        proj[0] = start
 
-            if group_cols is not None:
-                proj[0] = start.join(groups[g], on=group_cols, how="semi")[
-                    "last_daily"
-                ][0]
-            else:
-                proj[0] = start["last_daily"][0]
+        for i in range(proj.shape[0] - 1):
+            x = np.reshape(
+                np.array(
+                    [
+                        standardize(
+                            proj[i],
+                            standards["previous"]["mean"],
+                            standards["previous"]["std"],
+                        ),
+                        standardize(
+                            elapsed[i],
+                            standards["elapsed"]["mean"],
+                            standards["elapsed"]["std"],
+                        ),
+                    ]
+                ),
+                (-1, 2),
+            )
+            x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
+            y = model.predict(x)
+            proj[i + 1] = unstandardize(
+                y[(0, 0)],
+                standards["daily"]["mean"],
+                standards["daily"]["std"],
+            )
 
-            for i in range(proj.shape[0] - 1):
-                x = np.reshape(
-                    np.array(
-                        [
-                            standardize(
-                                proj[i],
-                                standards["previous"]["mean"],
-                                standards["previous"]["std"],
-                            ),
-                            standardize(
-                                groups[g]["elapsed"][i],
-                                standards["elapsed"]["mean"],
-                                standards["elapsed"]["mean"],
-                            ),
-                        ]
-                    ),
-                    (-1, 2),
-                )
-                x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
-                y = model.predict(x)
-                proj[i + 1] = unstandardize(
-                    y[(0, 0)],
-                    standards["daily"]["mean"],
-                    standards["daily"]["std"],
-                )
-
-            groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
-
-        scaffold = pl.concat(groups).with_columns(
-            estimate=pl.col("daily") * pl.col("interval")
-        )
-
-        scaffold = IncidentUptakeData(scaffold)
-
-        return scaffold
+        return proj
 
     def predict(
         self,
@@ -958,9 +934,30 @@ class LinearIncidentUptakeModel(UptakeModel):
             self.start, start_date, end_date, interval, group_cols
         )
 
-        self.incident_projection = LinearIncidentUptakeModel.project_sequentially(
-            self.incident_projection, self.start, self.standards, self.model, group_cols
+        if group_cols is not None:
+            groups = self.incident_projection.partition_by(group_cols)
+        else:
+            groups = [self.incident_projection]
+
+        for g in range(len(groups)):
+            if group_cols is not None:
+                start = self.start.join(groups[g], on=group_cols, how="semi")[
+                    "last_daily"
+                ][0]
+            else:
+                start = self.start["last_daily"][0]
+
+            proj = LinearIncidentUptakeModel.project_sequentially(
+                tuple(groups[g]["elapsed"]), start, self.standards, self.model
+            )
+
+            groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
+
+        self.incident_projection = pl.concat(groups).with_columns(
+            estimate=pl.col("daily") * pl.col("interval")
         )
+
+        self.incident_projection = IncidentUptakeData(self.incident_projection)
 
         if group_cols is not None:
             self.cumulative_projection = self.incident_projection.to_cumulative(

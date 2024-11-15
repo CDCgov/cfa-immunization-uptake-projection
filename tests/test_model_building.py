@@ -2,6 +2,8 @@ import iup
 import polars as pl
 import pytest
 import datetime as dt
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 
 @pytest.fixture
@@ -82,3 +84,81 @@ def test_fit(frame):
     output = output.fit(frame, ("geography",))
 
     assert output.model.score(output.x, output.y) == 1.0
+
+
+def test_build_scaffold_handles_no_groups():
+    """
+    Set up a data frame with 5 rows and 7 columns if no grouping factors are given
+    """
+    start = pl.DataFrame(
+        {
+            "last_date": dt.date(2020, 1, 31),
+            "last_daily": 0.1,
+            "last_elapsed": 31,
+            "last_cumulative": 4.0,
+            "last_interval": 1,
+        }
+    )
+    start_date = dt.date(2020, 2, 1)
+    end_date = dt.date(2020, 2, 29)
+    interval = "7d"
+    group_cols = None
+
+    output = iup.LinearIncidentUptakeModel.build_scaffold(
+        start, start_date, end_date, interval, group_cols
+    )
+
+    assert output.shape[0] == 5
+    assert output.shape[1] == 7
+
+
+def test_build_scaffold_handles_groups():
+    """
+    Set up a data frame with 10 rows and 8 columns if a grouping factor with 2 values is given
+    """
+    start = pl.DataFrame(
+        {
+            "last_date": dt.date(2020, 1, 31),
+            "last_daily": 0.1,
+            "last_elapsed": 31,
+            "last_cumulative": 4.0,
+            "last_interval": 1,
+        }
+    ).join(pl.DataFrame({"geography": ["USA", "PA"]}), how="cross")
+    start_date = dt.date(2020, 2, 1)
+    end_date = dt.date(2020, 2, 29)
+    interval = "7d"
+    group_cols = ("geography",)
+
+    output = iup.LinearIncidentUptakeModel.build_scaffold(
+        start, start_date, end_date, interval, group_cols
+    )
+
+    assert output.shape[0] == 10
+    assert output.shape[1] == 8
+
+
+def test_project_sequentially():
+    """
+    Model with coef 0 for previous and 1 for elapsed gives elapsed back
+    """
+    elapsed = tuple([10.0, 17.0])
+    start = 3
+    standards = {
+        "previous": {"mean": 0, "std": 1},
+        "elapsed": {"mean": 0, "std": 1},
+        "daily": {"mean": 0, "std": 1},
+    }
+    model = LinearRegression()
+    x = np.reshape(np.array([0, 0, 0, 0, 1, 0]), (2, 3))
+    y = np.reshape(np.array([0, 1]), (2, 1))
+    model.fit(x, y)
+
+    output = iup.LinearIncidentUptakeModel.project_sequentially(
+        elapsed, start, standards, model
+    )
+
+    assert all(
+        np.round(np.delete(output, 0), decimals=10)
+        == np.round(np.array(elapsed), decimals=10)
+    )
