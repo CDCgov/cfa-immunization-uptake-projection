@@ -114,7 +114,7 @@ def test_insert_rollout_handles_no_groups(frame):
 
 def test_extract_group_names_handles_matching_groups():
     """
-    If a list of matching group name dictionaries is given, just one dictionary is chosen.
+    If a list of matching group name dictionaries is given, the matching values are returned.
     """
     group_cols = [
         {"geography": "region", "indicator": "outcome"},
@@ -128,7 +128,7 @@ def test_extract_group_names_handles_matching_groups():
 
 def test_extract_group_names_handles_unmatched_keys():
     """
-    If a list of mismatched group name dictionaries is given, just one dictionary is chosen.
+    If a list of group name dictionaries with mismatched keys is given, the matching values are returned.
     """
     group_cols = [
         {"geography": "region", "indicator": "outcome"},
@@ -142,7 +142,7 @@ def test_extract_group_names_handles_unmatched_keys():
 
 def test_extract_group_names_handles_unmatched_values():
     """
-    If a list of mismatched group name dictionaries is given, just one dictionary is chosen.
+    If a list of group name dictionaries with mismatched values is given, an error is raised.
     """
     group_cols = [
         {"geography": "region", "indicator": "outcome"},
