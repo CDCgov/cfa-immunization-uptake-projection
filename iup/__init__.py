@@ -564,7 +564,11 @@ def standardize(x, mn=None, sd=None):
     if mn is not None:
         return (x - mn) / sd
     else:
-        return (x - x.mean()) / x.std()
+        return (
+            pl.when(x.drop_nulls().n_unique() == 1)
+            .then(x * 0.0)
+            .otherwise((x - x.mean()) / x.std())
+        )
 
 
 def unstandardize(x, mn, sd):

@@ -7,7 +7,7 @@ import datetime as dt
 @pytest.fixture
 def frame():
     """
-    Make a mock data frame to test data cleaning.
+    Make a mock data frame to uptake data manipulations.
     """
     frame = pl.DataFrame(
         {
@@ -143,6 +143,18 @@ def test_trim_outlier_intervals_handles_below_threshold(frame):
     output = frame.trim_outlier_intervals(group_cols=("geography",), threshold=2)
 
     assert output.shape[0] == 4
+
+
+def test_trim_outlier_intervals_handles_zero_std(frame):
+    """
+    If std dev of intervals is 0, first two rows are trimmed by group
+    """
+    frame = frame.filter(pl.col("date") > dt.date(2020, 1, 1))
+    frame = iup.IncidentUptakeData(frame)
+
+    output = frame.trim_outlier_intervals(group_cols=("geography",))
+
+    assert output.shape[0] == 2
 
 
 def test_expand_implicit_columns(frame):
