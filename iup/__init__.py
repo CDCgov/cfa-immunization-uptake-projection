@@ -1043,9 +1043,23 @@ def get_mean_bias(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame
     Input: data, pred in a matching and validated format
     Return: pl.DataFrame with mean bias and the forecast start date and end date
     """
-    joined = data.join(pred, on="date", how="inner", validate="1:1").with_columns(
-        diff=(pl.col("estimate") - pl.col("estimate_right"))
-    )
+
+    # Check the conditions for date match:
+    # 1. Mutual dates must exist between data and prediction.
+    assert any(
+        data["date"].is_in(pred["date"])
+    ), "No matched dates between data and prediction."
+
+    # 2. There should not be any duplicated date in either data or prediction.
+    common_dates = data.filter(pl.col("date").is_in(pred["date"])).select("date")
+
+    assert (
+        len(common_dates) == common_dates.n_unique()
+    ), "Duplicated dates are found in data or prediction."
+
+    joined = data.join(pred, on="date", how="inner", validate="1:1")
+
+    joined = joined.with_columns(diff=(pl.col("estimate") - pl.col("estimate_right")))
 
     joined = joined.with_columns(bias=joined["diff"].sign())
 
