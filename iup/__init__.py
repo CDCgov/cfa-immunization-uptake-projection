@@ -1018,7 +1018,8 @@ def get_mspe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
     )
 
     end = (
-        joined.with_columns(spe=(pl.col("estimate") - pl.col("estimate_right")) ** 2)
+        joined.rename({"estimate": "data", "estimate_right": "pred"})
+        .with_columns(spe=(pl.col("data") - pl.col("pred")) ** 2)
         .with_columns(
             mspe=pl.col("spe").mean(),
         )
@@ -1057,9 +1058,11 @@ def get_mean_bias(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame
         len(common_dates) == common_dates.n_unique()
     ), "Duplicated dates are found in data or prediction."
 
-    joined = data.join(pred, on="date", how="inner", validate="1:1")
-
-    joined = joined.with_columns(diff=(pl.col("estimate") - pl.col("estimate_right")))
+    joined = (
+        data.join(pred, on="date", how="inner", validate="1:1")
+        .rename({"estimate": "data", "estimate_right": "pred"})
+        .with_columns(diff=(pl.col("data") - pl.col("pred")))
+    )
 
     joined = joined.with_columns(bias=joined["diff"].sign())
 
@@ -1084,9 +1087,10 @@ def get_eos_abe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
     """
     joined = (
         data.join(pred, on="date", how="inner", validate="1:1")
+        .rename({"estimate": "data", "estimate_right": "pred"})
         .with_columns(
-            cumu_data=pl.col("estimate").cum_sum(),
-            cumu_pred=pl.col("estimate_right").cum_sum(),
+            cumu_data=pl.col("data").cum_sum(),
+            cumu_pred=pl.col("pred").cum_sum(),
         )
         .filter(pl.col("date") == pl.col("date").max())
         .rename({"date": "forecast_end"})
