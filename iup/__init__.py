@@ -779,7 +779,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             )
 
         self.incident_projection = self.incident_projection.with_columns(
-          
+
             elapsed=pl.col("elapsed")
             + pl.col("last_elapsed")
             + pl.col("last_interval"),
