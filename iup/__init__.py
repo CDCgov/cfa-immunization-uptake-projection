@@ -225,6 +225,44 @@ class IncidentUptakeData(UptakeData):
 
         return IncidentUptakeData(df)
 
+    def augment_implicit_columns(self, group_cols: tuple[str,] | None) -> Self:
+        """
+        Add explicit columns for information that is implicitly contained.
+
+        Parameters
+        data: IncidentUptakeData
+            data containing dates and incident uptake estimates
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+
+        Returns
+        IncidentUptakeData
+            data provided augmented with extra explicit columns.
+
+        Details
+        Extra columns are added to the incident uptake data:
+        - disease season that each date belongs to
+        - interval of time in days between each successive date
+        - number of days elapsed between rollout and each date
+        - daily-average uptake in the interval preceding each date
+        - daily-average uptake in the interval preceding the previous date
+        """
+        self = (
+            self.with_columns(
+                season=pl.col("date").pipe(UptakeData.date_to_season),
+                elapsed=pl.col("date")
+                .pipe(UptakeData.date_to_elapsed)
+                .over(group_cols),
+                interval=pl.col("date")
+                .pipe(UptakeData.date_to_interval)
+                .over(group_cols),
+            )
+            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+            .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
+        )
+
+        return self
+
     def to_cumulative(self, group_cols: tuple[str,] | None, last_cumulative=None):
         """
         Convert incident to cumulative uptake data.
@@ -318,7 +356,7 @@ def parse_nis(
         format of the dates in the NIS date column
     rollout: dt.date
         date of rollout
-    filters: dict
+    filters: dict | None
         filters to remove unnecessary rows from the NIS data
         keys are NIS column names and values are entries for rows to keep
 
@@ -362,14 +400,14 @@ def fetch_nis(path: str) -> pl.DataFrame:
     return pl.read_csv(path)
 
 
-def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
+def apply_filters(frame: pl.DataFrame, filters: dict | None) -> pl.DataFrame:
     """
     Apply filters to NIS data to remove unnecessary rows.
 
     Parameters
     frame: pl.DataFrame
         NIS data in the midst of parsing
-    filters: dict
+    filters: dict | None
         filters to remove unnecessary rows from the NIS data
         keys are NIS column names and values are entries for rows to keep
 
@@ -381,10 +419,11 @@ def apply_filters(frame: pl.DataFrame, filters: dict) -> pl.DataFrame:
         If multiple entries in a column indicate that a row should be kept,
         the dictionary value for that column may be a list of these entries.
     """
-    filter_expr = pl.lit(True)
-    for k, v in filters.items():
-        filter_expr &= pl.col(k).is_in(pl.lit(v))
-    frame = frame.filter(filter_expr)
+    if filters is not None:
+        filter_expr = pl.lit(True)
+        for k, v in filters.items():
+            filter_expr &= pl.col(k).is_in(pl.lit(v))
+        frame = frame.filter(filter_expr)
 
     return frame
 
@@ -393,11 +432,11 @@ def select_columns(
     frame: pl.DataFrame,
     estimate_col: str,
     date_col: str,
-    group_cols: dict,
+    group_cols: dict | None,
     date_format: str,
 ) -> pl.DataFrame:
     """
-    Select the date, region, and uptake estimate columns of NIS uptake data.
+    Select the date, uptake, and any grouping columns of NIS uptake data.
 
     Parameters
     frame: pl.DataFrame
@@ -406,7 +445,7 @@ def select_columns(
         name of the NIS column for the uptake estimate (population %)
     date_col: str
         name of the NIS column for the date
-    group_cols: dict
+    group_cols: dict | None
         dictionary of the NIS columns for the grouping factors
         keys are the NIS column names and values are the desired column names
     date_format: str
@@ -439,7 +478,7 @@ def select_columns(
 
 
 def insert_rollout(
-    frame: pl.DataFrame, rollout: dt.date, group_cols: dict
+    frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
 ) -> pl.DataFrame:
     """
     Insert into NIS uptake data rows with 0 uptake on the rollout date.
@@ -449,7 +488,7 @@ def insert_rollout(
         NIS data in the midst of parsing
     rollout: dt.date
         rollout date
-    group_cols: dict
+    group_cols: dict | None
         dictionary of the NIS columns for the grouping factors
         keys are the NIS column names and values are the desired column names
 
@@ -477,7 +516,7 @@ def extract_group_names(
     group_cols=[
         dict,
     ],
-):
+) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
 
@@ -500,12 +539,7 @@ def extract_group_names(
         group_names = None
     else:
         assert all([len(g) == len(group_cols[0]) for g in group_cols])
-        assert all(
-            [
-                g.get(v) == group_cols[0].get(v)
-                for g, v in zip(group_cols, group_cols[0])
-            ]
-        )
+        assert all([set(g.values()) == set(group_cols[0].values()) for g in group_cols])
         group_names = tuple([v for v in group_cols[0].values()])
 
     return group_names
@@ -516,7 +550,7 @@ def standardize(x, mn=None, sd=None):
     Standardize: subtract mean and divide by standard deviation.
 
     Parameters
-    x: pl.Expr | pl.DataFrame
+    x: pl.Expr | float64
         the numbers to standardize
     mn: float64
         the term to subtract, if not the mean of x
@@ -524,13 +558,26 @@ def standardize(x, mn=None, sd=None):
         the term to divide by, if not the standard deviation of x
 
     Returns
-    pl.Expr | pl.DataFrame
+    pl.Expr | float
         the standardized numbers
+
+    Details
+    If the standard deviation is 0, all standardized values are 0.0.
     """
-    if mn is not None:
-        return (x - mn) / sd
+    if type(x) is pl.Expr:
+        if mn is not None:
+            return (x - mn) / sd
+        else:
+            return (
+                pl.when(x.drop_nulls().n_unique() == 1)
+                .then(0.0)
+                .otherwise((x - x.mean()) / x.std())
+            )
     else:
-        return (x - x.mean()) / x.std()
+        if mn is not None:
+            return (x - mn) / sd
+        else:
+            return (x - x.mean()) / x.std()
 
 
 def unstandardize(x, mn, sd):
@@ -538,7 +585,7 @@ def unstandardize(x, mn, sd):
     Unstandardize: add standard deviation and multiply by mean.
 
     Parameters
-    x: pl.Expr | pl.DataFrame
+    x: pl.Expr
         the numbers to unstandardize
     mn: float64
         the term to add
@@ -546,7 +593,7 @@ def unstandardize(x, mn, sd):
         the term to multiply by
 
     Returns
-    pl.Expr | pl.DataFrame
+    pl.Expr
         the unstandardized numbers
     """
     return x * sd + mn
@@ -582,6 +629,69 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         self.model = LinearRegression()
 
+    @staticmethod
+    def extract_starting_conditions(
+        data: IncidentUptakeData, group_cols: tuple[str,] | None
+    ) -> pl.DataFrame:
+        """
+        Extract from incident uptake data the last observed values of several variables, by group.
+
+        Parameters
+        data: IncidentUptakeData
+            incident uptake data containing final observations of interest
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+
+        Returns
+        pl.DataFrame
+            the last observed values of several IncidentUptakeData variables
+
+        Details
+        Starting conditions include:
+        - Last date on which uptake was observed
+        - Daily average incident uptake on this date
+        - Days elapsed since rollout on this date
+        - Cumulative uptake since rollout on this date
+        """
+        start = data.group_by(group_cols).agg(
+            [
+                pl.col("date").last().alias("last_date"),
+                pl.col("daily").last().alias("last_daily"),
+                pl.col("elapsed").last().alias("last_elapsed"),
+                (pl.col("estimate"))
+                .filter(pl.col("season") == pl.col("season").max())
+                .sum()
+                .alias("last_cumulative"),
+            ]
+        )
+
+        return start
+
+    @staticmethod
+    def extract_standards(data: IncidentUptakeData, var_cols: tuple) -> dict:
+        """
+        Extract means and standard deviations from columns of incident uptake data.
+
+        Parameters
+        data: IncidentUptakeData
+            incident uptake data with some columns to be standardized
+        var_cols: (str,)
+            column names of variables to be standardized
+
+        Returns
+        dict
+            means and standard deviations for each variable column
+
+        Details
+        Keys are the variable names, and values are themselves
+        dictionaries of mean and standard deviation.
+        """
+        standards = {
+            var: {"mean": data[var].mean(), "std": data[var].std()} for var in var_cols
+        }
+
+        return standards
+
     def fit(self, data: IncidentUptakeData, group_cols: tuple[str,] | None) -> Self:
         """
         Fit a linear incident uptake model on training data.
@@ -594,61 +704,29 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Returns
         LinearIncidentUptakeModel
-            the model with projection starting conditions, standardization
+            model object with projection starting conditions, standardization
             constants, predictor and outcome variables, and the model fit
             all stored as attributes
 
         Details
-        Extra columns for fitting this model are added to the incident data:
-        - the disease season that each date belongs to
-        - the interval of time in days between each successive date
-        - the number of days elapsed between rollout and each date
-        - the daily-average uptake in the interval preceding each date
-        - the daily-average uptake in the interval preceding the previous date
+        Extra columns for fitting this model are added to the incident data,
+        including daily-average uptake. This is modeled rather than total uptake
+        to account for slight variations in interval lengths (e.g. 6 vs. 7 days).
 
-        The daily-average uptake is modeled (rather than the total uptake) to
-        account for slight variations in interval lengths (e.g. 6 vs. 7 days).
-
-        Some starting conditions must be recorded to enable prediction later:
-        - the last incident uptake in the training data
-        - the last date in the training data
-        - the last days-elapsed-since-rollout in the training data
-        - the cumulative uptake at the end of the training data
-        These are recorded separately for each group in the training data.
+        To enable projections later on, some starting conditions as well as
+        standardization constants for the model's outcome and first-order predictors
+        are recorded and stored as model attributes.
 
         If the training data spans multiple (combinations of) groups,
         complete pooling will be used to recognize the groups as distinct but
         to assume they behave identically except for initial conditions.
 
-        Standardization constants must also be recorded for the model's outcome
-        and first-order predictors, to enable projection later.
-
         Finally, the model is fit using the scikit-learn module.
         """
-        data = (
-            data.with_columns(
-                season=pl.col("date").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("date")
-                .pipe(UptakeData.date_to_elapsed)
-                .over(group_cols),
-                interval=pl.col("date")
-                .pipe(UptakeData.date_to_interval)
-                .over(group_cols),
-            )
-            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-            .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
-        )
+        data = data.augment_implicit_columns(group_cols)
 
-        self.start = data.group_by(group_cols).agg(
-            [
-                pl.col("daily").last().alias("last_daily"),
-                pl.col("date").last().alias("last_date"),
-                pl.col("elapsed").last().alias("last_elapsed"),
-                (pl.col("estimate"))
-                .filter(pl.col("season") == pl.col("season").max())
-                .sum()
-                .alias("last_cumulative"),
-            ]
+        self.start = LinearIncidentUptakeModel.extract_starting_conditions(
+            data, group_cols
         )
 
         data = data.trim_outlier_intervals(group_cols).with_columns(
@@ -657,14 +735,9 @@ class LinearIncidentUptakeModel(UptakeModel):
             daily_std=pl.col("daily").pipe(standardize),
         )
 
-        self.standards = {
-            "previous": {
-                "mean": data["previous"].mean(),
-                "std": data["previous"].std(),
-            },
-            "elapsed": {"mean": data["elapsed"].mean(), "std": data["elapsed"].std()},
-            "daily": {"mean": data["daily"].mean(), "std": data["daily"].std()},
-        }
+        self.standards = LinearIncidentUptakeModel.extract_standards(
+            data, ("previous", "elapsed", "daily")
+        )
 
         self.x = (
             data.select(["previous_std", "elapsed_std"])
@@ -677,6 +750,153 @@ class LinearIncidentUptakeModel(UptakeModel):
         self.model.fit(self.x, self.y)
 
         return self
+
+    @staticmethod
+    def build_scaffold(
+        start: pl.DataFrame,
+        start_date: dt.date,
+        end_date: dt.date,
+        interval: str,
+        group_cols: tuple[str,] | None,
+    ) -> pl.DataFrame:
+        """
+        Build a scaffold data frame to hold projections of a linear incident uptake model.
+
+        Parameters
+        start: pl.DataFrame
+            starting conditions for making projections
+        start_date: dt.date
+            the date on which projections should begin
+        end_date: dt.date
+            the date on which projections should end
+        interval: str
+            the time interval between projection dates,
+            following timedelta convention (e.g. '7d' = seven days)
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+
+        Returns
+        pl.DataFrame
+            scaffold to hold model projections
+
+        Details
+        The desired time frame for projections is repeated over grouping factors,
+        if any grouping factors exist.
+        """
+        scaffold = (
+            pl.date_range(
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                eager=True,
+            )
+            .alias("date")
+            .to_frame()
+            .with_columns(estimate=pl.lit(0.0))
+        )
+
+        if group_cols is not None:
+            scaffold = scaffold.join(start.select(group_cols), how="cross")
+
+        scaffold = IncidentUptakeData(scaffold).augment_implicit_columns(group_cols)
+
+        if group_cols is not None:
+            scaffold = scaffold.join(
+                start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
+                on=group_cols,
+            )
+        else:
+            scaffold = scaffold.with_columns(
+                last_elapsed=start["last_elapsed"][0],
+                last_interval=start["last_interval"][0],
+            )
+
+        scaffold = scaffold.with_columns(
+            elapsed=pl.col("elapsed")
+            + pl.col("last_elapsed")
+            + pl.col("last_interval"),
+            interval=pl.when(pl.col("interval").is_null())
+            .then(pl.col("last_interval"))
+            .otherwise(pl.col("interval")),
+        ).drop(["last_elapsed", "last_interval"])
+
+        return scaffold
+
+    @staticmethod
+    def project_sequentially(
+        elapsed: tuple, start: float, standards: dict, model: LinearRegression
+    ) -> np.ndarray:
+        """
+        Perform sequential projections from a linear incident uptake model.
+
+        Parameters
+        elapsed: tuple
+            days elapsed since rollout at each projection time point
+        start: pl.DataFrame
+            starting value for the first projection
+        standards: dict
+            means and standard deviations for the predictor and outcome variables
+        model: LinearRegression
+            model that predicts next daily-avg uptake from the current
+
+        Returns
+        IncidentUptakeProjection
+            Projections over the desired time frame from a linear incident uptake model
+
+        Details
+        Because daily-average uptake (outcome) and previous daily-average
+        uptake (predictor) each contain one observation that the other
+        does not, the projection at each time point must be unstandardized
+        according to the former and restandardized according to the latter
+        before it can be used to project the next time point. This is what
+        necessitates the sequential nature of these projections.
+
+        Projections are made separately by group, if grouping factors exist.
+        This function handles one group at a time.
+
+        This does not yet incorporate uncertainty, but it should in the future.
+        """
+        # Vector to hold the last known uptake and each sequential projection
+        proj = np.zeros(len(elapsed) + 1)
+
+        # First entry is the last known uptake value
+        proj[0] = start
+
+        # To make each sequential projection
+        for i in range(proj.shape[0] - 1):
+            # Predictors are the standardized uptake on the previous projection date
+            # and the standardized days-elapsed on the current projection date
+            x = np.reshape(
+                np.array(
+                    [
+                        standardize(
+                            proj[i],
+                            standards["previous"]["mean"],
+                            standards["previous"]["std"],
+                        ),
+                        standardize(
+                            elapsed[i],
+                            standards["elapsed"]["mean"],
+                            standards["elapsed"]["std"],
+                        ),
+                    ]
+                ),
+                (-1, 2),
+            )
+            # Include the interaction of the two 1st-order predictors
+            x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
+            # Predict the uptake on the projection date
+            y = model.predict(x)
+            # Unstandardize the projection onto its natural scale
+            proj[i + 1] = unstandardize(
+                y[(0, 0)],
+                standards["daily"]["mean"],
+                standards["daily"]["std"],
+            )
+            # This projection becomes the previous projection
+            # in the next loop iteration.
+
+        return proj
 
     def predict(
         self,
@@ -705,19 +925,12 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Details
         A data frame is set up to house the incident projectins over the
-        desired time frame with the desired time intervals.
+        desired time window with the desired intervals.
 
         The starting conditions derived from the last training data date
         are used to project for the first date. From there, projections
         are generated sequentially, because the projection for each date
         depends on the previous date, thanks to the model structure.
-
-        Note the each projection must be unstandardized using the mean/std
-        from the outcome variable in the training data, then restandardized
-        using the mean/std from the "previous" predictor in the training data.
-
-        The sequential projection loop does not yet incorporate uncertainty.
-        This must be included in the future.
 
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
@@ -726,52 +939,9 @@ class LinearIncidentUptakeModel(UptakeModel):
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
-        self.incident_projection = (
-            pl.date_range(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                eager=True,
-            )
-            .alias("date")
-            .to_frame()
+        self.incident_projection = LinearIncidentUptakeModel.build_scaffold(
+            self.start, start_date, end_date, interval, group_cols
         )
-
-        if group_cols is not None:
-            self.incident_projection = self.incident_projection.join(
-                self.start.select(group_cols), how="cross"
-            )
-
-        self.incident_projection = self.incident_projection.with_columns(
-            elapsed=((pl.col("date") - start_date).dt.total_days().cast(pl.Float64)),
-            season=(
-                pl.col("date").dt.year()
-                + pl.when(pl.col("date").dt.month() < 7).then(-1).otherwise(0)
-            ).cast(pl.Utf8),
-        ).with_columns(interval=pl.col("elapsed").diff().over(group_cols))
-
-        if group_cols is not None:
-            self.incident_projection = self.incident_projection.join(
-                self.start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
-                on=group_cols,
-            )
-        else:
-            self.incident_projection = self.incident_projection.with_columns(
-                last_elapsed=self.start["last_elapsed"][0],
-                last_interval=self.start["last_interval"][0],
-            )
-
-        self.incident_projection = self.incident_projection.with_columns(
-            elapsed=pl.col("elapsed")
-            + pl.col("last_elapsed")
-            + pl.col("last_interval"),
-            interval=pl.when(pl.col("interval").is_null())
-            .then(pl.col("last_interval"))
-            .otherwise(pl.col("interval")),
-            daily=pl.lit(0),
-            estimate=pl.lit(0),
-            previous=pl.lit(0),
-        ).drop(["last_elapsed", "last_interval"])
 
         if group_cols is not None:
             groups = self.incident_projection.partition_by(group_cols)
@@ -779,37 +949,16 @@ class LinearIncidentUptakeModel(UptakeModel):
             groups = [self.incident_projection]
 
         for g in range(len(groups)):
-            proj = np.zeros(groups[g].shape[0] + 1)
-
             if group_cols is not None:
-                proj[0] = self.start.join(groups[g], on=group_cols, how="semi")[
+                start = self.start.join(groups[g], on=group_cols, how="semi")[
                     "last_daily"
                 ][0]
             else:
-                proj[0] = self.start["last_daily"][0]
+                start = self.start["last_daily"][0]
 
-            for i in range(proj.shape[0] - 1):
-                x = np.column_stack(
-                    (
-                        standardize(
-                            proj[i],
-                            self.standards["previous"]["mean"],
-                            self.standards["previous"]["std"],
-                        ),
-                        standardize(
-                            groups[g]["elapsed"][i],
-                            self.standards["elapsed"]["mean"],
-                            self.standards["elapsed"]["mean"],
-                        ),
-                    )
-                )
-                x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
-                y = self.model.predict(x)
-                proj[i + 1] = unstandardize(
-                    y[(0, 0)],
-                    self.standards["daily"]["mean"],
-                    self.standards["daily"]["std"],
-                )
+            proj = LinearIncidentUptakeModel.project_sequentially(
+                tuple(groups[g]["elapsed"]), start, self.standards, self.model
+            )
 
             groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
 
