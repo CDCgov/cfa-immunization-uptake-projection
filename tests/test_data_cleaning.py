@@ -41,7 +41,7 @@ def test_apply_filters_handles_no_filters(frame):
 
     output = iup.apply_filters(frame, filters)
 
-    assert output.shape[0] == 3
+    assert output.equals(frame)
 
 
 def test_select_columns_handles_groups(frame):

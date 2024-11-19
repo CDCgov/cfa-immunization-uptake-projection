@@ -26,7 +26,7 @@ def frame():
                     "2020-01-21",
                 ],
                 "estimate": [0.0, 0.0, 1.0, 0.1, 3.0, 0.3, 4.0, 0.4],
-                "season": ["2019/2020"] * 8,
+                "season": "2019/2020",
                 "elapsed": [0, 0, 7, 7, 14, 14, 21, 21],
                 "interval": [None, None, 7, 7, 7, 7, 7, 7],
             }
@@ -71,8 +71,12 @@ def test_extract_standards(frame):
         frame, ("estimate", "elapsed")
     )
 
-    assert len(output) == 2
-    assert len(output["estimate"]) == 2
+    correct = {
+        "estimate": {"mean": frame["estimate"].mean(), "std": frame["estimate"].std()},
+        "elapsed": {"mean": frame["elapsed"].mean(), "std": frame["elapsed"].std()},
+    }
+
+    assert output == correct
 
 
 def test_fit(frame):
@@ -108,8 +112,7 @@ def test_build_scaffold_handles_no_groups():
         start, start_date, end_date, interval, group_cols
     )
 
-    assert output.shape[0] == 5
-    assert output.shape[1] == 7
+    assert output.shape == (5, 7)
 
 
 def test_build_scaffold_handles_groups():
@@ -134,8 +137,7 @@ def test_build_scaffold_handles_groups():
         start, start_date, end_date, interval, group_cols
     )
 
-    assert output.shape[0] == 10
-    assert output.shape[1] == 8
+    assert output.shape == (10, 8)
 
 
 def test_project_sequentially():

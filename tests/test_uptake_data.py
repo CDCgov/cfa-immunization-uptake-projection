@@ -157,12 +157,12 @@ def test_trim_outlier_intervals_handles_zero_std(frame):
     assert output.shape[0] == 2
 
 
-def test_expand_implicit_columns(frame):
+def test_augment_implicit_columns(frame):
     """
     Add 5 columns to the incident uptake data without losing any rows
     """
     frame = iup.IncidentUptakeData(frame)
-    frame = frame.expand_implicit_columns(group_cols=("geography",))
+    frame = frame.augment_implicit_columns(group_cols=("geography",))
 
     assert frame.shape[0] == 8
     assert frame.shape[1] == 8

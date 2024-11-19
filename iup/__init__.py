@@ -225,7 +225,7 @@ class IncidentUptakeData(UptakeData):
 
         return IncidentUptakeData(df)
 
-    def expand_implicit_columns(self, group_cols: tuple[str,] | None) -> Self:
+    def augment_implicit_columns(self, group_cols: tuple[str,] | None) -> Self:
         """
         Add explicit columns for information that is implicitly contained.
 
@@ -560,6 +560,9 @@ def standardize(x, mn=None, sd=None):
     Returns
     pl.Expr | float
         the standardized numbers
+
+    Details
+    If the standard deviation is 0, all standardized values are 0.0.
     """
     if type(x) is pl.Expr:
         if mn is not None:
@@ -567,7 +570,7 @@ def standardize(x, mn=None, sd=None):
         else:
             return (
                 pl.when(x.drop_nulls().n_unique() == 1)
-                .then(x * 0.0)
+                .then(0.0)
                 .otherwise((x - x.mean()) / x.std())
             )
     else:
@@ -683,13 +686,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         Keys are the variable names, and values are themselves
         dictionaries of mean and standard deviation.
         """
-        standards = {}
-
-        for v in range(len(var_cols)):
-            standards[var_cols[v]] = {
-                "mean": data[var_cols[v]].mean(),
-                "std": data[var_cols[v]].std(),
-            }
+        standards = {
+            var: {"mean": data[var].mean(), "std": data[var].std()} for var in var_cols
+        }
 
         return standards
 
@@ -724,7 +723,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using the scikit-learn module.
         """
-        data = data.expand_implicit_columns(group_cols)
+        data = data.augment_implicit_columns(group_cols)
 
         self.start = LinearIncidentUptakeModel.extract_starting_conditions(
             data, group_cols
@@ -799,7 +798,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         if group_cols is not None:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
 
-        scaffold = IncidentUptakeData(scaffold).expand_implicit_columns(group_cols)
+        scaffold = IncidentUptakeData(scaffold).augment_implicit_columns(group_cols)
 
         if group_cols is not None:
             scaffold = scaffold.join(
@@ -857,11 +856,16 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         This does not yet incorporate uncertainty, but it should in the future.
         """
+        # Vector to hold the last known uptake and each sequential projection
         proj = np.zeros(len(elapsed) + 1)
 
+        # First entry is the last known uptake value
         proj[0] = start
 
+        # To make each sequential projection
         for i in range(proj.shape[0] - 1):
+            # Predictors are the standardized uptake on the previous projection date
+            # and the standardized days-elapsed on the current projection date
             x = np.reshape(
                 np.array(
                     [
@@ -879,13 +883,18 @@ class LinearIncidentUptakeModel(UptakeModel):
                 ),
                 (-1, 2),
             )
+            # Include the interaction of the two 1st-order predictors
             x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
+            # Predict the uptake on the projection date
             y = model.predict(x)
+            # Unstandardize the projection onto its natural scale
             proj[i + 1] = unstandardize(
                 y[(0, 0)],
                 standards["daily"]["mean"],
                 standards["daily"]["std"],
             )
+            # This projection becomes the previous projection
+            # in the next loop iteration.
 
         return proj
 
