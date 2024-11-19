@@ -33,10 +33,8 @@ class UptakeData(ValidateData):
         """
         super().__init__(*args, **kwargs)
         self.validate()
-        self.sort("date")
 
     def validate(self):
-
         """
         Validate that an UptakeData object has the two key columns:
         date and uptake estimate (% of population). There may be others.
@@ -779,7 +777,6 @@ class LinearIncidentUptakeModel(UptakeModel):
             )
 
         self.incident_projection = self.incident_projection.with_columns(
-
             elapsed=pl.col("elapsed")
             + pl.col("last_elapsed")
             + pl.col("last_interval"),
