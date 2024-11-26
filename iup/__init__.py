@@ -8,33 +8,18 @@ from typing import List
 import re
 
 
-class ValidateData(pl.DataFrame, metaclass=abc.ABCMeta):
+class ValidatedData(pl.DataFrame):
     """
     Abstract class for observed data and forecast data.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    @abc.abstractmethod
-    def validate(self) -> None:
-        pass
-
-
-class UptakeData(ValidateData):
-    """
-    Abstract class for different forms of uptake data.
-    """
-
-    def __init__(self, *args, **kwargs):
-        """
-        Initialize an UptakeData object as a polars data frame plus validation.
-        """
-        super().__init__(*args, **kwargs)
+        self.validate()
 
     def validate(self):
         """
-        Validate that an UptakeData object has the two key columns:
+        Validate that an ValidatedData object has the two key columns:
         date and uptake estimate (% of population). There may be others.
         """
 
@@ -68,6 +53,20 @@ class UptakeData(ValidateData):
                 self[col].dtype == dtype
             ), f"Column {col} should be {dtype} but is {self[col].dtype}"
 
+    def assert_type_included(self, datatype):
+        """
+        Verify at least one column has the expected type.
+
+        Parameters
+        columns: List[str]
+            names of columns for which to check type
+        datatype:
+            data type for each listed column
+        """
+        assert any(
+            dtype == datatype for dtype in self.schema.values()
+        ), f"No column is {datatype} type"
+
     def with_columns(self, *args, **kwargs):
         """
         Copy of polars with_columns that returns the same subclass as it's given.
@@ -75,6 +74,22 @@ class UptakeData(ValidateData):
         orig_class = type(self)
         result = super().with_columns(*args, **kwargs)
         return orig_class(result)
+
+    @staticmethod
+    def assert_column_name_all(estimate, column_name):
+        """
+        Verify that all columns have a pattern with a common name
+
+        Parameters
+        estimate:
+            The data without 'date' type
+        column_name:
+            The common column name
+        """
+        pattern = rf"^{column_name}\d+$"
+        assert all(
+            [bool(re.match(pattern, col)) for col in estimate.columns]
+        ), f"Not all columns are Column name {column_name}"
 
     @staticmethod
     def date_to_season(date_col: pl.Expr) -> pl.Expr:
@@ -147,10 +162,10 @@ class UptakeData(ValidateData):
     @staticmethod
     def split_train_test(uptake_data_list, start_date: dt.date, side: str):
         """
-        Concatenate UptakeData objects and split into training and test data.
+        Concatenate ValidatedData objects and split into training and test data.
 
         Parameters
-        uptake_data_list: List[UptakeData]
+        uptake_data_list: List[ValidatedData]
             cumulative or incident uptake data objects, often from different seasons
         start_date: dt.date
             the first date for which projections should be made
@@ -158,7 +173,7 @@ class UptakeData(ValidateData):
             whether the "train" or "test" portion of the data is desired
 
         Returns
-        UptakeData
+        ValidatedData
             cumulative or uptake data object of the training or test portion
 
         Details
@@ -183,10 +198,13 @@ class UptakeData(ValidateData):
         return out
 
 
-class IncidentUptakeData(UptakeData):
+class IncidentUptakeData(ValidatedData):
     """
-    Subclass of UptakeData for incident uptake.
+    Subclass of ValidatedData for incident uptake.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def trim_outlier_intervals(
         self, group_cols: tuple[str,] | None, threshold: float = 1.0
@@ -199,7 +217,7 @@ class IncidentUptakeData(UptakeData):
           threshold (float): maximum standardized interval between first two dates
 
         Returns
-        IncidentUptakeData
+        IncidentValidatedData
             incident uptake data with the outlier rows removed
 
         Details
@@ -262,13 +280,9 @@ class IncidentUptakeData(UptakeData):
         """
         self = (
             self.with_columns(
-                season=pl.col("date").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("date")
-                .pipe(UptakeData.date_to_elapsed)
-                .over(group_cols),
-                interval=pl.col("date")
-                .pipe(UptakeData.date_to_interval)
-                .over(group_cols),
+                season=pl.col("date").pipe(super().date_to_season),
+                elapsed=pl.col("date").pipe(super().date_to_elapsed).over(group_cols),
+                interval=pl.col("date").pipe(super().date_to_interval).over(group_cols),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
             .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
@@ -314,9 +328,9 @@ class IncidentUptakeData(UptakeData):
         return out
 
 
-class CumulativeUptakeData(UptakeData):
+class CumulativeUptakeData(ValidatedData):
     """
-    Subclass of UptakeData for cumulative uptake.
+    Subclass of ValidatedData for cumulative uptake.
     """
 
     def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
@@ -996,36 +1010,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
 
 #### prediction output ####
-class Forecast(ValidateData):
-    """
-    Abstract class for all the forecast data type.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    # Can add validate to enforce the specific schema of Forecast when more Forecast types are added
-    def validate(self):
-        self.assert_type_included(pl.Date)
-        self.assert_type_included(pl.Float64)
-        # has at least 1 column of date and 1 column of estimate
-
-    def assert_type_included(self, datatype):
-        """
-        Verify at least one column has the expected type.
-
-        Parameters
-        columns: List[str]
-            names of columns for which to check type
-        datatype:
-            data type for each listed column
-        """
-        assert any(
-            dtype == datatype for dtype in self.schema.values()
-        ), f"No column is {datatype} type"
-
-
-class QuantileForecast(Forecast):
+class QuantileForecast(ValidatedData):
     """
     Class for forecast with quantiles.
     Save for future.
@@ -1034,74 +1019,31 @@ class QuantileForecast(Forecast):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    # Must be named as "quantileX.XX" except the date column
+    # Must be named as "quantileXX" except the date column
     def validate(self):
+        self.assert_type_included(pl.Date)
+        self.assert_type_included(pl.Float64)
+        # has at least 1 column of date and 1 column of estimate
         estimate = self.select(pl.all().exclude(pl.Date))
-        QuantileForecast.assert_column_name_all(estimate, "quantile")
-
-    @staticmethod
-    def assert_column_name_all(estimate, column_name):
-        """
-        Verify that all columns have a pattern with a common name
-
-        Parameters
-        estimate:
-            The data without 'date' type
-        column_name:
-            The common column name
-        """
-        pattern = rf"^{column_name}\d(\.\d+)?$"
-        assert all(
-            [bool(re.match(pattern, col)) for col in estimate.columns]
-        ), f"Not all columns are Column name {column_name}"
+        super().assert_column_name_all(estimate, "quantile")
 
 
 class PointForecast(QuantileForecast):
     """
     Class for forecast with point estimate
-    A subclass when quantile is 0.5
-    For now, enforce the "quantile0.5" to be "estimate"
+    A subclass when quantile is 50%
+    For now, enforce the "quantile50" to be "estimate"
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def validate(self):
-        self.assert_columns_found(["estimate"])
-        self.assert_columns_type(["estimate"], pl.Float64)
-
-    def assert_columns_found(self, columns: List[str]):
-        """
-        Verify that expected columns are found.
-
-        Parameters
-        columns: List[str]
-            names of expected columns
-        """
-        assert isinstance(columns, List), f"{columns} must be a list"
-
-        for col in columns:
-            assert col in self.columns, f"Column {col} is expected but not found."
-
-    def assert_columns_type(self, columns: List[str], dtype):
-        """
-        Verify that columns have the expected type.
-
-        Parameters
-        columns: List[str]
-            names of columns for which to check type
-        dtype:
-            data type for each listed column
-        """
-        assert isinstance(columns, List), f"{columns} must be a list"
-
-        for col in columns:
-            assert (
-                self[col].dtype == dtype
-            ), f"Column {col} should be {dtype} but is {self[col].dtype}"
+        super().assert_columns_found(["estimate"])
+        super().assert_columns_type(["estimate"], pl.Float64)
 
 
-class SampleForecast(Forecast):
+class SampleForecast(ValidatedData):
     """
     Class for forecast with posterior distribution.
     Save for future.
@@ -1112,23 +1054,7 @@ class SampleForecast(Forecast):
 
     def validate(self):
         estimate = self.select(pl.all().exclude(pl.Date))
-        SampleForecast.assert_column_name_all(estimate, "sample_id")
-
-    @staticmethod
-    def assert_column_name_all(estimate, column_name):
-        """
-        Verify that all columns have a pattern with a common name
-
-        Parameters
-        estimate:
-            The data without 'date' type
-        column_name:
-            The common column name
-        """
-        pattern = rf"^{column_name}\d+$"
-        assert all(
-            [bool(re.match(pattern, col)) for col in estimate.columns]
-        ), f"Not all columns are Column name {column_name}"
+        super().assert_column_name_all(estimate, "sample_id")
 
 
 ###### evaluation metrics #####
