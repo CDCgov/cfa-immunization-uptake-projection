@@ -632,11 +632,11 @@ class UptakeModel(abc.ABC):
     """
 
     @abc.abstractmethod
-    def fit(self, data: UptakeData) -> Self:
+    def fit(self, data: IncidentUptakeData) -> Self:
         pass
 
     @abc.abstractmethod
-    def predict(self, data: UptakeData, *args, **kwargs) -> UptakeData:
+    def predict(self, data: IncidentUptakeData, *args, **kwargs) -> IncidentUptakeData:
         pass
 
 
