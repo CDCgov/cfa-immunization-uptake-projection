@@ -35,7 +35,7 @@ def test_date_to_season(frame):
     """
     Return the overwinter season, for both fall and spring dates
     """
-    output = frame.with_columns(date=iup.ValidatedUptake.date_to_season(pl.col("date")))
+    output = frame.with_columns(date=iup.ValidatedData.date_to_season(pl.col("date")))
 
     assert all(output["date"] == pl.Series(["2019/2020"] * 8))
 
@@ -45,7 +45,7 @@ def test_date_to_interval(frame):
     Return the interval between dates by grouping factor
     """
     output = frame.with_columns(
-        interval=iup.ValidatedUptake.date_to_interval(pl.col("date")).over("geography")
+        interval=iup.ValidatedData.date_to_interval(pl.col("date")).over("geography")
     )
 
     assert all(
@@ -68,7 +68,7 @@ def test_date_to_elapsed(frame):
     Return the time elapsed since the first date by grouping factor.
     """
     output = frame.with_columns(
-        elapsed=iup.ValidatedUptake.date_to_elapsed(pl.col("date")).over("geography")
+        elapsed=iup.ValidatedData.date_to_elapsed(pl.col("date")).over("geography")
     )
 
     assert all(
@@ -95,7 +95,7 @@ def test_split_train_test_handles_train(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedUptake.split_train_test([frame, frame2], start_date, "train")
+    output = iup.ValidatedData.split_train_test([frame, frame2], start_date, "train")
 
     assert output.equals(frame)
 
@@ -107,7 +107,7 @@ def test_split_train_test_handles_test(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedUptake.split_train_test([frame, frame2], start_date, "test")
+    output = iup.ValidatedData.split_train_test([frame, frame2], start_date, "test")
 
     assert output.equals(frame2)
 
