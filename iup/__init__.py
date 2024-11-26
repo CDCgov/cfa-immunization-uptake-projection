@@ -132,7 +132,7 @@ class UptakeData(Data):
             whether the "train" or "test" portion of the data is desired
 
         Returns
-        ValidatedUptake
+        pl.DataFrame
             cumulative or uptake data object of the training or test portion
 
         Details
@@ -156,10 +156,16 @@ class UptakeData(Data):
         return out
 
 
-class IncidentUptakeData(UptakeData):
+class IncidentUptakeData(Data):
     """
     Subclass of ValidatedUptake for incident uptake.
     """
+
+    def validate(self):
+        # perform validations for UptakeData
+        super().validate()
+        # and also require that uptake be a proportion
+        assert self["estimate"].is_between(0.0, 1.0).all()
 
     def trim_outlier_intervals(
         self, group_cols: tuple[str,] | None, threshold: float = 1.0
@@ -281,7 +287,7 @@ class IncidentUptakeData(UptakeData):
         return out
 
 
-class CumulativeUptakeData(UptakeData):
+class CumulativeUptakeData(Data):
     """
     Subclass of ValidatedUptake for cumulative uptake.
     """
