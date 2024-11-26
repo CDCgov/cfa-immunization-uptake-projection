@@ -1021,9 +1021,11 @@ class QuantileForecast(ValidatedData):
 
     # Must be named as "quantileXX" except the date column
     def validate(self):
+        # has at least 1 column of date and 1 column of estimate
         self.assert_type_included(pl.Date)
         self.assert_type_included(pl.Float64)
-        # has at least 1 column of date and 1 column of estimate
+
+        # except date, must have the common column names
         estimate = self.select(pl.all().exclude(pl.Date))
         super().assert_column_name_all(estimate, "quantile")
 
@@ -1053,6 +1055,11 @@ class SampleForecast(ValidatedData):
         super().__init__(*args, **kwargs)
 
     def validate(self):
+        # has at least 1 column of date and 1 column of estimate
+        self.assert_type_included(pl.Date)
+        self.assert_type_included(pl.Float64)
+
+        # except date, must have the common column names
         estimate = self.select(pl.all().exclude(pl.Date))
         super().assert_column_name_all(estimate, "sample_id")
 
