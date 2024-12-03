@@ -26,10 +26,13 @@ class Data(pl.DataFrame):
             names_types (dict[str, pl.DataType]): Column names and types
         """
         for name, type_ in names_types.items():
-            assert (
-                name,
-                type_,
-            ) in self.schema, f"Column '{name}' of type {type_} not found"
+            if name not in self.schema.names():
+                raise RuntimeError(f"Column '{name}' not found")
+            elif (name, type_) not in self.schema.items():
+                actual_type = self.schema.to_python()[name]
+                f"Column '{name}' has type {actual_type}, not {type_}"
+
+            assert (name, type_) in self.schema.items()
 
 
 class UptakeData(Data):
@@ -153,12 +156,6 @@ class IncidentUptakeData(UptakeData):
     """
     Subclass of ValidatedUptake for incident uptake.
     """
-
-    def validate(self):
-        # perform validations for UptakeData
-        super().validate()
-        # and also require that uptake be a proportion
-        assert self["estimate"].is_between(0.0, 1.0).all()
 
     def trim_outlier_intervals(
         self, group_cols: tuple[str,] | None, threshold: float = 1.0
@@ -284,6 +281,14 @@ class CumulativeUptakeData(UptakeData):
     """
     Subclass of ValidatedUptake for cumulative uptake.
     """
+
+    def validate(self):
+        # same validations as UptakeData
+        super().validate()
+        # and also require that uptake be a proportion
+        assert (
+            self["estimate"].is_between(0.0, 1.0).all()
+        ), "cumulative uptake `estimate` must be a proportion"
 
     def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
         """
@@ -698,16 +703,23 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using the scikit-learn module.
         """
+        # validate data
+        data = IncidentUptakeData(data)
+
         data = data.augment_implicit_columns(group_cols)
 
         self.start = LinearIncidentUptakeModel.extract_starting_conditions(
             data, group_cols
         )
 
-        data = data.trim_outlier_intervals(group_cols).with_columns(
-            previous_std=pl.col("previous").pipe(standardize),
-            elapsed_std=pl.col("elapsed").pipe(standardize),
-            daily_std=pl.col("daily").pipe(standardize),
+        data = (
+            IncidentUptakeData(data)
+            .trim_outlier_intervals(group_cols)
+            .with_columns(
+                previous_std=pl.col("previous").pipe(standardize),
+                elapsed_std=pl.col("elapsed").pipe(standardize),
+                daily_std=pl.col("daily").pipe(standardize),
+            )
         )
 
         self.standards = LinearIncidentUptakeModel.extract_standards(
