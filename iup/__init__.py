@@ -3,13 +3,11 @@ import datetime as dt
 from sklearn.linear_model import LinearRegression
 import numpy as np
 import abc
+from typing import Sequence
 from typing_extensions import Self
-from typing import List
-import re
-from polars import testing
 
 
-class ValidatedUptake(pl.DataFrame):
+class Data(pl.DataFrame):
     """
     Abstract class for observed data and forecast data.
     """
@@ -19,107 +17,30 @@ class ValidatedUptake(pl.DataFrame):
         self.validate()
 
     def validate(self):
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    def assert_in_schema(self, names_types: Sequence[tuple[str, pl.DataType]]):
+        """Verify that column of the expected types are present in the data frame
+
+        Args:
+            names_types (Sequence[tuple[str, pl.DataType]]): Iterable of 2-tuples
+              of column name and polars data type
+        """
+        for name, type_ in names_types:
+            assert (
+                name,
+                type_,
+            ) in self.schema, f"Column '{name}' of type {type_} not found"
+
+
+class UptakeData(Data):
+    def validate(self):
         """
         Validate that an ValidatedUptake object has the two key columns:
         date and uptake estimate (% of population). There may be others.
         """
 
-        self.assert_columns_found(["date", "estimate"])
-        self.assert_columns_type(["date"], pl.Date)
-        self.assert_columns_type(["estimate"], pl.Float64)
-
-    def assert_columns_found(self, columns: List[str]):
-        """
-        Verify that expected columns are found.
-
-        Parameters
-        columns: List[str]
-            names of expected columns
-        """
-        for col in columns:
-            assert col in self.columns, f"Column {col} is expected but not found."
-
-    def assert_columns_type(self, columns: List[str], dtype):
-        """
-        Verify that columns have the expected type.
-
-        Parameters
-        columns: List[str]
-            names of columns for which to check type
-        dtype:
-            data type for each listed column
-        """
-        for col in columns:
-            assert (
-                self[col].dtype == dtype
-            ), f"Column {col} should be {dtype} but is {self[col].dtype}"
-
-    def assert_type_included(self, datatype):
-        """
-        Verify at least one column has the expected type.
-
-        Parameters
-        columns: List[str]
-            names of columns for which to check type
-        datatype:
-            data type for each listed column
-        """
-        assert any(
-            dtype == datatype for dtype in self.schema.values()
-        ), f"No column is {datatype} type"
-
-    def with_columns(self, *args, **kwargs):
-        """
-        Copy of polars with_columns that returns the same subclass as it's given.
-        """
-        orig_class = type(self)
-        result = super().with_columns(*args, **kwargs)
-        return orig_class(result)
-
-    def assert_numerical_columns_name(self, column_name):
-        """
-        Verify that all the numerical columns have a pattern with a common name
-
-        Parameters
-        column_name:
-            The common column name
-        """
-        estimate = self.select(pl.all().exclude([pl.Date, pl.String]))
-        pattern = rf"^{column_name}\d*$"
-        assert all(
-            [bool(re.match(pattern, col)) for col in estimate.columns]
-        ), f"Not all columns are Column name {column_name}"
-
-    def assert_numerical_columns_type(self, dtype):
-        """
-        Verify that all the numerical columns are the same data type
-
-        Parameters
-        dtype:
-            Required data type, should be numerical
-        """
-        estimate = self.select(pl.all().exclude([pl.Date, pl.String]))
-
-        for col in estimate.columns:
-            assert (
-                estimate[col].dtype == dtype
-            ), f"Column {col} should be {dtype} but is {estimate[col].dtype}"
-
-    @staticmethod
-    def assert_column_name_all(estimate, column_name):
-        """
-        Verify that all columns have a pattern with a common name
-
-        Parameters
-        estimate:
-            The data without 'date' type
-        column_name:
-            The common column name
-        """
-        pattern = rf"^{column_name}\d+$"
-        assert all(
-            [bool(re.match(pattern, col)) for col in estimate.columns]
-        ), f"Not all columns are Column name {column_name}"
+        self.assert_in_schema([("date", pl.Date), ("estimate", pl.Float64)])
 
     @staticmethod
     def date_to_season(date_col: pl.Expr) -> pl.Expr:
@@ -190,7 +111,9 @@ class ValidatedUptake(pl.DataFrame):
         return elapsed
 
     @staticmethod
-    def split_train_test(uptake_data_list, start_date: dt.date, side: str):
+    def split_train_test(
+        uptake_data_list, start_date: dt.date, side: str
+    ) -> pl.DataFrame:
         """
         Concatenate ValidatedUptake objects and split into training and test data.
 
@@ -209,7 +132,6 @@ class ValidatedUptake(pl.DataFrame):
         Details
         Training data are before the start date; test data are on or after.
         """
-        orig_class = type(uptake_data_list[0])
         if side == "train":
             out = (
                 pl.concat(uptake_data_list)
@@ -223,18 +145,13 @@ class ValidatedUptake(pl.DataFrame):
                 .filter(pl.col("date") >= start_date)
             )
 
-        out = orig_class(out)
-
         return out
 
 
-class IncidentUptakeData(ValidatedUptake):
+class IncidentUptakeData(UptakeData):
     """
     Subclass of ValidatedUptake for incident uptake.
     """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     def trim_outlier_intervals(
         self, group_cols: tuple[str,] | None, threshold: float = 1.0
@@ -286,7 +203,7 @@ class IncidentUptakeData(ValidatedUptake):
 
         return IncidentUptakeData(df)
 
-    def augment_implicit_columns(self, group_cols: tuple[str,] | None) -> Self:
+    def augment_implicit_columns(self, group_cols: tuple[str,] | None) -> pl.DataFrame:
         """
         Add explicit columns for information that is implicitly contained.
 
@@ -308,19 +225,19 @@ class IncidentUptakeData(ValidatedUptake):
         - daily-average uptake in the interval preceding each date
         - daily-average uptake in the interval preceding the previous date
         """
-        self = (
+        return (
             self.with_columns(
-                season=pl.col("date").pipe(super().date_to_season),
-                elapsed=pl.col("date").pipe(super().date_to_elapsed).over(group_cols),
-                interval=pl.col("date").pipe(super().date_to_interval).over(group_cols),
+                season=pl.col("date").pipe(self.date_to_season),
+                elapsed=pl.col("date").pipe(self.date_to_elapsed).over(group_cols),
+                interval=pl.col("date").pipe(self.date_to_interval).over(group_cols),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
             .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
         )
 
-        return self
-
-    def to_cumulative(self, group_cols: tuple[str,] | None, last_cumulative=None):
+    def to_cumulative(
+        self, group_cols: tuple[str,] | None, last_cumulative=None
+    ) -> pl.DataFrame:
         """
         Convert incident to cumulative uptake data.
 
@@ -353,12 +270,10 @@ class IncidentUptakeData(ValidatedUptake):
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
             ).drop("last_cumulative")
 
-        out = CumulativeUptakeData(out)
-
         return out
 
 
-class CumulativeUptakeData(ValidatedUptake):
+class CumulativeUptakeData(UptakeData):
     """
     Subclass of ValidatedUptake for cumulative uptake.
     """
@@ -382,9 +297,7 @@ class CumulativeUptakeData(ValidatedUptake):
             estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
         )
 
-        out = IncidentUptakeData(out)
-
-        return out
+        return IncidentUptakeData(out)
 
 
 def parse_nis(
@@ -570,9 +483,7 @@ def insert_rollout(
 
 
 def extract_group_names(
-    group_cols=[
-        dict,
-    ],
+    group_cols: [dict],
 ) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
@@ -1040,24 +951,20 @@ class LinearIncidentUptakeModel(UptakeModel):
 
 
 #### prediction output ####
-class QuantileForecast(ValidatedUptake):
+class QuantileForecast(Data):
     """
     Class for forecast with quantiles.
     Save for future.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     # Must be named as "quantileXX" except the date column
     def validate(self):
-        # has at least 1 column of date and 1 column of estimate
-        self.assert_type_included(pl.Date)
-        self.assert_type_included(pl.Float64)
+        self.assert_in_schema(
+            [("date", pl.Date), ("quantile", pl.Float64), ("estimate", pl.Float64)]
+        )
 
-        # except date, must have the common column names
-        estimate = self.select(pl.all().exclude(pl.Date))
-        super().assert_column_name_all(estimate, "quantile")
+        # all quantiles should be between 0 and 1
+        assert self["quantile"].is_between(0.0, 1.0).all()
 
 
 class PointForecast(QuantileForecast):
@@ -1067,24 +974,23 @@ class PointForecast(QuantileForecast):
     For now, enforce the "quantile50" to be "estimate"
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def validate(self):
-        super().assert_columns_found(["estimate"])
-        super().assert_columns_type(["estimate"], pl.Float64)
+        # same validations as for QuantileForecast
+        super().validate()
+        # but additionally require that there be only one quantile value
+        assert (self["quantile"] == 0.50).all()
 
 
-class SampleForecast(ValidatedUptake):
+class SampleForecast(Data):
     """
     Class for forecast with posterior distribution.
     Save for future.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def validate(self):
+        self.assert_in_schema(
+            [("date", pl.Date), ("sample_id", pl.Int64), ("estimate", pl.Float64)]
+        )
         # has at least 1 column of date and 1 column of estimate
         self.assert_type_included(pl.Date)
         self.assert_type_included(pl.Float64)
@@ -1116,7 +1022,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     pred = pred.sort("date")
 
     # 1. Dates must be 1-on-1 equal
-    testing.assert_series_equal(data["date"], pred["date"])
+    assert (data["date"], pred["date"]).all()
 
     # 2. There should not be any duplicated date in either data or prediction.
     assert (
