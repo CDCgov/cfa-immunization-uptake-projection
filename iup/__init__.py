@@ -4,7 +4,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 import abc
 from typing_extensions import Self
-from typing import List
+from typing import List, Callable
 import re
 from polars import testing
 
@@ -1088,9 +1088,13 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     ), "Duplicated dates are found in data and prediction."
 
 
-def calculate_mspe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
+def score(
+    data: IncidentUptakeData,
+    pred: PointForecast,
+    score_fun: Callable[[pl.Expr, pl.Expr], pl.Expr],
+) -> pl.DataFrame:
     """
-    Calculate MSPE between observed data and forecast.
+    Calculate score between observed data and forecast.
     ----------------------
 
     Parameters
@@ -1098,176 +1102,50 @@ def calculate_mspe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFram
         The observed data used for modeling. Should be IncidentUptakeData
     pred:
         The forecast made by model. Should be PointForecast
+    score_fun:
+        Scoring function. Takes observed and true values.
 
     Return
-    pl.DataFrame with forecast start date, forecast end date, and MSPE
+    pl.DataFrame with one row: forecast start date, forecast end date, and score
 
     """
-    joined = data.join(pred, on="date", how="inner", validate="1:1")
-
-    start = (
-        joined.filter(
-            pl.col("date") == pl.col("date").min(),
-        )
-        .rename({"date": "forecast_start"})
-        .select("forecast_start")
-    )
-
-    end = (
-        joined.rename({"estimate": "data", "estimate_right": "pred"})
-        .with_columns(spe=(pl.col("data") - pl.col("pred")) ** 2)
-        .with_columns(
-            mspe=pl.col("spe").mean(),
-        )
-        .filter(pl.col("date") == pl.col("date").max())
-        .rename({"date": "forecast_end"})
-        .select("forecast_end", "mspe")
-    )
-
-    return pl.concat([start, end], how="horizontal")
-
-
-def get_mspe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
-    """
-    Wrapper function of check_date_match and calculate_mspe
-    ----------------------
-
-    Parameters
-    data:
-        The observed data used for modeling. Should be IncidentUptakeData
-    pred:
-        The forecast made by model. Should be PointForecast
-
-    Return
-    pl.DataFrame with forecast start date, forecast end date, and MSPE
-
-    """
+    # validate inputs
+    data = IncidentUptakeData(data)
+    pred = PointForecast(pred)
     check_date_match(data, pred)
-    mspe = calculate_mspe(data, pred)
 
-    return mspe
+    return (
+        data.join(pred, on="date", how="inner", validate="1:1")
+        .rename({"estimate": "data", "estimate_right": "pred"})
+        .select(
+            forecast_start=pl.col("date").min(),
+            forecast_end=pl.col("date").max(),
+            score=score_fun(pl.col("data"), pl.col("pred")),
+        )
+    )
 
 
-def calculate_mean_bias(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
+def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+    return ((x - y) ** 2).mean()
+
+
+def mean_bias(pred: pl.Expr, data: pl.Expr) -> pl.Expr:
     """
-    Calculate Mean bias from joined data.
     Note the bias here is not the classical bias calculated from the posterior distribution.
-
     The bias here is defined as: at time t,
     bias = -1 if pred_t < data_t; bias = 0 if pred_t == data_t; bias = 1 if pred_t > bias_t
 
     mean_bias = sum of the bias across time/length of data
-    -------------------------
-
-    Parameters
-    data:
-        The observed data used for modeling. Should be IncidentUptakeData
-    pred:
-        The forecast made by model. Should be PointForecast
-
-    Return
-    pl.DataFrame with forecast start date, forecast end date, and mean bias
     """
 
-    joined = (
-        data.join(pred, on="date", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .with_columns(diff=(pl.col("data") - pl.col("pred")))
-    )
-
-    joined = joined.with_columns(bias=joined["diff"].sign())
-
-    m_bias = pl.DataFrame(
-        {
-            "forecast_start": joined["date"].min(),
-            "forecast_end": joined["date"].max(),
-            "mbias": joined["bias"].sum() / joined.shape[0],
-        }
-    )
-
-    return m_bias
+    return (pred - data).sign().mean()
 
 
-def get_mean_bias(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
-    """
-    Wrapper function of check_date_match and calculate_mean_bias
-    ----------------------
-
-    Parameters
-    data:
-        The observed data used for modeling. Should be IncidentUptakeData
-    pred:
-        The forecast made by model. Should be PointForecast
-
-    Return
-    pl.DataFrame with forecast start date, forecast end date, and mean bias
-
-    """
-    # Check the conditions for date match:
-    check_date_match(data, pred)
-    m_bias = calculate_mean_bias(data, pred)
-
-    return m_bias
-
-
-def calculate_eos_abe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
+def eos_abe(data: pl.Expr, pred: pl.Expr) -> pl.Expr:
     """
     Calculate the absolute error of the total uptake at the end of season between data and prediction
     relative to data.
-    -------------------
-
-    Parameters
-    data:
-        The observed data used for modeling. Should be IncidentUptakeData
-    pred:
-        The forecast made by model. Should be PointForecast
-
-    Return
-    pl.DataFrame with forecast start date, forecast end date, and absolute error
-        in the total uptake between data and prediction relative to data forecast end date.
-
     """
-    joined = (
-        data.join(pred, on="date", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .with_columns(
-            cumu_data=pl.col("data").cum_sum(),
-            cumu_pred=pl.col("pred").cum_sum(),
-        )
-    )
-
-    abe_prop = abs(joined["cumu_data"] - joined["cumu_pred"]) / joined["cumu_data"]
-    abe_prop = abe_prop[len(abe_prop) - 1]
-
-    eos_abe = pl.DataFrame(
-        {
-            "forecast_start": joined["date"].min(),
-            "forecast_end": joined["date"].max(),
-            "ae_prop": abe_prop,
-        }
-    )
-
-    return eos_abe
-
-
-def get_eos_abe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataFrame:
-    """
-    Wrapper function of check_date_match and calculate_eos_abe
-    ----------------------
-
-    Parameters
-    data:
-        The observed data used for modeling. Should be IncidentUptakeData
-    pred:
-        The forecast made by model. Should be PointForecast
-
-    Return
-    pl.DataFrame with forecast start date, forecast end date, and absolute error
-        in the total uptake between data and prediction relative to data forecast end date.
-
-    """
-    # Check the conditions for date match:
-    check_date_match(data, pred)
-    eos_abe = calculate_eos_abe(data, pred)
-
-    return eos_abe
+    cum_data = data.cum_sum().last()
+    cum_pred = pred.cum_sum().last()
+    return abs(cum_data - cum_pred) / cum_data
