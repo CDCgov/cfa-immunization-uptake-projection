@@ -53,20 +53,6 @@ class ValidatedUptake(pl.DataFrame):
                 self[col].dtype == dtype
             ), f"Column {col} should be {dtype} but is {self[col].dtype}"
 
-    def assert_type_included(self, datatype):
-        """
-        Verify at least one column has the expected type.
-
-        Parameters
-        columns: List[str]
-            names of columns for which to check type
-        datatype:
-            data type for each listed column
-        """
-        assert any(
-            dtype == datatype for dtype in self.schema.values()
-        ), f"No column is {datatype} type"
-
     def with_columns(self, *args, **kwargs):
         """
         Copy of polars with_columns that returns the same subclass as it's given.
@@ -75,19 +61,34 @@ class ValidatedUptake(pl.DataFrame):
         result = super().with_columns(*args, **kwargs)
         return orig_class(result)
 
-    def assert_column_name_all(self, column_name):
+    def assert_numerical_columns_name(self, column_name):
         """
-        Verify that all columns except 'date' have a pattern with a common name
+        Verify that all the numerical columns have a pattern with a common name
 
         Parameters
         column_name:
             The common column name
         """
-        estimate = self.select(pl.all().exclude(pl.Date))
+        estimate = self.select(pl.all().exclude([pl.Date, pl.String]))
         pattern = rf"^{column_name}\d*$"
         assert all(
             [bool(re.match(pattern, col)) for col in estimate.columns]
         ), f"Not all columns are Column name {column_name}"
+
+    def assert_numerical_columns_type(self, dtype):
+        """
+        Verify that all the numerical columns are the same data type
+
+        Parameters
+        dtype:
+            Required data type, should be numerical
+        """
+        estimate = self.select(pl.all().exclude([pl.Date, pl.String]))
+
+        for col in estimate.columns:
+            assert (
+                estimate[col].dtype == dtype
+            ), f"Column {col} should be {dtype} but is {estimate[col].dtype}"
 
     @staticmethod
     def date_to_season(date_col: pl.Expr) -> pl.Expr:
@@ -1019,12 +1020,10 @@ class QuantileForecast(ValidatedUptake):
 
     # Must be named as "quantileXX" except the date column
     def validate(self):
-        # has at least 1 column of date and 1 column of estimate
-        self.assert_type_included(pl.Date)
-        self.assert_type_included(pl.Float64)
-
-        # except date, must have the common column names
-        super().assert_column_name_all("quantile")
+        # must have a date column, and numerical columns must have common name and same data type
+        super().assert_columns_type(["date"], pl.Date)
+        super().assert_numerical_columns_type(pl.Float64)
+        super().assert_numerical_columns_name("quantile")
 
 
 class PointForecast(QuantileForecast):
@@ -1052,12 +1051,10 @@ class SampleForecast(ValidatedUptake):
         super().__init__(*args, **kwargs)
 
     def validate(self):
-        # has at least 1 column of date and 1 column of estimate
-        self.assert_type_included(pl.Date)
-        self.assert_type_included(pl.Float64)
-
-        # except date, must have the common column names
-        super().assert_column_name_all("sample_id")
+        # must have a date column, and numerical columns must have common name and same data type
+        super().assert_columns_type(["date"], pl.Date)
+        super().assert_numerical_columns_type(pl.Float64)
+        super().assert_numerical_columns_name("sample_id")
 
 
 ###### evaluation metrics #####
