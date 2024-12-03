@@ -31,63 +31,6 @@ def frame() -> iup.UptakeData:
     return iup.UptakeData(frame)
 
 
-def test_date_to_season(frame):
-    """
-    Return the overwinter season, for both fall and spring dates
-    """
-    output = frame.with_columns(date=iup.ValidatedData.date_to_season(pl.col("date")))
-
-    assert all(output["date"] == pl.Series(["2019/2020"] * 8))
-
-
-def test_date_to_interval(frame):
-    """
-    Return the interval between dates by grouping factor
-    """
-    output = frame.with_columns(
-        interval=iup.ValidatedData.date_to_interval(pl.col("date")).over("geography")
-    )
-
-    assert all(
-        output["interval"][2:8]
-        == pl.Series(
-            [
-                8.0,
-                8.0,
-                7.0,
-                7.0,
-                7.0,
-                7.0,
-            ]
-        )
-    )
-
-
-def test_date_to_elapsed(frame):
-    """
-    Return the time elapsed since the first date by grouping factor.
-    """
-    output = frame.with_columns(
-        elapsed=iup.ValidatedData.date_to_elapsed(pl.col("date")).over("geography")
-    )
-
-    assert all(
-        output["elapsed"]
-        == pl.Series(
-            [
-                0.0,
-                0.0,
-                8.0,
-                8.0,
-                15.0,
-                15.0,
-                22.0,
-                22.0,
-            ]
-        )
-    )
-
-
 def test_split_train_test_handles_train(frame):
     """
     Return the training half of a data set.
@@ -95,7 +38,7 @@ def test_split_train_test_handles_train(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedData.split_train_test([frame, frame2], start_date, "train")
+    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "train")
 
     assert output.equals(frame)
 
@@ -107,65 +50,9 @@ def test_split_train_test_handles_test(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedData.split_train_test([frame, frame2], start_date, "test")
+    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "test")
 
     assert output.equals(frame2)
-
-
-def test_trim_outlier_intervals_handles_two_rows(frame):
-    """
-    If there are two or fewer rows (per group), all rows should be trimmed.
-    """
-    frame = iup.IncidentUptakeData(frame.filter(pl.col("date") < dt.date(2020, 1, 9)))
-
-    output = frame.trim_outlier_intervals(group_cols=("geography",))
-
-    assert output.shape[0] == 0
-
-
-def test_trim_outlier_intervals_handles_above_threshold(frame):
-    """
-    If the first interval is too big, first three rows are trimmed by group.
-    """
-    frame = iup.IncidentUptakeData(frame)
-
-    output = frame.trim_outlier_intervals(group_cols=("geography",))
-
-    assert output.shape[0] == 2
-
-
-def test_trim_outlier_intervals_handles_below_threshold(frame):
-    """
-    If the first interval is not too big, first two rows are trimmed by group.
-    """
-    frame = iup.IncidentUptakeData(frame)
-
-    output = frame.trim_outlier_intervals(group_cols=("geography",), threshold=2)
-
-    assert output.shape[0] == 4
-
-
-def test_trim_outlier_intervals_handles_zero_std(frame):
-    """
-    If std dev of intervals is 0, first two rows are trimmed by group
-    """
-    frame = frame.filter(pl.col("date") > dt.date(2020, 1, 1))
-    frame = iup.IncidentUptakeData(frame)
-
-    output = frame.trim_outlier_intervals(group_cols=("geography",))
-
-    assert output.shape[0] == 2
-
-
-def test_augment_implicit_columns(frame):
-    """
-    Add 5 columns to the incident uptake data without losing any rows
-    """
-    frame = iup.IncidentUptakeData(frame)
-    frame = frame.augment_implicit_columns(group_cols=("geography",))
-
-    assert frame.shape[0] == 8
-    assert frame.shape[1] == 8
 
 
 def test_to_cumulative_handles_no_last(frame):
