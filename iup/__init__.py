@@ -1234,11 +1234,10 @@ def calculate_eos_abe(data: IncidentUptakeData, pred: PointForecast) -> pl.DataF
             cumu_data=pl.col("data").cum_sum(),
             cumu_pred=pl.col("pred").cum_sum(),
         )
-        .filter(pl.col("date") == pl.col("date").max())
-        .rename({"date": "forecast_end"})
     )
 
     abe_prop = abs(joined["cumu_data"] - joined["cumu_pred"]) / joined["cumu_data"]
+    abe_prop = abe_prop[len(abe_prop) - 1]
 
     eos_abe = pl.DataFrame(
         {
