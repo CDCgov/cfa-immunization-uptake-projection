@@ -8,7 +8,7 @@ from typing import List
 import re
 
 
-class ValidatedData(pl.DataFrame):
+class ValidatedUptake(pl.DataFrame):
     """
     Abstract class for observed data and forecast data.
     """
@@ -19,7 +19,7 @@ class ValidatedData(pl.DataFrame):
 
     def validate(self):
         """
-        Validate that an ValidatedData object has the two key columns:
+        Validate that an ValidatedUptake object has the two key columns:
         date and uptake estimate (% of population). There may be others.
         """
 
@@ -162,10 +162,10 @@ class ValidatedData(pl.DataFrame):
     @staticmethod
     def split_train_test(uptake_data_list, start_date: dt.date, side: str):
         """
-        Concatenate ValidatedData objects and split into training and test data.
+        Concatenate ValidatedUptake objects and split into training and test data.
 
         Parameters
-        uptake_data_list: List[ValidatedData]
+        uptake_data_list: List[ValidatedUptake]
             cumulative or incident uptake data objects, often from different seasons
         start_date: dt.date
             the first date for which projections should be made
@@ -173,7 +173,7 @@ class ValidatedData(pl.DataFrame):
             whether the "train" or "test" portion of the data is desired
 
         Returns
-        ValidatedData
+        ValidatedUptake
             cumulative or uptake data object of the training or test portion
 
         Details
@@ -198,9 +198,9 @@ class ValidatedData(pl.DataFrame):
         return out
 
 
-class IncidentUptakeData(ValidatedData):
+class IncidentUptakeData(ValidatedUptake):
     """
-    Subclass of ValidatedData for incident uptake.
+    Subclass of ValidatedUptake for incident uptake.
     """
 
     def __init__(self, *args, **kwargs):
@@ -217,7 +217,7 @@ class IncidentUptakeData(ValidatedData):
           threshold (float): maximum standardized interval between first two dates
 
         Returns
-        IncidentValidatedData
+        IncidentValidatedUptake
             incident uptake data with the outlier rows removed
 
         Details
@@ -328,9 +328,9 @@ class IncidentUptakeData(ValidatedData):
         return out
 
 
-class CumulativeUptakeData(ValidatedData):
+class CumulativeUptakeData(ValidatedUptake):
     """
-    Subclass of ValidatedData for cumulative uptake.
+    Subclass of ValidatedUptake for cumulative uptake.
     """
 
     def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
@@ -1010,7 +1010,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
 
 #### prediction output ####
-class QuantileForecast(ValidatedData):
+class QuantileForecast(ValidatedUptake):
     """
     Class for forecast with quantiles.
     Save for future.
@@ -1045,7 +1045,7 @@ class PointForecast(QuantileForecast):
         super().assert_columns_type(["estimate"], pl.Float64)
 
 
-class SampleForecast(ValidatedData):
+class SampleForecast(ValidatedUptake):
     """
     Class for forecast with posterior distribution.
     Save for future.
