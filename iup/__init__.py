@@ -3,8 +3,8 @@ import datetime as dt
 from sklearn.linear_model import LinearRegression
 import numpy as np
 import abc
-from typing import Sequence
 from typing_extensions import Self
+from typing import Sequence
 
 
 class Data(pl.DataFrame):
@@ -19,14 +19,13 @@ class Data(pl.DataFrame):
     def validate(self):
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def assert_in_schema(self, names_types: Sequence[tuple[str, pl.DataType]]):
+    def assert_in_schema(self, names_types: dict[str, pl.DataType]):
         """Verify that column of the expected types are present in the data frame
 
         Args:
-            names_types (Sequence[tuple[str, pl.DataType]]): Iterable of 2-tuples
-              of column name and polars data type
+            names_types (dict[str, pl.DataType]): Column names and types
         """
-        for name, type_ in names_types:
+        for name, type_ in names_types.items():
             assert (
                 name,
                 type_,
@@ -40,7 +39,7 @@ class UptakeData(Data):
         date and uptake estimate (% of population). There may be others.
         """
 
-        self.assert_in_schema([("date", pl.Date), ("estimate", pl.Float64)])
+        self.assert_in_schema({"date": pl.Date, "estimate": pl.Float64})
 
     @staticmethod
     def date_to_season(date_col: pl.Expr) -> pl.Expr:
@@ -112,13 +111,13 @@ class UptakeData(Data):
 
     @staticmethod
     def split_train_test(
-        uptake_data_list, start_date: dt.date, side: str
+        uptake_data_list: Sequence[Data], start_date: dt.date, side: str
     ) -> pl.DataFrame:
         """
-        Concatenate ValidatedUptake objects and split into training and test data.
+        Concatenate Data objects and split into training and test data.
 
         Parameters
-        uptake_data_list: List[ValidatedUptake]
+        uptake_data_list: Sequence[Data]
             cumulative or incident uptake data objects, often from different seasons
         start_date: dt.date
             the first date for which projections should be made
@@ -138,12 +137,14 @@ class UptakeData(Data):
                 .sort("date")
                 .filter(pl.col("date") < start_date)
             )
-        if side == "test":
+        elif side == "test":
             out = (
                 pl.concat(uptake_data_list)
                 .sort("date")
                 .filter(pl.col("date") >= start_date)
             )
+        else:
+            raise RuntimeError(f"Unrecognized side '{side}'")
 
         return out
 
@@ -152,6 +153,12 @@ class IncidentUptakeData(UptakeData):
     """
     Subclass of ValidatedUptake for incident uptake.
     """
+
+    def validate(self):
+        # perform validations for UptakeData
+        super().validate()
+        # and also require that uptake be a proportion
+        assert self["estimate"].is_between(0.0, 1.0).all()
 
     def trim_outlier_intervals(
         self, group_cols: tuple[str,] | None, threshold: float = 1.0
@@ -957,7 +964,6 @@ class QuantileForecast(Data):
     Save for future.
     """
 
-    # Must be named as "quantileXX" except the date column
     def validate(self):
         self.assert_in_schema(
             [("date", pl.Date), ("quantile", pl.Float64), ("estimate", pl.Float64)]
@@ -991,13 +997,6 @@ class SampleForecast(Data):
         self.assert_in_schema(
             [("date", pl.Date), ("sample_id", pl.Int64), ("estimate", pl.Float64)]
         )
-        # has at least 1 column of date and 1 column of estimate
-        self.assert_type_included(pl.Date)
-        self.assert_type_included(pl.Float64)
-
-        # except date, must have the common column names
-        estimate = self.select(pl.all().exclude(pl.Date))
-        super().assert_column_name_all(estimate, "sample_id")
 
 
 ###### evaluation metrics #####
