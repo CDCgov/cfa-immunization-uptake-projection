@@ -75,18 +75,16 @@ class ValidatedUptake(pl.DataFrame):
         result = super().with_columns(*args, **kwargs)
         return orig_class(result)
 
-    @staticmethod
-    def assert_column_name_all(estimate, column_name):
+    def assert_column_name_all(self, column_name):
         """
-        Verify that all columns have a pattern with a common name
+        Verify that all columns except 'date' have a pattern with a common name
 
         Parameters
-        estimate:
-            The data without 'date' type
         column_name:
             The common column name
         """
-        pattern = rf"^{column_name}\d+$"
+        estimate = self.select(pl.all().exclude(pl.Date))
+        pattern = rf"^{column_name}\d*$"
         assert all(
             [bool(re.match(pattern, col)) for col in estimate.columns]
         ), f"Not all columns are Column name {column_name}"
@@ -1026,8 +1024,7 @@ class QuantileForecast(ValidatedUptake):
         self.assert_type_included(pl.Float64)
 
         # except date, must have the common column names
-        estimate = self.select(pl.all().exclude(pl.Date))
-        super().assert_column_name_all(estimate, "quantile")
+        super().assert_column_name_all("quantile")
 
 
 class PointForecast(QuantileForecast):
@@ -1060,8 +1057,7 @@ class SampleForecast(ValidatedUptake):
         self.assert_type_included(pl.Float64)
 
         # except date, must have the common column names
-        estimate = self.select(pl.all().exclude(pl.Date))
-        super().assert_column_name_all(estimate, "sample_id")
+        super().assert_column_name_all("sample_id")
 
 
 ###### evaluation metrics #####
