@@ -55,7 +55,7 @@ def test_get_mspe(data, pred):
         )
     )
 
-    assert abs(output["mspe"][0] - 0.028) < 1e-6
+    assert np.isclose(output["mspe"][0], 0.028)
 
 
 def test_get_mean_bias(data, pred):
