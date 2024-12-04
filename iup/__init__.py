@@ -28,11 +28,15 @@ class Data(pl.DataFrame):
         for name, type_ in names_types.items():
             if name not in self.schema.names():
                 raise RuntimeError(f"Column '{name}' not found")
-            elif (name, type_) not in self.schema.items():
+            elif (
+                name in self.schema.names() and (name, type_) not in self.schema.items()
+            ):
                 actual_type = self.schema.to_python()[name]
-                f"Column '{name}' has type {actual_type}, not {type_}"
-
-            assert (name, type_) in self.schema.items()
+                raise RuntimeError(
+                    f"Column '{name}' has type {actual_type}, not {type_}"
+                )
+            else:
+                assert (name, type_) in self.schema.items()
 
 
 class UptakeData(Data):
@@ -1009,7 +1013,7 @@ class SampleForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            [("date", pl.Date), ("sample_id", pl.Int64), ("estimate", pl.Float64)]
+            {"date": pl.Date, "sample_id": pl.Int64, "estimate": pl.Float64}
         )
 
 
