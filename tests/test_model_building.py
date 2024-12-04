@@ -84,10 +84,10 @@ def test_fit(frame):
     Model should fit a line to two points, giving a 'perfect' fit
     """
 
-    output = iup.LinearIncidentUptakeModel()
-    output = output.fit(frame, ("geography",))
+    data = iup.IncidentUptakeData(frame)
+    model = iup.LinearIncidentUptakeModel().fit(data, ("geography",))
 
-    assert output.model.score(output.x, output.y) == 1.0
+    assert model.model.score(model.x, model.y) == 1.0
 
 
 def test_build_scaffold_handles_no_groups():

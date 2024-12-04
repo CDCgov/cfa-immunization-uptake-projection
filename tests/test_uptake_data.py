@@ -5,7 +5,7 @@ import datetime as dt
 
 
 @pytest.fixture
-def frame():
+def frame() -> iup.UptakeData:
     """
     Make a mock data frame to uptake data manipulations.
     """
@@ -26,16 +26,16 @@ def frame():
         }
     )
 
-    frame = frame.with_columns(date=pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"))
+    frame = frame.with_columns(date=pl.col("date").str.to_date("%Y-%m-%d"))
 
-    return frame
+    return iup.UptakeData(frame)
 
 
 def test_date_to_season(frame):
     """
     Return the overwinter season, for both fall and spring dates
     """
-    output = frame.with_columns(date=iup.ValidatedUptake.date_to_season(pl.col("date")))
+    output = frame.with_columns(date=iup.UptakeData.date_to_season(pl.col("date")))
 
     assert all(output["date"] == pl.Series(["2019/2020"] * 8))
 
@@ -45,7 +45,7 @@ def test_date_to_interval(frame):
     Return the interval between dates by grouping factor
     """
     output = frame.with_columns(
-        interval=iup.ValidatedUptake.date_to_interval(pl.col("date")).over("geography")
+        interval=iup.UptakeData.date_to_interval(pl.col("date")).over("geography")
     )
 
     assert all(
@@ -68,7 +68,7 @@ def test_date_to_elapsed(frame):
     Return the time elapsed since the first date by grouping factor.
     """
     output = frame.with_columns(
-        elapsed=iup.ValidatedUptake.date_to_elapsed(pl.col("date")).over("geography")
+        elapsed=iup.UptakeData.date_to_elapsed(pl.col("date")).over("geography")
     )
 
     assert all(
@@ -95,7 +95,7 @@ def test_split_train_test_handles_train(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedUptake.split_train_test([frame, frame2], start_date, "train")
+    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "train")
 
     assert output.equals(frame)
 
@@ -107,7 +107,7 @@ def test_split_train_test_handles_test(frame):
     frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.ValidatedUptake.split_train_test([frame, frame2], start_date, "test")
+    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "test")
 
     assert output.equals(frame2)
 
@@ -237,28 +237,26 @@ def test_to_cumulative_handles_no_groups(frame):
     assert all(output["estimate"] == pl.Series([0.0, 1.0, 4.0, 8.0]))
 
 
+def test_cumulative_uptake_is_proportion(frame):
+    # should have an error if cumulative uptake is >1
+    assert frame["estimate"].max() > 1.0
+    with pytest.raises(AssertionError, match="proportion"):
+        iup.CumulativeUptakeData(frame)
+
+    # should not have an error if not
+    iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 1.0))
+
+
 def test_to_incident_handles_groups(frame):
     """
     If there are groups, successive differences are taken over the groups.
     """
-    frame = iup.CumulativeUptakeData(frame)
+    frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 1.0))
 
     output = frame.to_incident(group_cols=("geography",))
 
     assert all(
-        output["estimate"].round(10)
-        == pl.Series(
-            [
-                0.0,
-                0.0,
-                1.0,
-                0.1,
-                2.0,
-                0.2,
-                1.0,
-                0.1,
-            ]
-        )
+        output["estimate"].round(10) == pl.Series([0.0, 0.0, 1.0, 0.1, 0.2, 0.1])
     )
 
 
@@ -267,19 +265,11 @@ def test_to_incident_handles_no_groups(frame):
     If there are no groups, successive differences are taken over the entire data frame.
     """
     frame = iup.CumulativeUptakeData(
-        frame.filter(pl.col("geography") == "USA").drop("geography")
+        frame.filter(pl.col("geography") == "USA", pl.col("estimate") <= 1.0).drop(
+            "geography"
+        )
     )
 
     output = frame.to_incident(group_cols=None)
 
-    assert all(
-        output["estimate"].round(10)
-        == pl.Series(
-            [
-                0.0,
-                1.0,
-                2.0,
-                1.0,
-            ]
-        )
-    )
+    assert all(output["estimate"].round(10) == pl.Series([0.0, 1.0]))
