@@ -550,7 +550,7 @@ class LinearIncidentUptakeModel(UptakeModel):
           threshold (float): maximum standardized interval between first two dates
 
         Returns
-        IncidentValidatedUptake
+        pl.DataFrame:
             incident uptake data with the outlier rows removed
 
         Details

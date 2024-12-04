@@ -38,10 +38,8 @@ class Data(pl.DataFrame):
 class UptakeData(Data):
     def validate(self):
         """
-        Validate that an ValidatedUptake object has the two key columns:
-        date and uptake estimate (% of population). There may be others.
+        Must have date and estimate columns; can have more
         """
-
         self.assert_in_schema({"date": pl.Date, "estimate": pl.Float64})
 
     @staticmethod
@@ -84,11 +82,7 @@ class UptakeData(Data):
         return out
 
 
-class IncidentUptakeData(Data):
-    """
-    Subclass of ValidatedUptake for incident uptake.
-    """
-
+class IncidentUptakeData(UptakeData):
     def to_cumulative(
         self, group_cols: tuple[str,] | None, last_cumulative=None
     ) -> pl.DataFrame:
@@ -127,11 +121,7 @@ class IncidentUptakeData(Data):
         return out
 
 
-class CumulativeUptakeData(Data):
-    """
-    Subclass of ValidatedUptake for cumulative uptake.
-    """
-
+class CumulativeUptakeData(UptakeData):
     def validate(self):
         # same validations as UptakeData
         super().validate()
