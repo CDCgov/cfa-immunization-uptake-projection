@@ -978,11 +978,13 @@ class QuantileForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            [("date", pl.Date), ("quantile", pl.Float64), ("estimate", pl.Float64)]
+            {"date": pl.Date, "quantile": pl.Float64, "estimate": pl.Float64}
         )
 
         # all quantiles should be between 0 and 1
-        assert self["quantile"].is_between(0.0, 1.0).all()
+        assert (
+            self["quantile"].is_between(0.0, 1.0).all()
+        ), "quantiles must be between 0 and 1"
 
 
 class PointForecast(QuantileForecast):

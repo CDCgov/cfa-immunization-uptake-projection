@@ -165,3 +165,10 @@ def test_extract_group_names_handles_no_groups():
     output = iup.extract_group_names(group_cols)
 
     assert output is None
+
+
+def test_quantile_forecast_validation():
+    with pytest.raises(AssertionError, match="quantile"):
+        iup.QuantileForecast(
+            {"quantile": [-0.1], "date": [dt.date(2020, 1, 1)], "estimate": [0.0]}
+        )
