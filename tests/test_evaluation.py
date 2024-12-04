@@ -1,6 +1,7 @@
 import polars as pl
 import iup
 import pytest
+import numpy as np
 from datetime import date
 
 
@@ -47,14 +48,8 @@ def test_get_mspe(data, pred):
 
     output = iup.get_mspe(data, pred)
 
-    output_date = output.select("forecast_start", "forecast_end")
-
-    assert output_date.equals(
-        pl.DataFrame(
-            {"forecast_start": date(2020, 1, 1), "forecast_end": date(2020, 1, 5)}
-        )
-    )
-
+    assert output.item(0, "forecast_start") == date(2020, 1, 1)
+    assert output.item(0, "forecast_end") == date(2020, 1, 5)
     assert np.isclose(output["mspe"][0], 0.028)
 
 
@@ -67,15 +62,9 @@ def test_get_mean_bias(data, pred):
 
     output = iup.get_mean_bias(data, pred)
 
-    output_date = output.select("forecast_start", "forecast_end")
-
-    assert output_date.equals(
-        pl.DataFrame(
-            {"forecast_start": date(2020, 1, 1), "forecast_end": date(2020, 1, 5)}
-        )
-    )
-
-    assert abs(output["mbias"][0] - (-0.6)) < 1e-6
+    assert output.item(0, "forecast_start") == date(2020, 1, 1)
+    assert output.item(0, "forecast_end") == date(2020, 1, 5)
+    assert np.isclose(output["mbias"][0], -0.6)
 
 
 def test_get_eos_abe(data, pred):
@@ -87,12 +76,6 @@ def test_get_eos_abe(data, pred):
 
     output = iup.get_eos_abe(data, pred)
 
-    output_date = output.select("forecast_start", "forecast_end")
-
-    assert output_date.equals(
-        pl.DataFrame(
-            {"forecast_start": date(2020, 1, 1), "forecast_end": date(2020, 1, 5)}
-        )
-    )
-
-    assert abs(output["ae_prop"][0] - (0.352941)) < 1e-6
+    assert output.item(0, "forecast_start") == date(2020, 1, 1)
+    assert output.item(0, "forecast_end") == date(2020, 1, 5)
+    assert np.isclose(output["ae_prop"][0], 0.352941)
