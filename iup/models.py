@@ -135,16 +135,14 @@ class LinearIncidentUptakeModel(UptakeModel):
         # validate data
         data = IncidentUptakeData(data)
 
-        data = data.pipe(self.augment_implicit_columns, group_cols)
+        data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
 
         self.start = LinearIncidentUptakeModel.extract_starting_conditions(
             data, group_cols
         )
 
-        data = (
-            IncidentUptakeData(data)
-            .pipe(self.trim_outlier_intervals, group_cols)
-            .with_columns(
+        data = IncidentUptakeData(
+            self.trim_outlier_intervals(data, group_cols).with_columns(
                 previous_std=pl.col("previous").pipe(self.standardize),
                 elapsed_std=pl.col("elapsed").pipe(self.standardize),
                 daily_std=pl.col("daily").pipe(self.standardize),
@@ -269,8 +267,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         if group_cols is not None:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
 
-        scaffold = IncidentUptakeData(scaffold).pipe(
-            cls.augment_implicit_columns, group_cols
+        scaffold = cls.augment_implicit_columns(
+            IncidentUptakeData(scaffold), group_cols
         )
 
         if group_cols is not None:
