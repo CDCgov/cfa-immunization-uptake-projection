@@ -21,17 +21,16 @@ def run(config):
     )
 
     # Fit models using the training data and make projections
-    incident_model = (
-        iup.LinearIncidentUptakeModel()
-        .fit(incident_train_data, grouping_factors)
-        .predict(
-            config["timeframe"]["start"],
-            config["timeframe"]["end"],
-            config["timeframe"]["interval"],
-            grouping_factors,
-        )
+    incident_model = iup.LinearIncidentUptakeModel().fit(
+        incident_train_data, grouping_factors
     )
-    print(incident_model.cumulative_projection)
+    cumulative_projections = incident_model.predict(
+        config["timeframe"]["start"],
+        config["timeframe"]["end"],
+        config["timeframe"]["interval"],
+        grouping_factors,
+    )
+    print(cumulative_projections)
 
 
 if __name__ == "__main__":
