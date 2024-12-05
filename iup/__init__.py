@@ -1,6 +1,8 @@
 import polars as pl
 import datetime as dt
 from typing import Sequence
+from typing import List
+from polars.datatypes.classes import DataTypeClass
 
 
 class Data(pl.DataFrame):
@@ -15,7 +17,7 @@ class Data(pl.DataFrame):
     def validate(self):
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def assert_in_schema(self, names_types: dict[str, pl.DataType]):
+    def assert_in_schema(self, names_types: dict[str, DataTypeClass]):
         """Verify that column of the expected types are present in the data frame
 
         Args:
@@ -289,7 +291,7 @@ def select_columns(
 
     frame = (
         frame.with_columns(
-            estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
+            estimate=pl.col(estimate_col).cast(pl.Float64, strict=False) / 100.0,
             date=pl.col(date_col).str.to_date(date_format),
         )
         .drop_nulls(subset=["estimate"])
@@ -335,7 +337,7 @@ def insert_rollout(
 
 
 def extract_group_names(
-    group_cols: Sequence[dict],
+    group_cols: List[dict],
 ) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
