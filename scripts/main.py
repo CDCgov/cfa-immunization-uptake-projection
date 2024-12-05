@@ -31,6 +31,8 @@ def run(config):
         grouping_factors,
     )
     print(cumulative_projections)
+    incident_projections = cumulative_projections.to_incident()
+    print(incident_projections)
 
 
 if __name__ == "__main__":
