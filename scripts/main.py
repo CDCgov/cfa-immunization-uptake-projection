@@ -1,5 +1,6 @@
 import yaml
 import iup
+from iup.models import LinearIncidentUptakeModel
 import argparse
 
 
@@ -16,22 +17,25 @@ def run(config):
     incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]
 
     # Concatenate data sets and split into train and test subsets
-    incident_train_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, config["timeframe"]["start"], "train"
+    incident_train_data = iup.IncidentUptakeData(
+        iup.IncidentUptakeData.split_train_test(
+            incident_data, config["timeframe"]["start"], "train"
+        )
     )
 
     # Fit models using the training data and make projections
-    incident_model = (
-        iup.LinearIncidentUptakeModel()
-        .fit(incident_train_data, grouping_factors)
-        .predict(
-            config["timeframe"]["start"],
-            config["timeframe"]["end"],
-            config["timeframe"]["interval"],
-            grouping_factors,
-        )
+    incident_model = LinearIncidentUptakeModel().fit(
+        incident_train_data, grouping_factors
     )
-    print(incident_model.cumulative_projection)
+    cumulative_projections = incident_model.predict(
+        config["timeframe"]["start"],
+        config["timeframe"]["end"],
+        config["timeframe"]["interval"],
+        grouping_factors,
+    )
+    print(cumulative_projections)
+    incident_projections = cumulative_projections.to_incident(grouping_factors)
+    print(incident_projections)
 
 
 if __name__ == "__main__":

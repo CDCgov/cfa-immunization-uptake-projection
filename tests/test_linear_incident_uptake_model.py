@@ -174,9 +174,8 @@ def test_trim_outlier_intervals_handles_two_rows(frame):
     """
     frame = iup.IncidentUptakeData(frame.filter(pl.col("date") < dt.date(2020, 1, 9)))
 
-    output = frame.pipe(
-        iup.models.LinearIncidentUptakeModel.trim_outlier_intervals,
-        group_cols=("geography",),
+    output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
+        frame, group_cols=("geography",)
     )
 
     assert output.shape[0] == 0
@@ -207,9 +206,8 @@ def test_trim_outlier_intervals_handles_above_threshold():
         .pipe(iup.IncidentUptakeData)
     )
 
-    output = df.pipe(
-        iup.models.LinearIncidentUptakeModel.trim_outlier_intervals,
-        group_cols=("geography",),
+    output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
+        df, group_cols=("geography",)
     )
 
     # should drop the first 3 rows, leaving only Jan 21
@@ -224,10 +222,8 @@ def test_trim_outlier_intervals_handles_below_threshold(frame):
     """
     frame = iup.IncidentUptakeData(frame)
 
-    output = frame.pipe(
-        iup.models.LinearIncidentUptakeModel.trim_outlier_intervals,
-        group_cols=("geography",),
-        threshold=2,
+    output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
+        frame, group_cols=("geography",), threshold=2
     )
 
     assert output.shape[0] == 4
@@ -240,9 +236,8 @@ def test_trim_outlier_intervals_handles_zero_std(frame):
     frame = frame.filter(pl.col("date") > dt.date(2020, 1, 1))
     frame = iup.IncidentUptakeData(frame)
 
-    output = frame.pipe(
-        iup.models.LinearIncidentUptakeModel.trim_outlier_intervals,
-        group_cols=("geography",),
+    output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
+        frame, group_cols=("geography",)
     )
 
     assert output.shape[0] == 2
@@ -253,9 +248,8 @@ def test_augment_implicit_columns(frame):
     Add 5 columns to the incident uptake data without losing any rows
     """
     frame = iup.IncidentUptakeData(frame)
-    frame = frame.pipe(
-        iup.models.LinearIncidentUptakeModel.augment_implicit_columns,
-        group_cols=("geography",),
+    frame = iup.models.LinearIncidentUptakeModel.augment_implicit_columns(
+        frame, group_cols=("geography",)
     )
 
     assert frame.shape[0] == 8
@@ -273,17 +267,7 @@ def test_date_to_season(frame):
     assert all(output["date"] == pl.Series(["2019/2020"] * 8))
 
 
-def test_date_to_interval():
-    dates = pl.Series(
-        [dt.date(2024, 12, 1), dt.date(2024, 12, 3), dt.date(2024, 12, 1)]
-    )
-    current = iup.models.LinearIncidentUptakeModel.date_to_interval(dates).to_list()
-    expected = [None, 2.0, -2.0]
-
-    assert current == expected
-
-
-def test_date_to_interval_df(frame):
+def test_date_to_interval(frame):
     """
     Return the interval between dates by grouping factor
     """
