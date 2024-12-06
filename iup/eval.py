@@ -55,8 +55,8 @@ def score(
 
     """
     # validate inputs
-    data = IncidentUptakeData(data)
-    pred = PointForecast(pred)
+    assert isinstance(data, IncidentUptakeData)
+    assert isinstance(pred, PointForecast)
     check_date_match(data, pred)
 
     return (
