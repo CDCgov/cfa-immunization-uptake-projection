@@ -271,6 +271,8 @@ class LinearIncidentUptakeModel(UptakeModel):
             IncidentUptakeData(scaffold), group_cols
         )
 
+        # scaffold = IncidentUptakeData(scaffold).pipe(cls.augment_implicit_columns, group_cols)
+
         if group_cols is not None:
             scaffold = scaffold.join(
                 start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
@@ -491,7 +493,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
-        incident_projection = LinearIncidentUptakeModel.build_scaffold(
+        incident_projection = self.build_scaffold(
             self.start, start_date, end_date, interval, group_cols
         )
 

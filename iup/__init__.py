@@ -1,6 +1,8 @@
 import polars as pl
 import datetime as dt
 from typing import Sequence
+from typing import List
+from polars.datatypes.classes import DataTypeClass
 
 
 class Data(pl.DataFrame):
@@ -15,7 +17,7 @@ class Data(pl.DataFrame):
     def validate(self):
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def assert_in_schema(self, names_types: dict[str, pl.DataType]):
+    def assert_in_schema(self, names_types: dict[str, DataTypeClass]):
         """Verify that column of the expected types are present in the data frame
 
         Args:
@@ -335,7 +337,7 @@ def insert_rollout(
 
 
 def extract_group_names(
-    group_cols: [dict],
+    group_cols: List[dict],
 ) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
