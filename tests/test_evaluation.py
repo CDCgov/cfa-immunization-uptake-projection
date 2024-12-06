@@ -2,7 +2,6 @@ import polars as pl
 import numpy as np
 import iup
 import pytest
-import numpy as np
 from datetime import date
 
 
