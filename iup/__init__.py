@@ -291,7 +291,7 @@ def select_columns(
 
     frame = (
         frame.with_columns(
-            estimate=pl.col(estimate_col).cast(pl.Float64, strict=False),
+            estimate=pl.col(estimate_col).cast(pl.Float64, strict=False) / 100.0,
             date=pl.col(date_col).str.to_date(date_format),
         )
         .drop_nulls(subset=["estimate"])
