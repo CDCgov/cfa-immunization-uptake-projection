@@ -18,3 +18,21 @@ timeframe:
   start: 2024-02-01
   end: 2024-04-30
   interval: 7d
+
+
+
+script1:
+  data_set_1:
+    path: "dataset.csv"
+    estimate_col: "estimate"
+    date_col: "date"
+    date_format: "%m/%d/%Y"
+  filters:
+    geography: "National"
+    indicator: "booster"
+
+script2:
+  analysis:
+    start_date: "2024-02-01"
+    end_date: "2024-04-30"
+    interval: 7

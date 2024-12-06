@@ -33,6 +33,8 @@ def run(config):
     )
     print(incident_model.cumulative_projection)
 
+    return incident_model
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
