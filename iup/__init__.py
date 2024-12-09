@@ -335,7 +335,7 @@ def insert_rollout(
 
 
 def extract_group_names(
-    group_cols: Sequence[dict],
+    group_cols: [dict],
 ) -> tuple[str,] | None:
     """
     Insure that the column names for grouping factors match across data sets.
