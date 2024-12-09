@@ -18,10 +18,9 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 1. Enable poetry
 2. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
-3. Cache NIS data with `make`
+3. Cache NIS data with `make cache`
 4. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-   - For now, the `path:` field needs to be set to the absolute path to `THIS_REPO/data/NIS_2023-24.csv`
-5. `python scripts/main.py --config=scripts/config.yaml`
+5. `make run`
 
 ## Project admins
 
