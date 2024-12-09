@@ -6,6 +6,7 @@
 *.bin
 *.xls
 *.xlsx
+*.txt
 
 # Documents
 *.doc
