@@ -6,7 +6,7 @@ CONFIG = scripts/config.yaml
 .PHONY: cache
 
 run: $(CONFIG)
-	python scripts/main.py --config=$(CONFIG)
+	python scripts/main.py --config=$(CONFIG) --cache=$(NIS_CACHE)/clean
 
 cache: $(NIS_CACHE)/status.txt
 

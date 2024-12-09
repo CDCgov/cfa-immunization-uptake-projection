@@ -7,14 +7,15 @@ import iup
 from iup.models import LinearIncidentUptakeModel
 
 
-def run(config: dict):
-    data = nisapi.get_nis()
+def run(config: dict, cache: str):
+    data = nisapi.get_nis(cache)
 
     # List of the cumulative data sets described in the yaml
     # note that df.filter(**{"column1": value1, "column2": value2}) is equivalent to
     # df.filter(pl.col("column1")==value1, pl.col("column2")==value2)
     cumulative_data = [
-        data.filter(**x["filters"]).collect() for x in config["data"].values()
+        iup.CumulativeUptakeData(data.filter(**x["filters"]).collect())
+        for x in config["data"].values()
     ]
 
     # List of grouping factors used in each data set
@@ -49,10 +50,11 @@ def run(config: dict):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", type=str, default="config.yaml", dest="config")
+    p.add_argument("--config", help="config file")
+    p.add_argument("--cache", help="NIS cache directory")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    run(config)
+    run(config=config, cache=args.cache)
