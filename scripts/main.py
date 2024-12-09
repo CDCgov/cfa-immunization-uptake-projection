@@ -1,12 +1,21 @@
-import yaml
-import iup
-from iup.models import LinearIncidentUptakeModel
 import argparse
 
+import nisapi
+import yaml
 
-def run(config):
+import iup
+from iup.models import LinearIncidentUptakeModel
+
+
+def run(config: dict):
+    data = nisapi.get_nis()
+
     # List of the cumulative data sets described in the yaml
-    cumulative_data = [iup.parse_nis(**x) for x in config["data"].values()]
+    # note that df.filter(**{"column1": value1, "column2": value2}) is equivalent to
+    # df.filter(pl.col("column1")==value1, pl.col("column2")==value2)
+    cumulative_data = [
+        data.filter(**x["filters"]).collect() for x in config["data"].values()
+    ]
 
     # List of grouping factors used in each data set
     grouping_factors = iup.extract_group_names(
