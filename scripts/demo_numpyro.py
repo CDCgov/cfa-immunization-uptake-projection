@@ -22,9 +22,15 @@ def model_factory(
 ):
     """Make a curve fitting model
 
+    Given priors and a parametric curve, return a model, i.e., the kind of function that can be passed to
+    the sampler. Output values from the curve are
+
     Args:
         priors (dict): mapping from variable name to numpyro.distributions object
-        curve (function): (x, pars) -> y
+        curve (function): (x,  sigma, pars) -> y, where:
+          - x and y are arrays of the input and output curves
+          - sigma is the standard deviation of each y value
+          - pars is a dictionary of parameters, from string name to a numpyro distribution
 
     Returns:
         function to be called with MCMC(NUTS(...))
@@ -32,31 +38,28 @@ def model_factory(
 
     def model(x, sigma, y=None):
         # verify data inputs
-        J = len(x)
+        J = len(x)  # length of x input
         assert len(sigma) == J
+        # the sampler sometimes calls this function without y values
         if y is not None:
             assert len(y) == J
 
         # turn prior names and distributions into numpyro.sample objects, which can be passed to curve functions
         pars = {name: numpyro.sample(name, distrib) for name, distrib in priors.items()}
 
+        # get the point estimate position of the output curve
         theta = curve(x, pars)
+
         with numpyro.plate("J", J):
             numpyro.sample("obs", dist.Normal(theta, sigma), obs=y)
 
     return model
 
 
+# Curve functions -------------------------------------------------------------
 def sigmoid(x, pars):
     """Sigmoidal curve"""
     return pars["ymax"] / (1.0 + jnp.exp(-pars["k"] * (x - pars["x0"])))
-
-
-sigmoid_priors = {
-    "ymax": dist.Uniform(0, 100),
-    "x0": dist.Uniform(-200, 200),
-    "k": dist.Uniform(0, 10),
-}
 
 
 def hill(x, pars):
@@ -82,25 +85,38 @@ def hill(x, pars):
     return y
 
 
+# Some example priors --------------------------------------------------------
+sigmoid_priors = {
+    "ymax": dist.Uniform(0, 100),
+    "x0": dist.Uniform(-200, 200),
+    "k": dist.Uniform(0, 10),
+}
+
 hill_priors = {
     "xstart": dist.Uniform(-50, 25),
     "xip_delay": dist.Uniform(0, 100),
     "mip": dist.Uniform(0, 100),
     "ymax": dist.Uniform(5, 50),
 }
+
+# Run an example -------------------------------------------------------------
+# which curve and priors do you want to use?
 my_curve = hill
 my_priors = hill_priors
 
-# should include multiple chains
+# build the model that's passed to the sampler
 model = model_factory(
     priors=my_priors,
     curve=my_curve,
 )
+
+# set up the sampler
 mcmc = MCMC(NUTS(model), num_warmup=500, num_samples=2000)
 
-# key should be drawn randomly
+# set up random seed
 rng_key = jax.random.PRNGKey(0)
 
+# actually run the sampler
 mcmc.run(
     rng_key,
     x=data["x"].to_numpy(),
