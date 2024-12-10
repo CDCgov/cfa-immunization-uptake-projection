@@ -135,25 +135,19 @@ class LinearIncidentUptakeModel(UptakeModel):
         # validate data
         data = IncidentUptakeData(data)
 
-        data = data.pipe(self.augment_implicit_columns, group_cols)
+        data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
 
-        self.start = LinearIncidentUptakeModel.extract_starting_conditions(
-            data, group_cols
-        )
+        self.start = self.extract_starting_conditions(data, group_cols)
 
-        data = (
-            IncidentUptakeData(data)
-            .pipe(self.trim_outlier_intervals, group_cols)
-            .with_columns(
+        data = IncidentUptakeData(
+            self.trim_outlier_intervals(data, group_cols).with_columns(
                 previous_std=pl.col("previous").pipe(self.standardize),
                 elapsed_std=pl.col("elapsed").pipe(self.standardize),
                 daily_std=pl.col("daily").pipe(self.standardize),
             )
         )
 
-        self.standards = LinearIncidentUptakeModel.extract_standards(
-            data, ("previous", "elapsed", "daily")
-        )
+        self.standards = self.extract_standards(data, ("previous", "elapsed", "daily"))
 
         self.x = (
             data.select(["previous_std", "elapsed_std"])
@@ -269,8 +263,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         if group_cols is not None:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
 
-        scaffold = IncidentUptakeData(scaffold).pipe(
-            cls.augment_implicit_columns, group_cols
+        scaffold = cls.augment_implicit_columns(
+            IncidentUptakeData(scaffold), group_cols
         )
 
         if group_cols is not None:
@@ -458,7 +452,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         group_cols: tuple[str,] | None,
-    ) -> Self:
+    ) -> CumulativeUptakeData:
         """
         Make projections from a fit linear incident uptake model.
 
@@ -493,14 +487,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
-        self.incident_projection = LinearIncidentUptakeModel.build_scaffold(
+        incident_projection = self.build_scaffold(
             self.start, start_date, end_date, interval, group_cols
         )
 
         if group_cols is not None:
-            groups = self.incident_projection.partition_by(group_cols)
+            groups = incident_projection.partition_by(group_cols)
         else:
-            groups = [self.incident_projection]
+            groups = [incident_projection]
 
         for g in range(len(groups)):
             if group_cols is not None:
@@ -510,30 +504,30 @@ class LinearIncidentUptakeModel(UptakeModel):
             else:
                 start = self.start["last_daily"][0]
 
-            proj = LinearIncidentUptakeModel.project_sequentially(
+            proj = self.project_sequentially(
                 tuple(groups[g]["elapsed"]), start, self.standards, self.model
             )
 
             groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
 
-        self.incident_projection = pl.concat(groups).with_columns(
+        incident_projection = pl.concat(groups).with_columns(
             estimate=pl.col("daily") * pl.col("interval")
         )
 
-        self.incident_projection = IncidentUptakeData(self.incident_projection)
+        incident_projection = IncidentUptakeData(incident_projection)
 
         if group_cols is not None:
-            self.cumulative_projection = self.incident_projection.to_cumulative(
+            cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
             ).select(list(group_cols) + ["date", "estimate"])
         else:
-            self.cumulative_projection = self.incident_projection.to_cumulative(
+            cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(["last_cumulative"])
             ).select(["date", "estimate"])
 
-        self.cumulative_projection = CumulativeUptakeData(self.cumulative_projection)
+        cumulative_projection = CumulativeUptakeData(cumulative_projection)
 
-        return self
+        return cumulative_projection
 
     @classmethod
     def trim_outlier_intervals(
