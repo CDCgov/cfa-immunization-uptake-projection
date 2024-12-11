@@ -1,27 +1,30 @@
 repos:
-#####
-# Basic file cleanliness
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+  #####
+  # Basic file cleanliness
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-    -   id: check-added-large-files
-    -   id: check-yaml
-        args: ['--unsafe']
-    -   id: check-toml
-    -   id: end-of-file-fixer
-    -   id: mixed-line-ending
-    -   id: trailing-whitespace
-#####
-# Python
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.4.0
-  hooks:
-    - id: ruff
-#####
-# Secrets
--   repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+      - id: check-added-large-files
+      - id: check-yaml
+        args: ["--unsafe"]
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  #####
+  # Python
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.2
     hooks:
-    -   id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
+      - id: ruff
+        args: ["check", "--select", "I", "--fix"]
+      - id: ruff
+      - id: ruff-format
+  #####
+  # Secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
         exclude: package.lock.json
