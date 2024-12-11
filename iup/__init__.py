@@ -4,6 +4,8 @@ from typing import List, Sequence
 import polars as pl
 from polars.datatypes.classes import DataTypeClass
 
+import polars as pl
+
 
 class Data(pl.DataFrame):
     """

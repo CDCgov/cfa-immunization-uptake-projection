@@ -1,11 +1,13 @@
-import iup
-import iup.models
+import datetime as dt
+
+import numpy as np
 import polars as pl
 import polars.testing
 import pytest
-import datetime as dt
 from sklearn.linear_model import LinearRegression
-import numpy as np
+
+import iup
+import iup.models
 
 
 @pytest.fixture

@@ -1,7 +1,9 @@
-import iup
+import datetime as dt
+
 import polars as pl
 import pytest
-import datetime as dt
+
+import iup
 
 
 @pytest.fixture

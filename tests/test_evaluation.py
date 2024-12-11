@@ -1,9 +1,11 @@
-import polars as pl
+from datetime import date
+
 import numpy as np
+import polars as pl
+import pytest
+
 import iup
 from iup import eval
-import pytest
-from datetime import date
 
 
 @pytest.fixture

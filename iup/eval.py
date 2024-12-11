@@ -1,6 +1,8 @@
-import polars as pl
-from iup import IncidentUptakeData, PointForecast
 from typing import Callable
+
+import polars as pl
+
+from iup import IncidentUptakeData, PointForecast
 
 
 ###### evaluation metrics #####
