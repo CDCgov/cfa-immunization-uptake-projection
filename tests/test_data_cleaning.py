@@ -1,7 +1,10 @@
-import iup
+import datetime as dt
+
 import polars as pl
 import pytest
-import datetime as dt
+
+import iup
+import iup.models
 
 
 @pytest.fixture
@@ -21,61 +24,6 @@ def frame():
     return frame
 
 
-def test_apply_filters_handles_filters(frame):
-    """
-    If multiple filters are given to apply_filters, all of them should be applied.
-    """
-    filters = {"geography": "USA", "indicator": "booster"}
-
-    output = iup.apply_filters(frame, filters)
-
-    assert output.shape[0] == 1
-    assert output["estimate"][0] == 2.0
-
-
-def test_apply_filters_handles_no_filters(frame):
-    """
-    If no filters are given to apply_filters, the whole frame is returned.
-    """
-    filters = None
-
-    output = iup.apply_filters(frame, filters)
-
-    assert output.equals(frame)
-
-
-def test_select_columns_handles_groups(frame):
-    """
-    If grouping columns are given to select_columns, they are included and renamed.
-    """
-    estimate_col = "estimate"
-    date_col = "date"
-    group_cols = {"geography": "region"}
-    date_format = "%Y-%m-%d"
-
-    output = iup.select_columns(frame, estimate_col, date_col, group_cols, date_format)
-
-    assert output.shape[1] == 3
-    assert "region" in output.columns
-    assert output["date"].is_sorted()
-
-
-def test_select_columns_handles_no_groups(frame):
-    """
-    If no grouping columns are given to select_columns, they are excluded.
-    """
-    estimate_col = "estimate"
-    date_col = "date"
-    group_cols = None
-    date_format = "%Y-%m-%d"
-
-    output = iup.select_columns(frame, estimate_col, date_col, group_cols, date_format)
-
-    assert output.shape[1] == 2
-    assert "region" not in output.columns
-    assert output["date"].is_sorted()
-
-
 def test_insert_rollout_handles_groups(frame):
     """
     If grouping columns are given to insert_rollout, they are included with rollout.
@@ -85,7 +33,9 @@ def test_insert_rollout_handles_groups(frame):
     group_cols = {"geography": "region"}
     frame = frame.rename(group_cols).drop("indicator")
 
-    output = iup.insert_rollout(frame, rollout, group_cols)
+    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
+        frame, rollout, group_cols
+    )
 
     assert output.shape[0] == 5
     assert (
@@ -103,7 +53,9 @@ def test_insert_rollout_handles_no_groups(frame):
     group_cols = None
     frame = frame.drop(["indicator", "geography"])
 
-    output = iup.insert_rollout(frame, rollout, group_cols)
+    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
+        frame, rollout, group_cols
+    )
 
     assert output.shape[0] == 4
     assert (

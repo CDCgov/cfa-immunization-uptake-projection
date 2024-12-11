@@ -12,18 +12,15 @@ This approach is applicable to seasonal adult immunizations. Each year, the upta
 
 ## Data sources
 
-- Weekly cumulatve COVID-19 vaccination coverage and intent among adults 18 years and older
-  [Dictionary](https://data.cdc.gov/Vaccinations/Weekly-Intent-for-Vaccination-and-Cumulative-Perce/pakc-hru3/about_data)
-
-  - `udsf-9v7b` - 2022/2023 NIS
-  - `pakc-hru3` - 2023/2024 NIS
+Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 ## Getting started
 
 1. Enable poetry
-2. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-   - For now, the `path:` field needs to be set to the absolute path to `THIS_REPO/data/NIS_2023-24.csv`
-3. `python scripts/main.py --config=scripts/config.yaml`
+2. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
+3. Cache NIS data with `make cache`
+4. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
+5. `make run`
 
 ## Project admins
 
