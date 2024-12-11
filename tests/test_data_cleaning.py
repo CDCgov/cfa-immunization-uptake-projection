@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 import iup
+import iup.models
 
 
 @pytest.fixture
@@ -32,7 +33,9 @@ def test_insert_rollout_handles_groups(frame):
     group_cols = {"geography": "region"}
     frame = frame.rename(group_cols).drop("indicator")
 
-    output = iup.insert_rollout(frame, rollout, group_cols)
+    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
+        frame, rollout, group_cols
+    )
 
     assert output.shape[0] == 5
     assert (
@@ -50,7 +53,9 @@ def test_insert_rollout_handles_no_groups(frame):
     group_cols = None
     frame = frame.drop(["indicator", "geography"])
 
-    output = iup.insert_rollout(frame, rollout, group_cols)
+    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
+        frame, rollout, group_cols
+    )
 
     assert output.shape[0] == 4
     assert (
