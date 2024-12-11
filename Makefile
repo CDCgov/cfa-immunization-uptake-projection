@@ -8,6 +8,9 @@ CONFIG = scripts/config.yaml
 run: $(CONFIG) cache
 	python scripts/main.py --config=$(CONFIG) --cache=$(NIS_CACHE)/clean
 
+data/nis_raw.parquet: scripts/preprocess.py cache
+	python $< --cache=$(NIS_CACHE)/clean --output=$@
+
 cache: $(NIS_CACHE)/status.txt
 
 $(NIS_CACHE)/status.txt $(TOKEN_PATH):
