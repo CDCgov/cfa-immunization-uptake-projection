@@ -605,38 +605,3 @@ class LinearIncidentUptakeModel(UptakeModel):
         Time difference is always in days.
         """
         return date_col.diff().dt.total_days().cast(pl.Float64)
-
-    @staticmethod
-    def insert_rollout(
-        frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
-    ) -> pl.DataFrame:
-        """
-        Insert into NIS uptake data rows with 0 uptake on the rollout date.
-
-        Parameters
-        frame: pl.DataFrame
-            NIS data in the midst of parsing
-        rollout: dt.date
-            rollout date
-        group_cols: dict | None
-            dictionary of the NIS columns for the grouping factors
-            keys are the NIS column names and values are the desired column names
-
-        Returns
-            NIS cumulative data with rollout rows included
-
-        Details
-        A separate rollout row is added for every grouping factor combination.
-        """
-        if group_cols is not None:
-            rollout_rows = (
-                frame.select(pl.col(v) for v in group_cols.values())
-                .unique()
-                .with_columns(date=rollout, estimate=0.0)
-            )
-        else:
-            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
-
-        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
-
-        return frame
