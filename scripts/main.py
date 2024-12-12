@@ -34,6 +34,8 @@ def run(config: dict, cache: str):
         [x["group_cols"] for x in config["data"].values()]
     )
 
+    print(grouping_factors)
+
     # List of incident data sets from the cumulative data sets
     incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]
 

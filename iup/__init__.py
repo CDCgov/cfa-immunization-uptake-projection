@@ -190,32 +190,27 @@ def insert_rollout(
 
 
 def extract_group_names(
-    group_cols: List[dict],
-) -> tuple[str,] | None:
+    group_cols: List[List[str]],
+) -> tuple | None:
     """
-    Insure that the column names for grouping factors match across data sets.
+    Note the column names for grouping factors across data sets.
 
     Parameters
-    group_cols: [dict,]
-        List of dictionaries of grouping factor column names, where
-        keys are the NIS column names and values are the desired column names
+    group_cols: [[str,]]
+        List of lists of column names for grouping factors, for each data set
 
     Returns
         (str,)
-        The desired column names
+        The column names of grouping factors common to all data sets
 
     Details
     Before returning a single tuple of the desired column names,
-    check that they are identical for every entry in the dictionary,
-    where each entry represents one data set.
+    check that they are identical for every data set.
     """
 
-    if None in group_cols:
-        group_names = None
-    else:
-        assert all([len(g) == len(group_cols[0]) for g in group_cols])
-        assert all([set(g.values()) == set(group_cols[0].values()) for g in group_cols])
-        group_names = tuple([v for v in group_cols[0].values()])
+    assert all([len(g) == len(group_cols[0]) for g in group_cols])
+    assert all([g == group_cols[0] for g in group_cols])
+    group_names = tuple(group_cols[0])
 
     return group_names
 
