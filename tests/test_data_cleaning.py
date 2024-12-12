@@ -16,7 +16,7 @@ def frame():
         {
             "geography": ["USA", "PA", "USA"],
             "date": ["2020-01-07", "2020-01-14", "2020-01-21"],
-            "estimate": [0.0, 1.0, 2.0],
+            "estimate": [0.0, 0.1, 0.2],
             "indicator": ["refused", "booster", "booster"],
         }
     )
@@ -26,80 +26,58 @@ def frame():
 
 def test_insert_rollout_handles_groups(frame):
     """
-    If grouping columns are given to insert_rollout, they are included with rollout.
+    If grouping columns are given to insert_rollout, a separate rollout is inserted for each group.
     """
     frame = frame.with_columns(date=pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"))
-    rollout = dt.date(2020, 1, 1)
-    group_cols = {"geography": "region"}
-    frame = frame.rename(group_cols).drop("indicator")
+    rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
+    group_cols = ("geography",)
+    frame = iup.CumulativeUptakeData(frame.drop("indicator"))
 
-    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
-        frame, rollout, group_cols
-    )
+    output = frame.insert_rollout(rollout, group_cols)
 
-    assert output.shape[0] == 5
+    assert output.shape[0] == 7
     assert (
-        output["date"].value_counts().filter(pl.col("date") == rollout)["count"][0] == 2
+        output["date"].value_counts().filter(pl.col("date") == rollout[0])["count"][0]
+        == 2
     )
     assert output["date"].is_sorted()
 
 
 def test_insert_rollout_handles_no_groups(frame):
     """
-    If grouping columns are given to insert_rollout, they are included with rollout.
+    If no grouping columns are given to insert_rollout, only one of each rollout is inserted.
     """
     frame = frame.with_columns(date=pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"))
-    rollout = dt.date(2020, 1, 1)
+    rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
     group_cols = None
-    frame = frame.drop(["indicator", "geography"])
+    frame = iup.CumulativeUptakeData(frame.drop(["indicator", "geography"]))
 
-    output = iup.models.LinearIncidentUptakeModel.insert_rollout(
-        frame, rollout, group_cols
-    )
+    output = frame.insert_rollout(rollout, group_cols)
 
-    assert output.shape[0] == 4
+    assert output.shape[0] == 5
     assert (
-        output["date"].value_counts().filter(pl.col("date") == rollout)["count"][0] == 1
+        output["date"].value_counts().filter(pl.col("date") == rollout[0])["count"][0]
+        == 1
     )
     assert output["date"].is_sorted()
 
 
-def test_extract_group_names_handles_matching_groups():
+def test_extract_group_names_handles_matched_groups():
     """
-    If a list of matching group name dictionaries is given, the matching values are returned.
+    If a list of identical group name lists is given, just one tuple is returned.
     """
-    group_cols = [
-        {"geography": "region", "indicator": "outcome"},
-        {"geography": "region", "indicator": "outcome"},
-    ]
+    group_cols = [["geography", "indicator"], ["geography", "indicator"]]
 
     output = iup.extract_group_names(group_cols)
 
-    assert output == ("region", "outcome")
+    assert output == ("geography", "indicator")
 
 
-def test_extract_group_names_handles_unmatched_keys():
+def test_extract_group_names_handles_unmatched_groups():
     """
-    If a list of group name dictionaries with mismatched keys is given, the matching values are returned.
+    If a list of non-identical group name lists is given, an error is raised.
     """
-    group_cols = [
-        {"geography": "region", "indicator": "outcome"},
-        {"area": "region", "indicator": "outcome"},
-    ]
-
-    output = iup.extract_group_names(group_cols)
-
-    assert output == ("region", "outcome")
-
-
-def test_extract_group_names_handles_unmatched_values():
-    """
-    If a list of group name dictionaries with mismatched values is given, an error is raised.
-    """
-    group_cols = [
-        {"geography": "region", "indicator": "outcome"},
-        {"geography": "area", "indicator": "outcome"},
-    ]
+    group_cols = [["geography", "indicator"], ["geography", "mismatch"]]
 
     with pytest.raises(AssertionError):
         iup.extract_group_names(group_cols)
@@ -107,16 +85,12 @@ def test_extract_group_names_handles_unmatched_values():
 
 def test_extract_group_names_handles_no_groups():
     """
-    If a group name dictionary is missing, None is returned.
+    If a list group name lists containing None is given, an error is raised.
     """
-    group_cols = [
-        {"geography": "region", "indicator": "outcome"},
-        None,
-    ]
+    group_cols = [[None], ["geography", "mismatch"]]
 
-    output = iup.extract_group_names(group_cols)
-
-    assert output is None
+    with pytest.raises(AssertionError):
+        iup.extract_group_names(group_cols)
 
 
 def test_quantile_forecast_validation():
