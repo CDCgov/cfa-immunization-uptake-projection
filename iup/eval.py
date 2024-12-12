@@ -23,8 +23,8 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
 
     """
     # sort data and pred by date #
-    data = data.sort("date")
-    pred = pred.sort("date")
+    data = IncidentUptakeData(data.sort("date"))
+    pred = PointForecast(pred.sort("date"))
 
     # 1. Dates must be 1-on-1 equal
     (data["date"] == pred["date"]).all()
