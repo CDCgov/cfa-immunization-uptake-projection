@@ -8,12 +8,14 @@ from iup.models import LinearIncidentUptakeModel
 
 
 def run(config: dict, cache: str):
+    # Get uptake data from the cache
     data = nisapi.get_nis(cache)
 
     print(data.head().collect())
     print(data.collect_schema().names())
     print(data.collect().shape)
 
+    # Prune data to correct rows and columns
     cumulative_data = [
         iup.CumulativeUptakeData(
             data.filter(**x["filters"])
@@ -29,12 +31,18 @@ def run(config: dict, cache: str):
     print(cumulative_data[0].columns)
     print(cumulative_data[0].shape)
 
-    # List of grouping factors used in each data set
+    # Find grouping factors common to all data sets
     grouping_factors = iup.extract_group_names(
         [x["group_cols"] for x in config["data"].values()]
     )
 
     print(grouping_factors)
+
+    # Insert rollout dates into the data
+    cumulative_data = [
+        iup.CumulativeUptakeData(x.insert_rollout(y["rollout"], grouping_factors))
+        for x, y in zip(cumulative_data, config["data"].values())
+    ]
 
     # List of incident data sets from the cumulative data sets
     incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]

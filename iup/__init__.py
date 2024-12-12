@@ -153,40 +153,36 @@ class CumulativeUptakeData(UptakeData):
 
         return IncidentUptakeData(out)
 
+    def insert_rollout(
+        self, rollout: dt.date, group_cols: tuple | None
+    ) -> pl.DataFrame:
+        """
+        Insert into cumulative uptake data rows with 0 uptake on the rollout date.
 
-def insert_rollout(
-    frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
-) -> pl.DataFrame:
-    """
-    Insert into NIS uptake data rows with 0 uptake on the rollout date.
+        Parameters
+        rollout: dt.date
+            rollout date
+        group_cols: tuple[str] | None
+            names of grouping factor columns
 
-    Parameters
-    frame: pl.DataFrame
-        NIS data in the midst of parsing
-    rollout: dt.date
-        rollout date
-    group_cols: dict | None
-        dictionary of the NIS columns for the grouping factors
-        keys are the NIS column names and values are the desired column names
+        Returns
+            cumulative uptake data with rollout rows included
 
-    Returns
-        NIS cumulative data with rollout rows included
+        Details
+        A separate rollout row is added for every grouping factor combination.
+        """
+        if group_cols is not None:
+            rollout_rows = (
+                self.select(pl.col(v) for v in group_cols)
+                .unique()
+                .with_columns(date=rollout, estimate=0.0)
+            )
+        else:
+            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
 
-    Details
-    A separate rollout row is added for every grouping factor combination.
-    """
-    if group_cols is not None:
-        rollout_rows = (
-            frame.select(pl.col(v) for v in group_cols.values())
-            .unique()
-            .with_columns(date=rollout, estimate=0.0)
-        )
-    else:
-        rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
+        frame = self.vstack(rollout_rows.select(self.columns)).sort("date")
 
-    frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
-
-    return frame
+        return frame
 
 
 def extract_group_names(
