@@ -11,10 +11,6 @@ def run(config: dict, cache: str):
     # Get uptake data from the cache
     data = nisapi.get_nis(cache)
 
-    print(data.head().collect())
-    print(data.collect_schema().names())
-    print(data.collect().shape)
-
     # Prune data to correct rows and columns
     cumulative_data = [
         iup.CumulativeUptakeData(
@@ -27,16 +23,10 @@ def run(config: dict, cache: str):
         for x in config["data"].values()
     ]
 
-    print(cumulative_data[0].head())
-    print(cumulative_data[0].columns)
-    print(cumulative_data[0].shape)
-
     # Find grouping factors common to all data sets
     grouping_factors = iup.extract_group_names(
         [x["group_cols"] for x in config["data"].values()]
     )
-
-    print(grouping_factors)
 
     # Insert rollout dates into the data
     cumulative_data = [

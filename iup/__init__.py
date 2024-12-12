@@ -154,14 +154,14 @@ class CumulativeUptakeData(UptakeData):
         return IncidentUptakeData(out)
 
     def insert_rollout(
-        self, rollout: dt.date, group_cols: tuple | None
+        self, rollout: List[dt.date], group_cols: tuple | None
     ) -> pl.DataFrame:
         """
-        Insert into cumulative uptake data rows with 0 uptake on the rollout date.
+        Insert into cumulative uptake data rows with 0 uptake on rollout dates.
 
         Parameters
-        rollout: dt.date
-            rollout date
+        rollout: List[dt.date]
+            list of rollout dates
         group_cols: tuple[str] | None
             names of grouping factor columns
 
@@ -171,16 +171,19 @@ class CumulativeUptakeData(UptakeData):
         Details
         A separate rollout row is added for every grouping factor combination.
         """
-        if group_cols is not None:
-            rollout_rows = (
-                self.select(pl.col(v) for v in group_cols)
-                .unique()
-                .with_columns(date=rollout, estimate=0.0)
-            )
-        else:
-            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
+        frame = self
 
-        frame = self.vstack(rollout_rows.select(self.columns)).sort("date")
+        for r in rollout:
+            if group_cols is not None:
+                rollout_rows = (
+                    frame.select(pl.col(v) for v in group_cols)
+                    .unique()
+                    .with_columns(date=r, estimate=0.0)
+                )
+            else:
+                rollout_rows = pl.DataFrame({"date": r, "estimate": 0.0})
+
+            frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
 
         return frame
 
