@@ -1,15 +1,19 @@
 # The data sets to load and how to interpret them
 data:
   data_set_1:
-    group_cols:
-      geography: region
-    rollout: 2023-09-01
+    rollout: [2023-09-01, 2024-09-01]
     filters:
       geography_type: nation
       domain_type: age
       domain: 18+ years
       indicator_type: 4-level vaccination and intent
       indicator: received a vaccination
+      time_type: week
+    keep:
+      geography: geography
+      estimate: estimate
+      time_end: date
+    group_cols: [geography]
 
 # The timeframe over which to generate projections
 timeframe:
