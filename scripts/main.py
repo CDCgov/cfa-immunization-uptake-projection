@@ -10,13 +10,24 @@ from iup.models import LinearIncidentUptakeModel
 def run(config: dict, cache: str):
     data = nisapi.get_nis(cache)
 
-    # List of the cumulative data sets described in the yaml
-    # note that df.filter(**{"column1": value1, "column2": value2}) is equivalent to
-    # df.filter(pl.col("column1")==value1, pl.col("column2")==value2)
+    print(data.head().collect())
+    print(data.collect_schema().names())
+    print(data.collect().shape)
+
     cumulative_data = [
-        iup.CumulativeUptakeData(data.filter(**x["filters"]).collect())
+        iup.CumulativeUptakeData(
+            data.filter(**x["filters"])
+            .collect()
+            .rename(x["keep"])
+            .select(x["keep"].values())
+            .sort("date")
+        )
         for x in config["data"].values()
     ]
+
+    print(cumulative_data[0].head())
+    print(cumulative_data[0].columns)
+    print(cumulative_data[0].shape)
 
     # List of grouping factors used in each data set
     grouping_factors = iup.extract_group_names(
