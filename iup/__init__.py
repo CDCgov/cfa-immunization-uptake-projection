@@ -100,10 +100,10 @@ class UptakeData(Data):
         Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
         """
         year1 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(-1).otherwise(0)
+            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(-1).otherwise(0)
         ).cast(pl.Utf8)
         year2 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(0).otherwise(1)
+            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(0).otherwise(1)
         ).cast(pl.Utf8)
         season = pl.concat_str([year1, year2], separator="/")
 
@@ -221,12 +221,12 @@ class CumulativeUptakeData(UptakeData):
                     season=pl.col("time_end").pipe(UptakeData.date_to_season)
                 )
                 .with_columns(
-                    min=(pl.col("estimate") - pl.min("estimate")).over((group_cols))
+                    min=(pl.col("estimate") - pl.min("estimate")).over(group_cols)
                 )
                 .group_by(group_cols)
                 .first()
             )["min"]
-            == 0
+            == 0.0
         ).all()
 
         return frame

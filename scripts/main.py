@@ -16,14 +16,14 @@ def run(config: dict, cache: str):
         iup.CumulativeUptakeData(
             data.filter(**x["filters"])
             .collect()
-            .select(config["keep"].values())
+            .select(config["keep"])
             .sort("time_end")
         )
         for x in config["data"].values()
     ]
 
     # Insure that the desired grouping factors are found in all data sets
-    grouping_factors = config["groups"].values()
+    grouping_factors = config["groups"]
     assert all(g in df.columns for g in grouping_factors for df in cumulative_data)
 
     # Insert rollout dates into the data
