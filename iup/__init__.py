@@ -83,10 +83,36 @@ class UptakeData(Data):
 
         return out
 
+    @staticmethod
+    def date_to_season(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract season column from a date column, as polars expressions.
+
+        Parameters
+        date_col: pl.Expr
+            column of dates
+
+        Returns
+        pl.Expr
+            column of the season for each date
+
+        Details
+        Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
+        """
+        year1 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(-1).otherwise(0)
+        ).cast(pl.Utf8)
+        year2 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(0).otherwise(1)
+        ).cast(pl.Utf8)
+        season = pl.concat_str([year1, year2], separator="/")
+
+        return season
+
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
-        self, group_cols: tuple[str,] | None, last_cumulative=None
+        self, group_cols: List[str,] | None, last_cumulative=None
     ) -> pl.DataFrame:
         """
         Convert incident to cumulative uptake data.
@@ -132,7 +158,7 @@ class CumulativeUptakeData(UptakeData):
             self["estimate"].is_between(0.0, 1.0).all()
         ), "cumulative uptake `estimate` must be a proportion"
 
-    def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
+    def to_incident(self, group_cols: List[str,] | None) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
 
@@ -154,7 +180,7 @@ class CumulativeUptakeData(UptakeData):
         return IncidentUptakeData(out)
 
     def insert_rollout(
-        self, rollout: List[dt.date], group_cols: tuple | None
+        self, rollout: List[dt.date], group_cols: List[str] | None
     ) -> pl.DataFrame:
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
@@ -173,45 +199,36 @@ class CumulativeUptakeData(UptakeData):
         """
         frame = self
 
-        for r in rollout:
-            if group_cols is not None:
-                rollout_rows = (
-                    frame.select(pl.col(v) for v in group_cols)
-                    .unique()
-                    .with_columns(date=r, estimate=0.0)
-                )
-            else:
-                rollout_rows = pl.DataFrame({"date": r, "estimate": 0.0})
+        if group_cols is not None:
+            rollout_rows = (
+                frame.select(group_cols)
+                .unique()
+                .join(pl.DataFrame({"date": rollout}), how="cross")
+                .with_columns(estimate=0.0)
+            )
+            group_cols = group_cols + ["season"]
+        else:
+            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
+            group_cols = ["season"]
 
-            frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
+        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
+
+        # Check that, after adding rollout, the first date for each group and season
+        # is the one with the minimum estimate.
+        assert (
+            (
+                frame.with_columns(
+                    season=pl.col("date").pipe(UptakeData.date_to_season)
+                )
+                .with_columns(
+                    min=(pl.col("estimate") - pl.min("estimate")).over((group_cols))
+                )
+                .filter(pl.col("date").first().over(group_cols))
+            )["min"]
+            == 0
+        ).all()
 
         return frame
-
-
-def extract_group_names(
-    group_cols: List[List[str]],
-) -> tuple | None:
-    """
-    Note the column names for grouping factors across data sets.
-
-    Parameters
-    group_cols: [[str,]]
-        List of lists of column names for grouping factors, for each data set
-
-    Returns
-        (str,)
-        The column names of grouping factors common to all data sets
-
-    Details
-    Before returning a single tuple of the desired column names,
-    check that they are identical for every data set.
-    """
-
-    assert all([len(g) == len(group_cols[0]) for g in group_cols])
-    assert all([g == group_cols[0] for g in group_cols])
-    group_names = tuple(group_cols[0])
-
-    return group_names
 
 
 class QuantileForecast(Data):

@@ -13,7 +13,9 @@ data:
       geography: geography
       estimate: estimate
       time_end: date
-    group_cols: [geography]
+
+# Grouping factors across data sets
+groups: [geography]
 
 # The timeframe over which to generate projections
 timeframe:

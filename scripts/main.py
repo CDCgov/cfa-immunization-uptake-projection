@@ -23,10 +23,9 @@ def run(config: dict, cache: str):
         for x in config["data"].values()
     ]
 
-    # Find grouping factors common to all data sets
-    grouping_factors = iup.extract_group_names(
-        [x["group_cols"] for x in config["data"].values()]
-    )
+    # Insure that the desired grouping factors are found in all data sets
+    grouping_factors = config["groups"].values()
+    assert all(g in df.columns for g in grouping_factors for df in cumulative_data)
 
     # Insert rollout dates into the data
     cumulative_data = [
