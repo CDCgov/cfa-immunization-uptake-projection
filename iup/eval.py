@@ -30,8 +30,8 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     (data["date"] == pred["date"]).all()
 
     # 2. There should not be any duplicated date in either data or prediction.
-    assert (
-        len(data["date"]) == data["date"].n_unique()
+    assert not (
+        any(data["date"].is_duplicated())
     ), "Duplicated dates are found in data and prediction."
 
 
