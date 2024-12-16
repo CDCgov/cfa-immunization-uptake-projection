@@ -27,17 +27,17 @@ def plot_projections(obs_data, pred_data_list, n_columns, pic_loc, pic_name):
     """
 
     # input check #
-    if "date" not in obs_data.columns or "cumulative" not in obs_data.columns:
-        ValueError("'date' or 'cumulative' is missing from obs_data.")
+    if "time_end" not in obs_data.columns or "cumulative" not in obs_data.columns:
+        ValueError("'time_end' or 'cumulative' is missing from obs_data.")
 
     if not isinstance(pred_data_list, list):
         ValueError("pred_data_list must be a list.")
 
     if (
-        "date" not in pred_data_list[0].columns
+        "time_end" not in pred_data_list[0].columns
         or "cumulative" not in pred_data_list[0].columns
     ):
-        ValueError("'date' or 'cumulative' is missing from pred_data_list.")
+        ValueError("'time_end' or 'cumulative' is missing from pred_data_list.")
 
     # plot weekly initiated prediction #
     time_axis = alt.Axis(format="%Y-%m", tickCount="month")
@@ -45,12 +45,12 @@ def plot_projections(obs_data, pred_data_list, n_columns, pic_loc, pic_name):
     obs = (
         alt.Chart(obs_data)
         .mark_circle(color="black")
-        .encode(alt.X("date", axis=time_axis), alt.Y("cumulative"))
+        .encode(alt.X("time_end", axis=time_axis), alt.Y("cumulative"))
     )
 
     charts = []
 
-    dates = [pred_data_list[i]["date"].min() for i in range(len(pred_data_list))]
+    dates = [pred_data_list[i]["time_end"].min() for i in range(len(pred_data_list))]
 
     for i in range(len(pred_data_list)):
         date = dates[i].strftime("%Y-%m-%d")
@@ -60,7 +60,7 @@ def plot_projections(obs_data, pred_data_list, n_columns, pic_loc, pic_name):
             alt.Chart(pred)
             .mark_line(color="red")
             .encode(
-                x=alt.X("date:T", title="Date", axis=time_axis),
+                x=alt.X("time_end:T", title="Date", axis=time_axis),
                 y=alt.Y("cumulative:Q", title="Cumulative Vaccine Uptake (%)"),
             )
             .properties(title=f"Start Date: {date}")

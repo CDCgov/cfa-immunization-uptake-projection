@@ -18,7 +18,7 @@ def run(config: dict, cache: str):
             .collect()
             .rename(x["keep"])
             .select(x["keep"].values())
-            .sort("date")
+            .sort("time_end")
         )
         for x in config["data"].values()
     ]

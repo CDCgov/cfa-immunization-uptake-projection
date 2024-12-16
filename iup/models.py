@@ -66,7 +66,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         start = data.group_by(group_cols).agg(
             [
-                pl.col("date").last().alias("last_date"),
+                pl.col("time_end").last().alias("last_date"),
                 pl.col("daily").last().alias("last_daily"),
                 pl.col("elapsed").last().alias("last_elapsed"),
                 (pl.col("estimate"))
@@ -257,7 +257,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 interval=interval,
                 eager=True,
             )
-            .alias("date")
+            .alias("time_end")
             .to_frame()
             .with_columns(estimate=pl.lit(0.0))
         )
@@ -319,9 +319,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         return (
             IncidentUptakeData(df)
             .with_columns(
-                season=pl.col("date").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("date").pipe(cls.date_to_elapsed).over(group_cols),
-                interval=pl.col("date").pipe(cls.date_to_interval).over(group_cols),
+                season=pl.col("time_end").pipe(UptakeData.date_to_season),
+                elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
+                interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
             .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
@@ -495,11 +495,11 @@ class LinearIncidentUptakeModel(UptakeModel):
         if group_cols is not None:
             cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
-            ).select(list(group_cols) + ["date", "estimate"])
+            ).select(list(group_cols) + ["time_end", "estimate"])
         else:
             cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(["last_cumulative"])
-            ).select(["date", "estimate"])
+            ).select(["time_end", "estimate"])
 
         cumulative_projection = CumulativeUptakeData(cumulative_projection)
 
@@ -542,9 +542,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        rank = pl.col("date").rank().over(group_cols)
+        rank = pl.col("time_end").rank().over(group_cols)
         shifted_standard_interval = (
-            pl.col("date")
+            pl.col("time_end")
             .pipe(cls.date_to_interval)
             .pipe(cls.standardize)
             .shift(1)
@@ -555,7 +555,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             # validate input
             IncidentUptakeData(df)
             # sort by date
-            .sort("date")
+            .sort("time_end")
             # keep only the correct rows
             .filter(
                 (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))

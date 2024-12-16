@@ -40,9 +40,9 @@ class Data(pl.DataFrame):
 class UptakeData(Data):
     def validate(self):
         """
-        Must have date and estimate columns; can have more
+        Must have time_end and estimate columns; can have more
         """
-        self.assert_in_schema({"date": pl.Date, "estimate": pl.Float64})
+        self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
     @staticmethod
     def split_train_test(
@@ -69,14 +69,14 @@ class UptakeData(Data):
         if side == "train":
             out = (
                 pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") < start_date)
+                .sort("time_end")
+                .filter(pl.col("time_end") < start_date)
             )
         elif side == "test":
             out = (
                 pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") >= start_date)
+                .sort("time_end")
+                .filter(pl.col("time_end") >= start_date)
             )
         else:
             raise RuntimeError(f"Unrecognized side '{side}'")
@@ -203,27 +203,27 @@ class CumulativeUptakeData(UptakeData):
             rollout_rows = (
                 frame.select(group_cols)
                 .unique()
-                .join(pl.DataFrame({"date": rollout}), how="cross")
+                .join(pl.DataFrame({"time_end": rollout}), how="cross")
                 .with_columns(estimate=0.0)
             )
             group_cols = group_cols + ["season"]
         else:
-            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
+            rollout_rows = pl.DataFrame({"time_end": rollout, "estimate": 0.0})
             group_cols = ["season"]
 
-        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
+        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("time_end")
 
         # Check that, after adding rollout, the first date for each group and season
         # is the one with the minimum estimate.
         assert (
             (
                 frame.with_columns(
-                    season=pl.col("date").pipe(UptakeData.date_to_season)
+                    season=pl.col("time_end").pipe(UptakeData.date_to_season)
                 )
                 .with_columns(
                     min=(pl.col("estimate") - pl.min("estimate")).over((group_cols))
                 )
-                .filter(pl.col("date").first().over(group_cols))
+                .filter(pl.col("time_end").first().over(group_cols))
             )["min"]
             == 0
         ).all()
@@ -239,7 +239,7 @@ class QuantileForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            {"date": pl.Date, "quantile": pl.Float64, "estimate": pl.Float64}
+            {"time_end": pl.Date, "quantile": pl.Float64, "estimate": pl.Float64}
         )
 
         # all quantiles should be between 0 and 1
@@ -270,5 +270,5 @@ class SampleForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            {"date": pl.Date, "sample_id": pl.Int64, "estimate": pl.Float64}
+            {"time_end": pl.Date, "sample_id": pl.Int64, "estimate": pl.Float64}
         )

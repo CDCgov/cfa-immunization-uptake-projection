@@ -12,7 +12,7 @@ data:
     keep:
       geography: geography
       estimate: estimate
-      time_end: date
+      time_end: time_end
 
 # Grouping factors across data sets
 groups: [geography]

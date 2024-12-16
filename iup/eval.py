@@ -23,15 +23,15 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
 
     """
     # sort data and pred by date #
-    data = IncidentUptakeData(data.sort("date"))
-    pred = PointForecast(pred.sort("date"))
+    data = IncidentUptakeData(data.sort("time_end"))
+    pred = PointForecast(pred.sort("time_end"))
 
     # 1. Dates must be 1-on-1 equal
-    (data["date"] == pred["date"]).all()
+    (data["time_end"] == pred["time_end"]).all()
 
     # 2. There should not be any duplicated date in either data or prediction.
     assert (
-        len(data["date"]) == data["date"].n_unique()
+        len(data["time_end"]) == data["time_end"].n_unique()
     ), "Duplicated dates are found in data and prediction."
 
 
@@ -62,12 +62,12 @@ def score(
     check_date_match(data, pred)
 
     return (
-        data.join(pred, on="date", how="inner", validate="1:1")
+        data.join(pred, on="time_end", how="inner", validate="1:1")
         .rename({"estimate": "data", "estimate_right": "pred"})
         .select(
-            forecast_start=pl.col("date").min(),
-            forecast_end=pl.col("date").max(),
-            score=score_fun(pl.col("data"), pl.col("pred")),
+            forecast_start=pl.col("time_end").min(),
+            forecast_end=pl.col("time_end").max(),
+            score=score_fun(pl.col("time_end"), pl.col("pred")),
         )
     )
 
