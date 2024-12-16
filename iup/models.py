@@ -1,12 +1,13 @@
 import abc
 import datetime as dt
+from typing import List
 
 import numpy as np
 import polars as pl
 from sklearn.linear_model import LinearRegression
 from typing_extensions import Self
 
-from iup import CumulativeUptakeData, IncidentUptakeData
+from iup import CumulativeUptakeData, IncidentUptakeData, UptakeData
 
 
 class UptakeModel(abc.ABC):
@@ -41,7 +42,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def extract_starting_conditions(
-        data: IncidentUptakeData, group_cols: tuple[str,] | None
+        data: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
         """
         Extract from incident uptake data the last observed values of several variables, by group.
@@ -65,7 +66,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         start = data.group_by(group_cols).agg(
             [
-                pl.col("date").last().alias("last_date"),
+                pl.col("time_end").last().alias("last_date"),
                 pl.col("daily").last().alias("last_daily"),
                 pl.col("elapsed").last().alias("last_elapsed"),
                 (pl.col("estimate"))
@@ -102,7 +103,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         return standards
 
-    def fit(self, data: IncidentUptakeData, group_cols: tuple[str,] | None) -> Self:
+    def fit(self, data: IncidentUptakeData, group_cols: List[str,] | None) -> Self:
         """
         Fit a linear incident uptake model on training data.
 
@@ -223,7 +224,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        group_cols: tuple[str,] | None,
+        group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
         Build a scaffold data frame to hold projections of a linear incident uptake model.
@@ -256,7 +257,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 interval=interval,
                 eager=True,
             )
-            .alias("date")
+            .alias("time_end")
             .to_frame()
             .with_columns(estimate=pl.lit(0.0))
         )
@@ -292,7 +293,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @classmethod
     def augment_implicit_columns(
-        cls, df: IncidentUptakeData, group_cols: tuple[str,] | None
+        cls, df: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
         """
         Add explicit columns for information that is implicitly contained.
@@ -318,9 +319,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         return (
             IncidentUptakeData(df)
             .with_columns(
-                season=pl.col("date").pipe(cls.date_to_season),
-                elapsed=pl.col("date").pipe(cls.date_to_elapsed).over(group_cols),
-                interval=pl.col("date").pipe(cls.date_to_interval).over(group_cols),
+                season=pl.col("time_end").pipe(UptakeData.date_to_season),
+                elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
+                interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
             .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
@@ -344,32 +345,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         Time difference is always in days.
         """
         return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
-
-    @staticmethod
-    def date_to_season(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract season column from a date column, as polars expressions.
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the season for each date
-
-        Details
-        Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
-        """
-        year1 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(-1).otherwise(0)
-        ).cast(pl.Utf8)
-        year2 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 7).then(0).otherwise(1)
-        ).cast(pl.Utf8)
-        season = pl.concat_str([year1, year2], separator="/")
-
-        return season
 
     @classmethod
     def project_sequentially(
@@ -452,7 +427,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        group_cols: tuple[str,] | None,
+        group_cols: List[str,] | None,
     ) -> CumulativeUptakeData:
         """
         Make projections from a fit linear incident uptake model.
@@ -520,11 +495,11 @@ class LinearIncidentUptakeModel(UptakeModel):
         if group_cols is not None:
             cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
-            ).select(list(group_cols) + ["date", "estimate"])
+            ).select(list(group_cols) + ["time_end", "estimate"])
         else:
             cumulative_projection = incident_projection.to_cumulative(
                 group_cols, self.start.select(["last_cumulative"])
-            ).select(["date", "estimate"])
+            ).select(["time_end", "estimate"])
 
         cumulative_projection = CumulativeUptakeData(cumulative_projection)
 
@@ -534,7 +509,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def trim_outlier_intervals(
         cls,
         df: IncidentUptakeData,
-        group_cols: tuple[str,] | None,
+        group_cols: List[str,] | None,
         threshold: float = 1.0,
     ) -> pl.DataFrame:
         """
@@ -567,9 +542,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        rank = pl.col("date").rank().over(group_cols)
+        rank = pl.col("time_end").rank().over(group_cols)
         shifted_standard_interval = (
-            pl.col("date")
+            pl.col("time_end")
             .pipe(cls.date_to_interval)
             .pipe(cls.standardize)
             .shift(1)
@@ -580,7 +555,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             # validate input
             IncidentUptakeData(df)
             # sort by date
-            .sort("date")
+            .sort("time_end")
             # keep only the correct rows
             .filter(
                 (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
@@ -605,38 +580,3 @@ class LinearIncidentUptakeModel(UptakeModel):
         Time difference is always in days.
         """
         return date_col.diff().dt.total_days().cast(pl.Float64)
-
-    @staticmethod
-    def insert_rollout(
-        frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
-    ) -> pl.DataFrame:
-        """
-        Insert into NIS uptake data rows with 0 uptake on the rollout date.
-
-        Parameters
-        frame: pl.DataFrame
-            NIS data in the midst of parsing
-        rollout: dt.date
-            rollout date
-        group_cols: dict | None
-            dictionary of the NIS columns for the grouping factors
-            keys are the NIS column names and values are the desired column names
-
-        Returns
-            NIS cumulative data with rollout rows included
-
-        Details
-        A separate rollout row is added for every grouping factor combination.
-        """
-        if group_cols is not None:
-            rollout_rows = (
-                frame.select(pl.col(v) for v in group_cols.values())
-                .unique()
-                .with_columns(date=rollout, estimate=0.0)
-            )
-        else:
-            rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
-
-        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
-
-        return frame

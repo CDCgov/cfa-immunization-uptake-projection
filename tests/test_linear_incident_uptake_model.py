@@ -19,7 +19,7 @@ def frame():
         pl.DataFrame(
             {
                 "geography": ["USA", "PA", "USA", "PA", "USA", "PA", "USA", "PA"],
-                "date": [
+                "time_end": [
                     "2019-12-31",
                     "2019-12-31",
                     "2020-01-07",
@@ -37,7 +37,7 @@ def frame():
         )
         .with_columns(daily=(pl.col("estimate") / pl.col("interval")).fill_null(0))
         .with_columns(previous=pl.col("daily").shift(1).over("geography"))
-        .with_columns(date=pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"))
+        .with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
     )
 
     frame = iup.IncidentUptakeData(frame)
@@ -50,7 +50,10 @@ def test_extract_starting_conditions(frame):
     Use the last date for each grouping factor
     """
     output = iup.models.LinearIncidentUptakeModel.extract_starting_conditions(
-        frame, ("geography",)
+        frame,
+        [
+            "geography",
+        ],
     )
 
     assert output.sort("geography").equals(
@@ -89,7 +92,10 @@ def test_fit(frame):
     """
 
     data = iup.IncidentUptakeData(frame)
-    model = iup.models.LinearIncidentUptakeModel().fit(data, ("geography",))
+    model = iup.models.LinearIncidentUptakeModel().fit(
+        data,
+        ["geography"],
+    )
 
     assert model.model.score(model.x, model.y) == 1.0
 
@@ -135,7 +141,7 @@ def test_build_scaffold_handles_groups():
     start_date = dt.date(2020, 2, 1)
     end_date = dt.date(2020, 2, 29)
     interval = "7d"
-    group_cols = ("geography",)
+    group_cols = ["geography"]
 
     output = iup.models.LinearIncidentUptakeModel.build_scaffold(
         start, start_date, end_date, interval, group_cols
@@ -174,10 +180,13 @@ def test_trim_outlier_intervals_handles_two_rows(frame):
     """
     If there are two or fewer rows (per group), all rows should be trimmed.
     """
-    frame = iup.IncidentUptakeData(frame.filter(pl.col("date") < dt.date(2020, 1, 9)))
+    frame = iup.IncidentUptakeData(
+        frame.filter(pl.col("time_end") < dt.date(2020, 1, 9))
+    )
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
-        frame, group_cols=("geography",)
+        frame,
+        group_cols=["geography"],
     )
 
     assert output.shape[0] == 0
@@ -187,12 +196,11 @@ def test_trim_outlier_intervals_handles_above_threshold():
     """
     If the first interval is too big, first three rows are trimmed by group.
     """
-
     df = (
         pl.DataFrame(
             {
                 "geography": ["USA"] * 4 + ["PA"] * 4,
-                "date": [
+                "time_end": [
                     dt.date(2019, 12, 31),
                     dt.date(2020, 1, 7),
                     dt.date(2020, 1, 14),
@@ -209,11 +217,12 @@ def test_trim_outlier_intervals_handles_above_threshold():
     )
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
-        df, group_cols=("geography",)
+        df,
+        group_cols=["geography"],
     )
 
     # should drop the first 3 rows, leaving only Jan 21
-    expected = output.filter(pl.col("date") == dt.date(2020, 1, 21))
+    expected = output.filter(pl.col("time_end") == dt.date(2020, 1, 21))
 
     polars.testing.assert_frame_equal(output, expected, check_row_order=False)
 
@@ -225,7 +234,9 @@ def test_trim_outlier_intervals_handles_below_threshold(frame):
     frame = iup.IncidentUptakeData(frame)
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
-        frame, group_cols=("geography",), threshold=2
+        frame,
+        group_cols=["geography"],
+        threshold=2,
     )
 
     assert output.shape[0] == 4
@@ -235,11 +246,12 @@ def test_trim_outlier_intervals_handles_zero_std(frame):
     """
     If std dev of intervals is 0, first two rows are trimmed by group
     """
-    frame = frame.filter(pl.col("date") > dt.date(2020, 1, 1))
+    frame = frame.filter(pl.col("time_end") > dt.date(2020, 1, 1))
     frame = iup.IncidentUptakeData(frame)
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
-        frame, group_cols=("geography",)
+        frame,
+        group_cols=["geography"],
     )
 
     assert output.shape[0] == 2
@@ -251,7 +263,8 @@ def test_augment_implicit_columns(frame):
     """
     frame = iup.IncidentUptakeData(frame)
     frame = iup.models.LinearIncidentUptakeModel.augment_implicit_columns(
-        frame, group_cols=("geography",)
+        frame,
+        group_cols=["geography"],
     )
 
     assert frame.shape[0] == 8
@@ -263,19 +276,19 @@ def test_date_to_season(frame):
     Return the overwinter season, for both fall and spring dates
     """
     output = frame.with_columns(
-        date=iup.models.LinearIncidentUptakeModel.date_to_season(pl.col("date"))
+        season=iup.UptakeData.date_to_season(pl.col("time_end"))
     )
 
-    assert all(output["date"] == pl.Series(["2019/2020"] * 8))
+    assert all(output["season"] == pl.Series(["2019/2020"] * 8))
 
 
 def test_date_to_interval(frame):
     """
     Return the interval between dates by grouping factor
     """
-    output = frame.sort(["geography", "date"]).with_columns(
+    output = frame.sort(["geography", "time_end"]).with_columns(
         interval=iup.models.LinearIncidentUptakeModel.date_to_interval(
-            pl.col("date")
+            pl.col("time_end")
         ).over("geography")
     )
 
@@ -288,9 +301,9 @@ def test_date_to_elapsed(frame):
     """
     Return the time elapsed since the first date by grouping factor.
     """
-    output = frame.sort(["date", "geography"]).with_columns(
+    output = frame.sort(["time_end", "geography"]).with_columns(
         elapsed=iup.models.LinearIncidentUptakeModel.date_to_elapsed(
-            pl.col("date")
+            pl.col("time_end")
         ).over("geography")
     )
 

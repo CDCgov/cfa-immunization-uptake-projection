@@ -40,9 +40,9 @@ class Data(pl.DataFrame):
 class UptakeData(Data):
     def validate(self):
         """
-        Must have date and estimate columns; can have more
+        Must have time_end and estimate columns; can have more
         """
-        self.assert_in_schema({"date": pl.Date, "estimate": pl.Float64})
+        self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
     @staticmethod
     def split_train_test(
@@ -69,24 +69,50 @@ class UptakeData(Data):
         if side == "train":
             out = (
                 pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") < start_date)
+                .sort("time_end")
+                .filter(pl.col("time_end") < start_date)
             )
         elif side == "test":
             out = (
                 pl.concat(uptake_data_list)
-                .sort("date")
-                .filter(pl.col("date") >= start_date)
+                .sort("time_end")
+                .filter(pl.col("time_end") >= start_date)
             )
         else:
             raise RuntimeError(f"Unrecognized side '{side}'")
 
         return out
 
+    @staticmethod
+    def date_to_season(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract season column from a date column, as polars expressions.
+
+        Parameters
+        date_col: pl.Expr
+            column of dates
+
+        Returns
+        pl.Expr
+            column of the season for each date
+
+        Details
+        Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
+        """
+        year1 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(-1).otherwise(0)
+        ).cast(pl.Utf8)
+        year2 = (
+            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(0).otherwise(1)
+        ).cast(pl.Utf8)
+        season = pl.concat_str([year1, year2], separator="/")
+
+        return season
+
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
-        self, group_cols: tuple[str,] | None, last_cumulative=None
+        self, group_cols: List[str,] | None, last_cumulative=None
     ) -> pl.DataFrame:
         """
         Convert incident to cumulative uptake data.
@@ -132,7 +158,7 @@ class CumulativeUptakeData(UptakeData):
             self["estimate"].is_between(0.0, 1.0).all()
         ), "cumulative uptake `estimate` must be a proportion"
 
-    def to_incident(self, group_cols: tuple[str,] | None) -> IncidentUptakeData:
+    def to_incident(self, group_cols: List[str,] | None) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
 
@@ -153,71 +179,57 @@ class CumulativeUptakeData(UptakeData):
 
         return IncidentUptakeData(out)
 
+    def insert_rollout(
+        self, rollout: List[dt.date], group_cols: List[str] | None
+    ) -> pl.DataFrame:
+        """
+        Insert into cumulative uptake data rows with 0 uptake on rollout dates.
 
-def insert_rollout(
-    frame: pl.DataFrame, rollout: dt.date, group_cols: dict | None
-) -> pl.DataFrame:
-    """
-    Insert into NIS uptake data rows with 0 uptake on the rollout date.
+        Parameters
+        rollout: List[dt.date]
+            list of rollout dates
+        group_cols: tuple[str] | None
+            names of grouping factor columns
 
-    Parameters
-    frame: pl.DataFrame
-        NIS data in the midst of parsing
-    rollout: dt.date
-        rollout date
-    group_cols: dict | None
-        dictionary of the NIS columns for the grouping factors
-        keys are the NIS column names and values are the desired column names
+        Returns
+            cumulative uptake data with rollout rows included
 
-    Returns
-        NIS cumulative data with rollout rows included
+        Details
+        A separate rollout row is added for every grouping factor combination.
+        """
+        frame = self
 
-    Details
-    A separate rollout row is added for every grouping factor combination.
-    """
-    if group_cols is not None:
-        rollout_rows = (
-            frame.select(pl.col(v) for v in group_cols.values())
-            .unique()
-            .with_columns(date=rollout, estimate=0.0)
-        )
-    else:
-        rollout_rows = pl.DataFrame({"date": rollout, "estimate": 0.0})
+        if group_cols is not None:
+            rollout_rows = (
+                frame.select(group_cols)
+                .unique()
+                .join(pl.DataFrame({"time_end": rollout}), how="cross")
+                .with_columns(estimate=0.0)
+            )
+            group_cols = group_cols + ["season"]
+        else:
+            rollout_rows = pl.DataFrame({"time_end": rollout, "estimate": 0.0})
+            group_cols = ["season"]
 
-    frame = frame.vstack(rollout_rows.select(frame.columns)).sort("date")
+        frame = frame.vstack(rollout_rows.select(frame.columns)).sort("time_end")
 
-    return frame
+        # Check that, after adding rollout, the first date for each group and season
+        # is the one with the minimum estimate.
+        assert (
+            (
+                frame.with_columns(
+                    season=pl.col("time_end").pipe(UptakeData.date_to_season)
+                )
+                .with_columns(
+                    min=(pl.col("estimate") - pl.min("estimate")).over(group_cols)
+                )
+                .group_by(group_cols)
+                .first()
+            )["min"]
+            == 0.0
+        ).all()
 
-
-def extract_group_names(
-    group_cols: List[dict],
-) -> tuple[str,] | None:
-    """
-    Insure that the column names for grouping factors match across data sets.
-
-    Parameters
-    group_cols: [dict,]
-        List of dictionaries of grouping factor column names, where
-        keys are the NIS column names and values are the desired column names
-
-    Returns
-        (str,)
-        The desired column names
-
-    Details
-    Before returning a single tuple of the desired column names,
-    check that they are identical for every entry in the dictionary,
-    where each entry represents one data set.
-    """
-
-    if None in group_cols:
-        group_names = None
-    else:
-        assert all([len(g) == len(group_cols[0]) for g in group_cols])
-        assert all([set(g.values()) == set(group_cols[0].values()) for g in group_cols])
-        group_names = tuple([v for v in group_cols[0].values()])
-
-    return group_names
+        return frame
 
 
 class QuantileForecast(Data):
@@ -228,7 +240,7 @@ class QuantileForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            {"date": pl.Date, "quantile": pl.Float64, "estimate": pl.Float64}
+            {"time_end": pl.Date, "quantile": pl.Float64, "estimate": pl.Float64}
         )
 
         # all quantiles should be between 0 and 1
@@ -259,5 +271,5 @@ class SampleForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            {"date": pl.Date, "sample_id": pl.Int64, "estimate": pl.Float64}
+            {"time_end": pl.Date, "sample_id": pl.Int64, "estimate": pl.Float64}
         )

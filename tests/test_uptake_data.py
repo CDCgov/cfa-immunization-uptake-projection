@@ -14,7 +14,7 @@ def frame() -> iup.UptakeData:
     frame = pl.DataFrame(
         {
             "geography": ["USA", "PA", "USA", "PA", "USA", "PA", "USA", "PA"],
-            "date": [
+            "time_end": [
                 "2019-12-30",
                 "2019-12-30",
                 "2020-01-07",
@@ -28,7 +28,7 @@ def frame() -> iup.UptakeData:
         }
     )
 
-    frame = frame.with_columns(date=pl.col("date").str.to_date("%Y-%m-%d"))
+    frame = frame.with_columns(time_end=pl.col("time_end").str.to_date("%Y-%m-%d"))
 
     return iup.UptakeData(frame)
 
@@ -37,7 +37,7 @@ def test_split_train_test_handles_train(frame):
     """
     Return the training half of a data set.
     """
-    frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
+    frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
     output = iup.UptakeData.split_train_test([frame, frame2], start_date, "train")
@@ -49,7 +49,7 @@ def test_split_train_test_handles_test(frame):
     """
     Return the testing half of a data set.
     """
-    frame2 = frame.with_columns(date=pl.col("date") + pl.duration(days=365))
+    frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
     output = iup.UptakeData.split_train_test([frame, frame2], start_date, "test")
@@ -63,7 +63,11 @@ def test_to_cumulative_handles_no_last(frame):
     """
     frame = iup.IncidentUptakeData(frame)
 
-    output = frame.to_cumulative(group_cols=("geography",))
+    output = frame.to_cumulative(
+        group_cols=[
+            "geography",
+        ]
+    )
 
     assert all(
         output["estimate"]
@@ -93,7 +97,10 @@ def test_to_cumulative_handles_last(frame):
     )
 
     output = frame.to_cumulative(
-        group_cols=("geography",), last_cumulative=last_cumulative
+        group_cols=[
+            "geography",
+        ],
+        last_cumulative=last_cumulative,
     )
 
     assert all(
@@ -142,7 +149,11 @@ def test_to_incident_handles_groups(frame):
     """
     frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 1.0))
 
-    output = frame.to_incident(group_cols=("geography",))
+    output = frame.to_incident(
+        group_cols=[
+            "geography",
+        ]
+    )
 
     assert all(
         output["estimate"].round(10) == pl.Series([0.0, 0.0, 1.0, 0.1, 0.2, 0.1])
