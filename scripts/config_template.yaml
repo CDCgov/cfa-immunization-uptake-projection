@@ -9,10 +9,9 @@ data:
       indicator_type: 4-level vaccination and intent
       indicator: received a vaccination
       time_type: week
-    keep:
-      geography: geography
-      estimate: estimate
-      time_end: time_end
+
+# Columns to keep from each data set
+keep: ["geography", "estimate", "time_end"]
 
 # Grouping factors across data sets
 groups: [geography]

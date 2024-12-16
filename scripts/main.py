@@ -16,8 +16,7 @@ def run(config: dict, cache: str):
         iup.CumulativeUptakeData(
             data.filter(**x["filters"])
             .collect()
-            .rename(x["keep"])
-            .select(x["keep"].values())
+            .select(config["keep"].values())
             .sort("time_end")
         )
         for x in config["data"].values()
