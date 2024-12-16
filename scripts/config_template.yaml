@@ -11,7 +11,7 @@ data:
       time_type: week
 
 # Columns to keep from each data set
-keep: ["geography", "estimate", "time_end"]
+keep: [geography, estimate, time_end]
 
 # Grouping factors across data sets
 groups: [geography]

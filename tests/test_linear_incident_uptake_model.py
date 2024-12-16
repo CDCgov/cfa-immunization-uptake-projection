@@ -94,9 +94,7 @@ def test_fit(frame):
     data = iup.IncidentUptakeData(frame)
     model = iup.models.LinearIncidentUptakeModel().fit(
         data,
-        [
-            "geography",
-        ],
+        ["geography"],
     )
 
     assert model.model.score(model.x, model.y) == 1.0
@@ -143,9 +141,7 @@ def test_build_scaffold_handles_groups():
     start_date = dt.date(2020, 2, 1)
     end_date = dt.date(2020, 2, 29)
     interval = "7d"
-    group_cols = [
-        "geography",
-    ]
+    group_cols = ["geography"]
 
     output = iup.models.LinearIncidentUptakeModel.build_scaffold(
         start, start_date, end_date, interval, group_cols
@@ -190,9 +186,7 @@ def test_trim_outlier_intervals_handles_two_rows(frame):
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
         frame,
-        group_cols=[
-            "geography",
-        ],
+        group_cols=["geography"],
     )
 
     assert output.shape[0] == 0
@@ -224,9 +218,7 @@ def test_trim_outlier_intervals_handles_above_threshold():
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
         df,
-        group_cols=[
-            "geography",
-        ],
+        group_cols=["geography"],
     )
 
     # should drop the first 3 rows, leaving only Jan 21
@@ -243,9 +235,7 @@ def test_trim_outlier_intervals_handles_below_threshold(frame):
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
         frame,
-        group_cols=[
-            "geography",
-        ],
+        group_cols=["geography"],
         threshold=2,
     )
 
@@ -261,9 +251,7 @@ def test_trim_outlier_intervals_handles_zero_std(frame):
 
     output = iup.models.LinearIncidentUptakeModel.trim_outlier_intervals(
         frame,
-        group_cols=[
-            "geography",
-        ],
+        group_cols=["geography"],
     )
 
     assert output.shape[0] == 2
@@ -276,9 +264,7 @@ def test_augment_implicit_columns(frame):
     frame = iup.IncidentUptakeData(frame)
     frame = iup.models.LinearIncidentUptakeModel.augment_implicit_columns(
         frame,
-        group_cols=[
-            "geography",
-        ],
+        group_cols=["geography"],
     )
 
     assert frame.shape[0] == 8
