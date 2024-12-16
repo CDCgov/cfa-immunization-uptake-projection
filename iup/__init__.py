@@ -223,7 +223,8 @@ class CumulativeUptakeData(UptakeData):
                 .with_columns(
                     min=(pl.col("estimate") - pl.min("estimate")).over((group_cols))
                 )
-                .filter(pl.col("time_end").first().over(group_cols))
+                .group_by(group_cols)
+                .first()
             )["min"]
             == 0
         ).all()

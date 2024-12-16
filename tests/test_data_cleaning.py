@@ -29,7 +29,7 @@ def test_insert_rollout_handles_groups(frame):
     If grouping columns are given to insert_rollout, a separate rollout is inserted for each group.
     """
     frame = frame.with_columns(
-        date=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
+        time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
     )
     rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
     group_cols = [
@@ -54,7 +54,7 @@ def test_insert_rollout_handles_no_groups(frame):
     If no grouping columns are given to insert_rollout, only one of each rollout is inserted.
     """
     frame = frame.with_columns(
-        date=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
+        time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
     )
     rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
     group_cols = None

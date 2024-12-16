@@ -67,7 +67,7 @@ def score(
         .select(
             forecast_start=pl.col("time_end").min(),
             forecast_end=pl.col("time_end").max(),
-            score=score_fun(pl.col("time_end"), pl.col("pred")),
+            score=score_fun(pl.col("data"), pl.col("pred")),
         )
     )
 

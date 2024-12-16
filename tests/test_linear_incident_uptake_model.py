@@ -37,7 +37,7 @@ def frame():
         )
         .with_columns(daily=(pl.col("estimate") / pl.col("interval")).fill_null(0))
         .with_columns(previous=pl.col("daily").shift(1).over("geography"))
-        .with_columns(date=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
+        .with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
     )
 
     frame = iup.IncidentUptakeData(frame)
