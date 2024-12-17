@@ -84,30 +84,38 @@ class UptakeData(Data):
         return out
 
     @staticmethod
-    def date_to_season(date_col: pl.Expr) -> pl.Expr:
+    def date_to_season(
+        date: pl.Expr, season_start_month: int = 9, season_start_day: int = 1
+    ) -> pl.Expr:
         """
-        Extract season column from a date column, as polars expressions.
+        Extract winter season from a date
+
+        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
+        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
+        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/24"
 
         Parameters
-        date_col: pl.Expr
-            column of dates
+        date: pl.Expr
+            dates
+        season_start_month: int
+            month of the year the season starts
+        season_start_day: int
+            day of season_start_month that the season starts
 
         Returns
         pl.Expr
-            column of the season for each date
-
-        Details
-        Assume overwinter seasons, e.g. 2023-10-07 and 2024-04-18 are both in "2023/24"
+            seasons for each date
         """
-        year1 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(-1).otherwise(0)
-        ).cast(pl.Utf8)
-        year2 = (
-            date_col.dt.year() + pl.when(date_col.dt.month() < 9).then(0).otherwise(1)
-        ).cast(pl.Utf8)
-        season = pl.concat_str([year1, year2], separator="/")
 
-        return season
+        # for every date, figure out the season breakpoint in that year
+        season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
+
+        # what is the first year in the two-year season indicator?
+        date_year = date.dt.year()
+        year1 = pl.when(date < season_start).then(date_year - 1).otherwise(date_year)
+
+        year2 = year1 + 1
+        return pl.format("{}/{}", year1, year2)
 
 
 class IncidentUptakeData(UptakeData):

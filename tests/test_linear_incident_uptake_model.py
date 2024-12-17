@@ -275,11 +275,11 @@ def test_date_to_season(frame):
     """
     Return the overwinter season, for both fall and spring dates
     """
-    output = frame.with_columns(
-        season=iup.UptakeData.date_to_season(pl.col("time_end"))
-    )
+    df = pl.DataFrame({"date": [dt.date(2020, 1, 1), dt.date(2020, 12, 31)]})
+    current = df.select(iup.UptakeData.date_to_season(pl.col("date"))).to_series()
+    expected = pl.Series("date", ["2019/2020", "2020/2021"])
 
-    assert all(output["season"] == pl.Series(["2019/2020"] * 8))
+    assert (current == expected).all()
 
 
 def test_date_to_interval(frame):
