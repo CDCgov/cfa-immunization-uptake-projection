@@ -8,7 +8,6 @@ import yaml
 import iup
 from iup import eval
 from iup.models import LinearIncidentUptakeModel
-from iup import eval
 
 
 def run(config: dict, cache: str):
