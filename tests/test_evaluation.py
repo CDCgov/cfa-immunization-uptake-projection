@@ -15,7 +15,7 @@ def data():
     """
     return pl.DataFrame(
         {
-            "date": pl.date_range(
+            "time_end": pl.date_range(
                 date(2020, 1, 1), date(2020, 1, 5), interval="1d", eager=True
             ),
             "estimate": [0.0, 0.1, 0.7, 0.4, 0.5],
@@ -30,7 +30,7 @@ def pred():
     """
     return pl.DataFrame(
         {
-            "date": pl.date_range(
+            "time_end": pl.date_range(
                 date(2020, 1, 1), date(2020, 1, 5), interval="1d", eager=True
             ),
             "estimate": [0.0, 0.2, 1.0, 0.6, 0.5],

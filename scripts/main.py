@@ -12,20 +12,29 @@ from iup import eval
 
 
 def run(config: dict, cache: str):
+    # Get uptake data from the cache
     data = nisapi.get_nis(cache)
 
-    # List of the cumulative data sets described in the yaml
-    # note that df.filter(**{"column1": value1, "column2": value2}) is equivalent to
-    # df.filter(pl.col("column1")==value1, pl.col("column2")==value2)
+    # Prune data to correct rows and columns
     cumulative_data = [
-        iup.CumulativeUptakeData(data.filter(**x["filters"]).collect())
+        iup.CumulativeUptakeData(
+            data.filter(**x["filters"])
+            .collect()
+            .select(config["keep"])
+            .sort("time_end")
+        )
         for x in config["data"].values()
     ]
 
-    # List of grouping factors used in each data set
-    grouping_factors = iup.extract_group_names(
-        [x["group_cols"] for x in config["data"].values()]
-    )
+    # Insure that the desired grouping factors are found in all data sets
+    grouping_factors = config["groups"]
+    assert all(g in df.columns for g in grouping_factors for df in cumulative_data)
+
+    # Insert rollout dates into the data
+    cumulative_data = [
+        iup.CumulativeUptakeData(x.insert_rollout(y["rollout"], grouping_factors))
+        for x, y in zip(cumulative_data, config["data"].values())
+    ]
 
     # List of incident data sets from the cumulative data sets
     incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]
