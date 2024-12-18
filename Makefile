@@ -8,6 +8,12 @@ CONFIG = scripts/config.yaml
 run: $(CONFIG) cache
 	python scripts/main.py --config=$(CONFIG) --cache=$(NIS_CACHE)/clean
 
+data/scores.parquet: scripts/eval.py
+	echo MISSING STUFF
+
+data/forecasts.parquet: scripts/forecast.py
+	echo MISSING STUFF
+
 data/nis_raw.parquet: scripts/preprocess.py cache
 	python $< --cache=$(NIS_CACHE)/clean --output=$@
 
