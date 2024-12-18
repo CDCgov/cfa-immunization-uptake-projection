@@ -2,19 +2,21 @@ NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
+RAW_DATA = data/nis_raw.parquet
+FORECASTS = data/forecasts.parquet
+SCORES = data/scores.parquet
 
 .PHONY: cache
 
-run: $(CONFIG) cache
-	python scripts/main.py --config=$(CONFIG) --cache=$(NIS_CACHE)/clean
+all: $(SCORES)
 
-data/scores.parquet: scripts/eval.py
-	echo MISSING STUFF
+$(SCORE): scripts/eval.py $(FORECASTS)
+	python $< --input=$(FORECASTS) --output=$@
 
-data/forecasts.parquet: scripts/forecast.py
-	echo MISSING STUFF
+$(FORECASTS): scripts/forecast.py $(RAW_DATA)
+	python $< --input=$(RAW_DATA) --output=$@
 
-data/nis_raw.parquet: scripts/preprocess.py cache
+$(RAW_DATA): scripts/preprocess.py cache
 	python $< --cache=$(NIS_CACHE)/clean --output=$@
 
 cache: $(NIS_CACHE)/status.txt
