@@ -1,5 +1,5 @@
 import argparse
-import datetime as dt
+from pathlib import Path
 
 import nisapi
 import polars as pl
@@ -27,116 +27,70 @@ def run(config: dict, cache: str):
 
     # Preprocessing -----------------------------------------------------------
     # Get uptake data from the cache
-    data = nisapi.get_nis(cache)
+    raw_data = nisapi.get_nis(Path(cache))
 
-    # Prune data to correct rows and columns
-    cumulative_data = [
-        iup.CumulativeUptakeData(
-            data.filter(**x["filters"])
-            .collect()
-            .select(config["keep"])
+    for data_set_spec in config["data"]:
+        # Prune data to correct rows and columns
+        cumulative_data = iup.CumulativeUptakeData(
+            raw_data.filter(**data_set_spec["filters"])
+            .select(data_set_spec["keep"])
             .sort("time_end")
+            .collect()
         )
-        for x in config["data"].values()
-    ]
 
-    # Ensure that the desired grouping factors are found in all data sets
-    grouping_factors = config["groups"]
-    assert all(g in df.columns for g in grouping_factors for df in cumulative_data)
+        # Ensure that the desired grouping factors are found in all data sets
+        grouping_factors = config["groups"]
+        assert set(cumulative_data.columns).issuperset(grouping_factors)
 
-    # Insert rollout dates into the data
-    cumulative_data = [
-        iup.CumulativeUptakeData(x.insert_rollout(y["rollout"], grouping_factors))
-        for x, y in zip(cumulative_data, config["data"].values())
-    ]
+        # Insert rollout dates into the data
+        cumulative_data = iup.CumulativeUptakeData(
+            cumulative_data.insert_rollout(data_set_spec["rollout"], grouping_factors)
+        )
 
-    # List of incident data sets from the cumulative data sets
-    incident_data = [x.to_incident(grouping_factors) for x in cumulative_data]
+        # Convert to incident data
+        incident_data = cumulative_data.to_incident(grouping_factors)
 
-    # Forecasts ---------------------------------------------------------------
+        # Forecasts ---------------------------------------------------------------
 
-    for model in models:
-        for forecast_date in forecast_dates:
-            # Get data available as of the forecast date
-            incident_train_data = iup.IncidentUptakeData(
-                iup.IncidentUptakeData.split_train_test(
-                    incident_data, config["timeframe"]["start"], "train"
+        for model in models:
+            for forecast_date in forecast_dates:
+                # Get data available as of the forecast date
+                incident_train_data = iup.IncidentUptakeData(
+                    iup.IncidentUptakeData.split_train_test(
+                        incident_data, config["timeframe"]["start"], "train"
+                    )
                 )
-            )
 
-    if config["option"] == "projection":
-        cumulative_projections = incident_model.predict(
-            config["timeframe"]["start"],
-            config["timeframe"]["end"],
-            config["timeframe"]["interval"],
-            grouping_factors,
-        )
-        print(cumulative_projections)
-        incident_projections = cumulative_projections.to_incident(grouping_factors)
-        print(incident_projections)
+                # Fit models using the training data and make projections
+                fit_model = model().fit(incident_train_data, grouping_factors)
 
-    elif config["option"] == "evaluation":
-        # Make projections sequentially
-        interval_str = config["timeframe"]["interval"]
-        interval_number = int(interval_str[0])
-
-        dates = pl.date_range(
-            config["timeframe"]["start"],
-            config["timeframe"]["end"] - dt.timedelta(interval_number),
-            config["timeframe"]["interval"],
-            eager=True,
-        )
-
-        scores = pl.DataFrame(
-            schema={
-                "forecast_start": pl.Date,
-                "forecast_end": pl.Date,
-                "score": pl.Float64,
-                "type": pl.String,
-            }
-        )
-
-        for date in dates:
-            incident_train_data = iup.IncidentUptakeData(
-                iup.IncidentUptakeData.split_train_test(incident_data, date, "train")
-            )
-
-            # Fit models using the training data and make projections
-            incident_model = incident_model().fit(incident_train_data, grouping_factors)
-
-            # Generate cumulative predictions
-            cumulative_projections = incident_model.predict(
-                date,
-                config["timeframe"]["end"],
-                config["timeframe"]["interval"],
-                grouping_factors,
-            )
-            # save these projections somewhere
-
-            pred = iup.PointForecast(
-                cumulative_projections.to_incident(grouping_factors)
-            )
-
-            test_data = iup.IncidentUptakeData(
-                iup.IncidentUptakeData.split_train_test(
-                    incident_data, config["timeframe"]["start"], "test"
+                cumulative_projections = fit_model.predict(
+                    config["timeframe"]["start"],
+                    config["timeframe"]["end"],
+                    config["timeframe"]["interval"],
+                    grouping_factors,
                 )
-            ).filter(pl.col("date") <= config["timeframe"]["end"])
+                # save these projections somewhere
 
-            score_fun = getattr(eval, config["metric"])
-            score = eval.score(test_data, pred, score_fun)
+                incident_projections = cumulative_projections.to_incident(
+                    grouping_factors
+                )
+                # save these projections somewhere
 
-            if config["metric"] == "all":
-                score_funs = [eval.mspe, eval.mean_bias, eval.eos_abe]
-                score = pl.concat([eval.score(data, pred, func) for func in score_funs])
+                # Evaluation / Post-processing --------------------------------------------
 
-            if config["metric"] not in ["mspe", "mean_bias", "eos_abe", "all"]:
-                raise ValueError("Invalid metric input.")
+                incident_test_data = iup.IncidentUptakeData(
+                    iup.IncidentUptakeData.split_train_test(
+                        incident_data, config["timeframe"]["start"], "test"
+                    )
+                ).filter(pl.col("date") <= config["timeframe"]["end"])
 
-            score = score.with_columns(type=pl.lit(config["metric"]))
-            scores = pl.concat([scores, score], how="vertical")
-
-        print(scores)
+                for score_fun in score_funs:
+                    score = eval.score(
+                        incident_test_data, incident_projections, score_fun
+                    )
+                    print(f"{model=} {forecast_date=} {score_fun=} {score=}")
+                    # save these scores somewhere
 
 
 if __name__ == "__main__":
