@@ -16,11 +16,16 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 ## Getting started
 
-1. Enable poetry
-2. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
-3. Cache NIS data with `make cache`
-4. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-5. `make run`
+1. Set up a virtual environment with `poetry shell`
+2. Installed the required dependencies with `poetry install`
+3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
+4. Cache NIS data with `make cache`
+5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
+    - data: specify the type of vaccine data in terms of: geography, demography (domain), and vaccine status(indicator).
+    - timeframe: specify the start and the end of time in predicted projections or evaluation.
+    - option: specify the returned output. Can be either "prediction" or "evaluation".
+    - metrics: specify the evaluation metrics. Only valid when option is "evaluation". Can be one of "mspe", "mean_bias","end_of_season_error", or "all".
+6. `make run`
 
 ## Project admins
 
