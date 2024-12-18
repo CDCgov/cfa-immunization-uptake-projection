@@ -50,9 +50,7 @@ def run(config: dict, cache: str):
         incident_train_data, grouping_factors
     )
 
-    option = config["option"]
-
-    if option == "projection":
+    if config["option"] == "projection":
         cumulative_projections = incident_model.predict(
             config["timeframe"]["start"],
             config["timeframe"]["end"],
@@ -63,7 +61,7 @@ def run(config: dict, cache: str):
         incident_projections = cumulative_projections.to_incident(grouping_factors)
         print(incident_projections)
 
-    elif option == "evaluation":
+    elif config["option"] == "evaluation":
         # Make projections sequentially
         interval_str = config["timeframe"]["interval"]
         interval_number = int(interval_str[0])
@@ -85,6 +83,15 @@ def run(config: dict, cache: str):
         )
 
         for date in dates:
+            incident_train_data = iup.IncidentUptakeData(
+                iup.IncidentUptakeData.split_train_test(incident_data, date, "train")
+            )
+
+            # Fit models using the training data and make projections
+            incident_model = LinearIncidentUptakeModel().fit(
+                incident_train_data, grouping_factors
+            )
+
             # Generate cumulative predictions
             cumulative_projections = incident_model.predict(
                 date,
@@ -96,22 +103,22 @@ def run(config: dict, cache: str):
             pred = iup.PointForecast(
                 cumulative_projections.to_incident(grouping_factors)
             )
+
             test_data = iup.IncidentUptakeData(
                 iup.IncidentUptakeData.split_train_test(
                     incident_data, date, "test"
                 ).filter(pl.col("date") <= config["timeframe"]["end"])
             )
 
-            if config["metric"] == "mspe":
-                score = eval.score(test_data, pred, eval.mspe)
-            elif config["metric"] == "mean_bias":
-                score = eval.score(test_data, pred, eval.mean_bias)
-            elif config["metric"] == "eos_abe":
-                score = eval.score(test_data, pred, eval.eos_abe)
-            elif config["metric"] == "all":
-                score = eval.score(test_data, pred, eval.mspe)
-                score = score.concat(eval.score(test_data, pred, eval.mean_bias))
-                score = score.concat(eval.score(test_data, pred, eval.eos_abe))
+            score_fun = getattr(eval, config["metric"])
+            score = eval.score(test_data, pred, score_fun)
+
+            if config["metric"] == "all":
+                score_funs = [eval.mspe, eval.mean_bias, eval.eos_abe]
+                score = pl.concat([eval.score(data, pred, func) for func in score_funs])
+
+            if config["metric"] not in ["mspe", "mean_bias", "eos_abe", "all"]:
+                raise ValueError("Invalid metric input.")
 
             score = score.with_columns(type=pl.lit(config["metric"]))
             scores = pl.concat([scores, score], how="vertical")
