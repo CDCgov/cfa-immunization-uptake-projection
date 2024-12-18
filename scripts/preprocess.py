@@ -1,29 +1,68 @@
 import argparse
+import datetime
+from typing import List
 
 import nisapi
 import polars as pl
+import yaml
+
+import iup
 
 
-def preprocess(raw_data: pl.LazyFrame) -> pl.DataFrame:
-    return (
-        raw_data.filter(
-            pl.col("geography_type").is_in(["nation", "admin1"]),
-            pl.col("domain_type") == pl.lit("age"),
-            pl.col("domain") == pl.lit("18+ years"),
-            pl.col("indicator") == pl.lit("received a vaccination"),
-        )
-        .drop(["indicator_type", "indicator"])
-        .head()
-        .collect()
+def preprocess(
+    raw_data: pl.LazyFrame,
+    filters: dict,
+    keep: List[str],
+    groups: List[str],
+    rollout_dates: List[datetime.date],
+) -> pl.DataFrame:
+    # Prune data to correct rows and columns
+    cumulative_data = iup.CumulativeUptakeData(
+        raw_data.filter(filters).select(keep).sort("time_end").collect()
+    )
+
+    # Ensure that the desired grouping factors are found in all data sets
+    assert set(cumulative_data.columns).issuperset(groups)
+
+    # Insert rollout dates into the data
+    cumulative_data = iup.CumulativeUptakeData(
+        cumulative_data.insert_rollout(rollout_dates, groups)
+    )
+
+    # Convert to incident data
+    incident_data = cumulative_data.to_incident(groups)
+
+    return pl.concat(
+        [
+            cumulative_data.with_columns(estimate_type="cumulative"),
+            incident_data.with_columns(estimate_type="incident"),
+        ]
     )
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
+    p.add_argument("--config", help="config file", default="scripts/config.yaml")
+    p.add_argument(
+        "--cache", help="NIS cache directory", default=".cache/nisapi/clean/"
+    )
     p.add_argument("--cache", help="clean cache directory")
     p.add_argument("--output", help="output parquet file")
     args = p.parse_args()
 
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
+
+    assert len(config["data"]) == 1, "Don't know how to preprocess multiple data sets"
+
     raw_data = nisapi.get_nis(path=args.cache)
-    clean_data = preprocess(raw_data)
+
+    clean_data = preprocess(
+        raw_data,
+        filters=config["data"][0]["filters"],
+        keep=config["data"][0]["keep"],
+        groups=config["groups"],
+        rollout_dates=config["data"][0]["rollout"],
+    )
+
     clean_data.write_parquet(args.output)
