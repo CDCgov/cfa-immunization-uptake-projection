@@ -22,9 +22,7 @@ timeframe:
   end: 2024-04-30
   interval: 7d
 
+models: [LinearIncidentUptakeModel]
 
-# The options to return projection or evaluation metrics, can be "projection" or "evaluation"
-option: projection
-
-# The metric is only available when option == 'evaluation', it can be "mspe","mean_bias","end_of_season_error", "all"
-metrics: mspe
+# score metrics
+score_funs: [mspe, mean_bias, eos_abe]
