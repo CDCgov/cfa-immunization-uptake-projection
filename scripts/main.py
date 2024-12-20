@@ -1,9 +1,12 @@
 import argparse
+import datetime as dt
 
 import nisapi
+import polars as pl
 import yaml
 
 import iup
+from iup import eval
 from iup.models import LinearIncidentUptakeModel
 
 
@@ -46,15 +49,81 @@ def run(config: dict, cache: str):
     incident_model = LinearIncidentUptakeModel().fit(
         incident_train_data, grouping_factors
     )
-    cumulative_projections = incident_model.predict(
-        config["timeframe"]["start"],
-        config["timeframe"]["end"],
-        config["timeframe"]["interval"],
-        grouping_factors,
-    )
-    print(cumulative_projections)
-    incident_projections = cumulative_projections.to_incident(grouping_factors)
-    print(incident_projections)
+
+    if config["option"] == "projection":
+        cumulative_projections = incident_model.predict(
+            config["timeframe"]["start"],
+            config["timeframe"]["end"],
+            config["timeframe"]["interval"],
+            grouping_factors,
+        )
+        print(cumulative_projections)
+        incident_projections = cumulative_projections.to_incident(grouping_factors)
+        print(incident_projections)
+
+    elif config["option"] == "evaluation":
+        # Make projections sequentially
+        interval_str = config["timeframe"]["interval"]
+        interval_number = int(interval_str[0])
+
+        dates = pl.date_range(
+            config["timeframe"]["start"],
+            config["timeframe"]["end"] - dt.timedelta(interval_number),
+            config["timeframe"]["interval"],
+            eager=True,
+        )
+
+        scores = pl.DataFrame(
+            schema={
+                "forecast_start": pl.Date,
+                "forecast_end": pl.Date,
+                "score": pl.Float64,
+                "type": pl.String,
+            }
+        )
+
+        for date in dates:
+            incident_train_data = iup.IncidentUptakeData(
+                iup.IncidentUptakeData.split_train_test(incident_data, date, "train")
+            )
+
+            # Fit models using the training data and make projections
+            incident_model = LinearIncidentUptakeModel().fit(
+                incident_train_data, grouping_factors
+            )
+
+            # Generate cumulative predictions
+            cumulative_projections = incident_model.predict(
+                date,
+                config["timeframe"]["end"],
+                config["timeframe"]["interval"],
+                grouping_factors,
+            )
+
+            pred = iup.PointForecast(
+                cumulative_projections.to_incident(grouping_factors)
+            )
+
+            test_data = iup.IncidentUptakeData(
+                iup.IncidentUptakeData.split_train_test(
+                    incident_data, date, "test"
+                ).filter(pl.col("date") <= config["timeframe"]["end"])
+            )
+
+            score_fun = getattr(eval, config["metric"])
+            score = eval.score(test_data, pred, score_fun)
+
+            if config["metric"] == "all":
+                score_funs = [eval.mspe, eval.mean_bias, eval.eos_abe]
+                score = pl.concat([eval.score(data, pred, func) for func in score_funs])
+
+            if config["metric"] not in ["mspe", "mean_bias", "eos_abe", "all"]:
+                raise ValueError("Invalid metric input.")
+
+            score = score.with_columns(type=pl.lit(config["metric"]))
+            scores = pl.concat([scores, score], how="vertical")
+
+        print(scores)
 
 
 if __name__ == "__main__":
