@@ -18,7 +18,7 @@ def preprocess(
 ) -> pl.DataFrame:
     # Prune data to correct rows and columns
     cumulative_data = iup.CumulativeUptakeData(
-        raw_data.filter(filters).select(keep).sort("time_end").collect()
+        raw_data.filter(**filters).select(keep).sort("time_end").collect()
     )
 
     # Ensure that the desired grouping factors are found in all data sets
@@ -34,8 +34,8 @@ def preprocess(
 
     return pl.concat(
         [
-            cumulative_data.with_columns(estimate_type="cumulative"),
-            incident_data.with_columns(estimate_type="incident"),
+            cumulative_data.with_columns(estimate_type=pl.lit("cumulative")),
+            incident_data.with_columns(estimate_type=pl.lit("incident")),
         ]
     )
 
@@ -46,7 +46,9 @@ if __name__ == "__main__":
     p.add_argument(
         "--cache", help="NIS cache directory", default=".cache/nisapi/clean/"
     )
-    p.add_argument("--cache", help="clean cache directory")
+    # p.add_argument("--cache", help="clean cache directory")
+    # comment out the above because an error occurs with 'conflicting --cache' if not
+
     p.add_argument("--output", help="output parquet file")
     args = p.parse_args()
 
@@ -59,10 +61,10 @@ if __name__ == "__main__":
 
     clean_data = preprocess(
         raw_data,
-        filters=config["data"][0]["filters"],
-        keep=config["data"][0]["keep"],
+        filters=config["data"]["data_set_1"]["filters"],
+        keep=config["keep"],
         groups=config["groups"],
-        rollout_dates=config["data"][0]["rollout"],
+        rollout_dates=config["data"]["data_set_1"]["rollout"],
     )
 
     clean_data.write_parquet(args.output)
