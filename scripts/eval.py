@@ -11,7 +11,7 @@ def eval_all_forecasts(test, pred, config):
     """Evaluate the forecasts for all models, all forecast ends, and all scores"""
     score_names = config["score_funs"]
     model_names = pred["model"].unique()
-    forecast_ends = pred["forecast_end"].unique()
+    forecast_starts = pred["forecast_start"].unique()
 
     # only 'incident' type is evaluated #
     incident_pred = pred.filter(pl.col("estimate_type") == "incident").with_columns(
@@ -25,9 +25,9 @@ def eval_all_forecasts(test, pred, config):
         score_fun = getattr(eval, score_name)
 
         for model in model_names:
-            for forecast_end in forecast_ends:
+            for forecast_start in forecast_starts:
                 pred_data = incident_pred.filter(
-                    pl.col("model") == model, pl.col("forecast_end") == forecast_end
+                    pl.col("model") == model, pl.col("forecast_start") == forecast_start
                 )
 
                 assert (pred_data["forecast_start"] == test["time_end"].min()).all()
