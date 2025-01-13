@@ -30,13 +30,13 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
                 model,
                 clean_data,
                 grouping_factors=config["groups"],
-                forecast_start=config["timeframe"]["start"],
-                forecast_end=forecast_date,
+                forecast_start=forecast_date,
+                forecast_end=config["timeframe"]["end"],
             )
 
             forecast = forecast.with_columns(
-                forecast_start=config["timeframe"]["start"],
-                forecast_end=forecast_date,
+                forecast_start=forecast_date,
+                forecast_end=config["timeframe"]["end"],
                 model=pl.lit(model.__name__),
             )
 
@@ -60,9 +60,7 @@ def run_forecast(
     )
 
     incident_train_data = iup.IncidentUptakeData(
-        iup.IncidentUptakeData.split_train_test(
-            incident_data, config["timeframe"]["start"], "train"
-        )
+        iup.IncidentUptakeData.split_train_test(incident_data, forecast_start, "train")
     )
 
     # Fit models using the training data and make projections
@@ -77,6 +75,7 @@ def run_forecast(
 
     incident_projections = cumulative_projections.to_incident(grouping_factors)
 
+    # Note that here returns incident projections only, for evaluation
     return incident_projections
 
 
