@@ -29,15 +29,7 @@ def preprocess(
         cumulative_data.insert_rollout(rollout_dates, groups)
     )
 
-    # Convert to incident data
-    incident_data = cumulative_data.to_incident(groups)
-
-    return pl.concat(
-        [
-            cumulative_data.with_columns(estimate_type=pl.lit("cumulative")),
-            incident_data.with_columns(estimate_type=pl.lit("incident")),
-        ]
-    )
+    return cumulative_data
 
 
 if __name__ == "__main__":
