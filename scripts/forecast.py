@@ -47,12 +47,17 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
 
 def run_forecast(
     model,
-    incident_data,
+    observed_data,
     grouping_factors,
     forecast_start,
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
+
+    # preprocess.py returns cumulative data, need to convert to incidence for LinearIncidentUptakeModel #
+    incident_data = iup.CumulativeUptakeData(observed_data).to_incident(
+        grouping_factors
+    )
 
     incident_train_data = iup.IncidentUptakeData(
         iup.IncidentUptakeData.split_train_test(
@@ -72,12 +77,7 @@ def run_forecast(
 
     incident_projections = cumulative_projections.to_incident(grouping_factors)
 
-    return pl.concat(
-        [
-            cumulative_projections.with_columns(estimate_type=pl.lit("cumulative")),
-            incident_projections.with_columns(estimate_type=pl.lit("incident")),
-        ]
-    )
+    return incident_projections
 
 
 if __name__ == "__main__":
@@ -91,6 +91,8 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     input_data = pl.scan_parquet(args.input).collect()
+
+    input_data = iup.CumulativeUptakeData(input_data)
 
     all_forecast = run_all_forecasts(config=config, clean_data=input_data)
     all_forecast.write_parquet(args.output)
