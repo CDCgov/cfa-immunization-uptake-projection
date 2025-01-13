@@ -7,16 +7,14 @@ import iup
 from iup import eval
 
 
-def eval_all_forecasts(test, pred, config):
+def eval_all_forecasts(data, pred, config):
     """Evaluate the forecasts for all models, all forecast ends, and all scores"""
     score_names = config["score_funs"]
     model_names = pred["model"].unique()
     forecast_starts = pred["forecast_start"].unique()
 
     # only 'incident' type is evaluated #
-    incident_pred = pred.filter(pl.col("estimate_type") == "incident").with_columns(
-        quantile=0.5
-    )
+    incident_pred = pred.with_columns(quantile=0.5)
     # This step is arbitrary, but it is necessary to pass PointForecast validation #
 
     all_scores = pl.DataFrame()
@@ -28,6 +26,11 @@ def eval_all_forecasts(test, pred, config):
             for forecast_start in forecast_starts:
                 pred_data = incident_pred.filter(
                     pl.col("model") == model, pl.col("forecast_start") == forecast_start
+                )
+
+                test = data.filter(
+                    pl.col("time_end") >= forecast_start,
+                    pl.col("time_end") < config["timeframe"]["end"],
                 )
 
                 assert (pred_data["forecast_start"] == test["time_end"].min()).all()
@@ -56,14 +59,9 @@ if __name__ == "__main__":
 
     pred_data = pl.scan_parquet(args.pred).collect()
     obs_data = pl.scan_parquet(args.obs).collect()
-    obs_data = obs_data.filter(pl.col("estimate_type") == "incident")
 
     # ensure the same test data is used for all models
-    test_data = iup.IncidentUptakeData.split_train_test(
-        obs_data, config["timeframe"]["start"], "test"
-    ).filter(pl.col("time_end") <= config["timeframe"]["end"])
+    obs_data = iup.CumulativeUptakeData.to_incident(config["groups"])
 
-    test_data = iup.IncidentUptakeData(test_data)
-
-    all_scores = eval_all_forecasts(test_data, pred_data, config)
+    all_scores = eval_all_forecasts(obs_data, pred_data, config)
     all_scores.write_parquet(args.output)
