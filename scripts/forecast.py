@@ -3,12 +3,18 @@ import argparse
 import polars as pl
 import yaml
 
+import iup
+
+
 def run_all_forecasts() -> pl.DataFrame:
     """Run all forecasts
 
     Returns:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
+    raise NotImplementedError
+    models = None
+
     forecast_dates = pl.date_range(
         config["timeframe"]["start"],
         config["timeframe"]["end"],
@@ -19,41 +25,42 @@ def run_all_forecasts() -> pl.DataFrame:
     assert all(issubclass(model, iup.models.UptakeModel) for model in models)
 
     for model in models:
-            for forecast_date in forecast_dates:
-                # Get data available as of the forecast date
+        for forecast_date in forecast_dates:
+            # Get data available as of the forecast date
+            pass
 
 
 def run_forecast() -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    incident_train_data = iup.IncidentUptakeData(
-        iup.IncidentUptakeData.split_train_test(
-            incident_data, config["timeframe"]["start"], "train"
-        )
-    )
+    raise NotImplementedError
+
+    # incident_train_data = iup.IncidentUptakeData(
+    #     iup.IncidentUptakeData.split_train_test(
+    #         incident_data, config["timeframe"]["start"], "train"
+    #     )
+    # )
 
     # Fit models using the training data and make projections
-    fit_model = model().fit(incident_train_data, grouping_factors)
+    # fit_model = model().fit(incident_train_data, grouping_factors)
 
-    cumulative_projections = fit_model.predict(
-        config["timeframe"]["start"],
-        config["timeframe"]["end"],
-        config["timeframe"]["interval"],
-        grouping_factors,
-    )
+    # cumulative_projections = fit_model.predict(
+    #     config["timeframe"]["start"],
+    #     config["timeframe"]["end"],
+    #     config["timeframe"]["interval"],
+    #     grouping_factors,
+    # )
     # save these projections somewhere
 
-    incident_projections = cumulative_projections.to_incident(
-        grouping_factors
-    )
+    # incident_projections = cumulative_projections.to_incident(grouping_factors)
     # save these projections somewhere
 
     # Evaluation / Post-processing --------------------------------------------
 
-    incident_test_data = iup.IncidentUptakeData(
-        iup.IncidentUptakeData.split_train_test(
-            incident_data, config["timeframe"]["start"], "test"
-        )
-    ).filter(pl.col("date") <= config["timeframe"]["end"])
+    # incident_test_data = iup.IncidentUptakeData(
+    #     iup.IncidentUptakeData.split_train_test(
+    #         incident_data, config["timeframe"]["start"], "test"
+    #     )
+    # ).filter(pl.col("date") <= config["timeframe"]["end"])
 
 
 if __name__ == "__main__":
