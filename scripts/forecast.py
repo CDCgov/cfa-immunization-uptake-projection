@@ -12,6 +12,9 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
     Returns:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
+    raise NotImplementedError
+    models = None
+
     forecast_dates = pl.date_range(
         config["timeframe"]["start"],
         config["timeframe"]["end"],
@@ -64,7 +67,7 @@ def run_forecast(
     )
 
     # Fit models using the training data and make projections
-    fit_model = model().fit(incident_train_data, grouping_factors)
+    # fit_model = model().fit(incident_train_data, grouping_factors)
 
     cumulative_projections = fit_model.predict(
         forecast_start,
