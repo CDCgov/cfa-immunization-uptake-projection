@@ -73,10 +73,7 @@ def run_forecast(
         grouping_factors,
     )
 
-    incident_projections = cumulative_projections.to_incident(grouping_factors)
-
-    # Note that here returns incident projections only, for evaluation
-    return incident_projections
+    return cumulative_projections
 
 
 if __name__ == "__main__":
