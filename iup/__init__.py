@@ -187,8 +187,8 @@ class CumulativeUptakeData(UptakeData):
 
         return IncidentUptakeData(out)
 
-    def insert_rollout(
-        self, rollout: List[dt.date], group_cols: List[str] | None
+    def insert_rollouts(
+        self, rollouts: List[dt.date], group_cols: List[str] | None
     ) -> pl.DataFrame:
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
@@ -211,12 +211,12 @@ class CumulativeUptakeData(UptakeData):
             rollout_rows = (
                 frame.select(group_cols)
                 .unique()
-                .join(pl.DataFrame({"time_end": rollout}), how="cross")
+                .join(pl.DataFrame({"time_end": rollouts}), how="cross")
                 .with_columns(estimate=0.0)
             )
             group_cols = group_cols + ["season"]
         else:
-            rollout_rows = pl.DataFrame({"time_end": rollout, "estimate": 0.0})
+            rollout_rows = pl.DataFrame({"time_end": rollouts, "estimate": 0.0})
             group_cols = ["season"]
 
         frame = frame.vstack(rollout_rows.select(frame.columns)).sort("time_end")

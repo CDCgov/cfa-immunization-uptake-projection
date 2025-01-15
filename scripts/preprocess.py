@@ -14,22 +14,20 @@ def preprocess(
     filters: dict,
     keep: List[str],
     groups: List[str],
-    rollout_dates: List[datetime.date],
-) -> pl.DataFrame:
+    rollouts: List[datetime.date],
+) -> iup.CumulativeUptakeData:
     # Prune data to correct rows and columns
-    cumulative_data = iup.CumulativeUptakeData(
-        raw_data.filter(**filters).select(keep).sort("time_end").collect()
-    )
+    data = raw_data.filter(**filters).select(keep).sort("time_end").collect()
 
     # Ensure that the desired grouping factors are found in all data sets
-    assert set(cumulative_data.columns).issuperset(groups)
+    assert set(data.columns).issuperset(groups)
 
     # Insert rollout dates into the data
-    cumulative_data = iup.CumulativeUptakeData(
-        cumulative_data.insert_rollout(rollout_dates, groups)
+    # note the awkward wrapping with the class, because insert_rollouts returns
+    # a normal data frame
+    return iup.CumulativeUptakeData(
+        iup.CumulativeUptakeData(data).insert_rollouts(rollouts, groups)
     )
-
-    return cumulative_data
 
 
 if __name__ == "__main__":
@@ -38,25 +36,20 @@ if __name__ == "__main__":
     p.add_argument(
         "--cache", help="NIS cache directory", default=".cache/nisapi/clean/"
     )
-    # p.add_argument("--cache", help="clean cache directory")
-    # comment out the above because an error occurs with 'conflicting --cache' if not
-
-    p.add_argument("--output", help="output parquet file")
+    p.add_argument("--output", help="output parquet file", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    assert len(config["data"]) == 1, "Don't know how to preprocess multiple data sets"
-
     raw_data = nisapi.get_nis(path=args.cache)
 
     clean_data = preprocess(
         raw_data,
-        filters=config["data"]["data_set_1"]["filters"],
-        keep=config["keep"],
-        groups=config["groups"],
-        rollout_dates=config["data"]["data_set_1"]["rollout"],
+        filters=config["data"]["filters"],
+        keep=config["data"]["keep"],
+        groups=config["data"]["groups"],
+        rollouts=config["data"]["rollouts"],
     )
 
     clean_data.write_parquet(args.output)

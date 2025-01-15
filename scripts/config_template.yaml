@@ -1,20 +1,19 @@
 # The data sets to load and how to interpret them
 data:
-  data_set_1:
-    rollout: [2023-09-01, 2024-09-01]
-    filters:
-      geography_type: nation
-      domain_type: age
-      domain: 18+ years
-      indicator_type: 4-level vaccination and intent
-      indicator: received a vaccination
-      time_type: week
-
-# Columns to keep from each data set
-keep: [geography, estimate, time_end]
-
-# Grouping factors across data sets
-groups: [geography]
+  rollouts: [2023-09-01, 2024-09-01]
+  # filter data; eg `vaccine: covid` means filter column "vaccine" for value "covid"
+  filters:
+    vaccine: covid
+    geography_type: nation
+    domain_type: age
+    domain: 18+ years
+    indicator_type: 4-level vaccination and intent
+    indicator: received a vaccination
+    time_type: week
+  # keep only these data columns
+  keep: [geography, estimate, time_end]
+  # use these columns as grouping factors
+  groups: [geography]
 
 # The timeframe over which to generate projections
 timeframe:
