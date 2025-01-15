@@ -1,3 +1,4 @@
+
 import argparse
 
 import polars as pl
@@ -24,13 +25,14 @@ def eval_all_forecasts(data, pred, config):
                     pl.col("model") == model, pl.col("forecast_start") == forecast_start
                 )
 
-                # only 'incident' type is evaluated #
+                # convert cumulative predictions to incident predictions given certain forecast period and model #
                 incident_pred = iup.CumulativeUptakeData(this_pred).to_incident(
                     config["data"]["groups"]
                 )
+                # This step is arbitrary, but it is necessary to pass PointForecast validation #
                 incident_pred = incident_pred.with_columns(quantile=0.5)
                 incident_pred = iup.PointForecast(incident_pred)
-                # This step is arbitrary, but it is necessary to pass PointForecast validation #
+
 
                 test = data.filter(
                     pl.col("time_end") >= forecast_start,
@@ -68,3 +70,4 @@ if __name__ == "__main__":
 
     all_scores = eval_all_forecasts(obs_data, pred_data, config)
     all_scores.write_parquet(args.output)
+
