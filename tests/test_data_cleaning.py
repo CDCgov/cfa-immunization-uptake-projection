@@ -24,49 +24,49 @@ def frame():
     return frame
 
 
-def test_insert_rollout_handles_groups(frame):
+def test_insert_rollouts_handles_groups(frame):
     """
-    If grouping columns are given to insert_rollout, a separate rollout is inserted for each group.
+    If grouping columns are given to insert_rollouts, a separate rollout is inserted for each group.
     """
     frame = frame.with_columns(
         time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
     )
-    rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
+    rollouts = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
     group_cols = [
         "geography",
     ]
     frame = iup.CumulativeUptakeData(frame.drop("indicator"))
 
-    output = frame.insert_rollout(rollout, group_cols)
+    output = frame.insert_rollouts(rollouts, group_cols)
 
     assert output.shape[0] == 7
     assert (
         output["time_end"]
         .value_counts()
-        .filter(pl.col("time_end") == rollout[0])["count"][0]
+        .filter(pl.col("time_end") == rollouts[0])["count"][0]
         == 2
     )
     assert output["time_end"].is_sorted()
 
 
-def test_insert_rollout_handles_no_groups(frame):
+def test_insert_rollouts_handles_no_groups(frame):
     """
-    If no grouping columns are given to insert_rollout, only one of each rollout is inserted.
+    If no grouping columns are given to insert_rollouts, only one of each rollout is inserted.
     """
     frame = frame.with_columns(
         time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
     )
-    rollout = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
+    rollouts = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
     group_cols = None
     frame = iup.CumulativeUptakeData(frame.drop(["indicator", "geography"]))
 
-    output = frame.insert_rollout(rollout, group_cols)
+    output = frame.insert_rollouts(rollouts, group_cols)
 
     assert output.shape[0] == 5
     assert (
         output["time_end"]
         .value_counts()
-        .filter(pl.col("time_end") == rollout[0])["count"][0]
+        .filter(pl.col("time_end") == rollouts[0])["count"][0]
         == 1
     )
     assert output["time_end"].is_sorted()
