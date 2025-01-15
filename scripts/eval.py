@@ -1,4 +1,3 @@
-
 import argparse
 
 import polars as pl
@@ -32,7 +31,6 @@ def eval_all_forecasts(data, pred, config):
                 # This step is arbitrary, but it is necessary to pass PointForecast validation #
                 incident_pred = incident_pred.with_columns(quantile=0.5)
                 incident_pred = iup.PointForecast(incident_pred)
-
 
                 test = data.filter(
                     pl.col("time_end") >= forecast_start,
@@ -70,4 +68,3 @@ if __name__ == "__main__":
 
     all_scores = eval_all_forecasts(obs_data, pred_data, config)
     all_scores.write_parquet(args.output)
-

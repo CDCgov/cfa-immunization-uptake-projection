@@ -7,7 +7,6 @@ import iup.models
 
 
 def run_all_forecasts(clean_data, config) -> pl.DataFrame:
-  
     """Run all forecasts
 
     Returns:
@@ -20,7 +19,7 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
         config["timeframe"]["interval"],
         eager=True,
     )
-    
+
     models = [getattr(iup.models, model_name) for model_name in config["models"]]
     assert all(issubclass(model, iup.models.UptakeModel) for model in models)
 
@@ -66,7 +65,7 @@ def run_forecast(
     incident_train_data = iup.IncidentUptakeData(
         iup.IncidentUptakeData.split_train_test(incident_data, forecast_start, "train")
     )
-    
+
     # Fit models using the training data and make projections
     fit_model = model().fit(incident_train_data, grouping_factors)
 
@@ -78,6 +77,7 @@ def run_forecast(
     )
 
     return cumulative_projections
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
