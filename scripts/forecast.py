@@ -12,9 +12,7 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
     Returns:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
-    raise NotImplementedError
-    models = None
-
+    
     forecast_dates = pl.date_range(
         config["timeframe"]["start"],
         config["timeframe"]["end"],
@@ -61,7 +59,7 @@ def run_forecast(
     incident_data = iup.CumulativeUptakeData(observed_data).to_incident(
         grouping_factors
     )
-
+    
     incident_train_data = iup.IncidentUptakeData(
         iup.IncidentUptakeData.split_train_test(incident_data, forecast_start, "train")
     )
