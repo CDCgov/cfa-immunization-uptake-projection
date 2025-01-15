@@ -19,6 +19,7 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
         config["timeframe"]["interval"],
         eager=True,
     )
+
     models = [getattr(iup.models, model_name) for model_name in config["models"]]
     assert all(issubclass(model, iup.models.UptakeModel) for model in models)
 
@@ -27,6 +28,7 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
     for model in models:
         for forecast_date in forecast_dates:
             # Get data available as of the forecast date
+
             forecast = run_forecast(
                 model,
                 clean_data,

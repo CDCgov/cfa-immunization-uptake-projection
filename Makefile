@@ -10,8 +10,8 @@ SCORES = data/scores.parquet
 
 all: $(SCORES)
 
-$(SCORE): scripts/eval.py $(FORECASTS)
-	python $< --input=$(FORECASTS) --output=$@
+$(SCORES): scripts/eval.py $(FORECASTS)
+	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
 
 $(FORECASTS): scripts/forecast.py $(RAW_DATA)
 	python $< --input=$(RAW_DATA) --output=$@
