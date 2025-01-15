@@ -162,9 +162,9 @@ class CumulativeUptakeData(UptakeData):
         # same validations as UptakeData
         super().validate()
         # and also require that uptake be a proportion
-        assert (
-            self["estimate"].is_between(0.0, 1.0).all()
-        ), "cumulative uptake `estimate` must be a proportion"
+        assert self["estimate"].is_between(0.0, 1.0).all(), (
+            "cumulative uptake `estimate` must be a proportion"
+        )
 
     def to_incident(self, group_cols: List[str,] | None) -> IncidentUptakeData:
         """
@@ -252,9 +252,9 @@ class QuantileForecast(Data):
         )
 
         # all quantiles should be between 0 and 1
-        assert (
-            self["quantile"].is_between(0.0, 1.0).all()
-        ), "quantiles must be between 0 and 1"
+        assert self["quantile"].is_between(0.0, 1.0).all(), (
+            "quantiles must be between 0 and 1"
+        )
 
 
 class PointForecast(QuantileForecast):
