@@ -1,4 +1,4 @@
-NIS_CACHE = .cache/nisapi/clean
+NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
