@@ -34,7 +34,7 @@ def eval_all_forecasts(data, pred, config):
                 test = iup.CumulativeUptakeData(
                     data.filter(
                         pl.col("time_end") >= forecast_start,
-                        pl.col("time_end") < config["timeframe"]["end"],
+                        pl.col("time_end") <= config["timeframe"]["end"],
                     )
                 ).to_incident(config["data"]["groups"])
 
@@ -42,7 +42,9 @@ def eval_all_forecasts(data, pred, config):
                 print(incident_pred.shape)
                 print(test.head)
 
-                assert (incident_pred["forecast_start"] == test["time_end"].min()).all()
+                assert incident_pred["forecast_start"][0] == test["time_end"].min(), (
+                    "Dates do not match between the forecast and the test data"
+                )
 
                 score = eval.score(test, incident_pred, score_fun)
                 score = score.with_columns(score_fun=score_name, model=model)
@@ -63,8 +65,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    pred_data = pl.scan_parquet(args.pred).collect()
-    obs_data = pl.scan_parquet(args.obs).collect()
+    pred = pl.scan_parquet(args.pred).collect()
+    data = pl.scan_parquet(args.obs).collect()
 
-    all_scores = eval_all_forecasts(obs_data, pred_data, config)
-    all_scores.write_parquet(args.output)
+    eval_all_forecasts(data, pred, config).write_parquet(args.output)

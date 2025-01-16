@@ -17,7 +17,7 @@ data:
 
 # The timeframe over which to generate projections
 timeframe:
-  start: 2024-02-01
+  start: [2024-02-03]
   end: 2024-04-30
   interval: 7d
 

@@ -6,19 +6,12 @@ import yaml
 import iup.models
 
 
-def run_all_forecasts(clean_data, config) -> pl.DataFrame:
+def run_all_forecasts(data, config) -> pl.DataFrame:
     """Run all forecasts
 
     Returns:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
-
-    forecast_dates = pl.date_range(
-        config["timeframe"]["start"],
-        config["timeframe"]["end"],
-        config["timeframe"]["interval"],
-        eager=True,
-    )
 
     models = [getattr(iup.models, model_name) for model_name in config["models"]]
     assert all(issubclass(model, iup.models.UptakeModel) for model in models)
@@ -26,12 +19,10 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
     all_forecast = pl.DataFrame()
 
     for model in models:
-        for forecast_date in forecast_dates:
-            # Get data available as of the forecast date
-
+        for forecast_date in config["timeframe"]["start"]:
             forecast = run_forecast(
                 model,
-                clean_data,
+                data,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["timeframe"]["end"],
@@ -50,20 +41,19 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
 
 def run_forecast(
     model,
-    observed_data,
+    data,
     grouping_factors,
     forecast_start,
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
 
-    # preprocess.py returns cumulative data, need to convert to incidence for LinearIncidentUptakeModel #
-    incident_data = iup.CumulativeUptakeData(observed_data).to_incident(
-        grouping_factors
-    )
+    # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
+    incident_data = data.to_incident(grouping_factors)
 
-    incident_train_data = iup.IncidentUptakeData(
-        iup.IncidentUptakeData.split_train_test(incident_data, forecast_start, "train")
+    # Prune to only the training portion
+    incident_train_data = iup.IncidentUptakeData.split_train_test(
+        incident_data, forecast_start, "train"
     )
 
     # Fit models using the training data and make projections
@@ -91,5 +81,4 @@ if __name__ == "__main__":
 
     input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
 
-    all_forecast = run_all_forecasts(config=config, clean_data=input_data)
-    all_forecast.write_parquet(args.output)
+    run_all_forecasts(input_data, config).write_parquet(args.output)
