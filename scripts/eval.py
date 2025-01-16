@@ -20,26 +20,29 @@ def eval_all_forecasts(data, pred, config):
 
         for model in model_names:
             for forecast_start in forecast_starts:
-                this_pred = pred.filter(
-                    pl.col("model") == model, pl.col("forecast_start") == forecast_start
+                incident_pred = iup.PointForecast(
+                    iup.CumulativeUptakeData(
+                        pred.filter(
+                            pl.col("model") == model,
+                            pl.col("forecast_start") == forecast_start,
+                        )
+                    )
+                    .to_incident(config["data"]["groups"])
+                    .with_columns(quantile=0.5)
                 )
 
-                # convert cumulative predictions to incident predictions given certain forecast period and model #
-                incident_pred = iup.CumulativeUptakeData(this_pred).to_incident(
-                    config["data"]["groups"]
-                )
-                # This step is arbitrary, but it is necessary to pass PointForecast validation #
-                incident_pred = incident_pred.with_columns(quantile=0.5)
-                incident_pred = iup.PointForecast(incident_pred)
+                test = iup.CumulativeUptakeData(
+                    data.filter(
+                        pl.col("time_end") >= forecast_start,
+                        pl.col("time_end") < config["timeframe"]["end"],
+                    )
+                ).to_incident(config["data"]["groups"])
 
-                test = data.filter(
-                    pl.col("time_end") >= forecast_start,
-                    pl.col("time_end") < config["timeframe"]["end"],
-                )
+                print(incident_pred.head)
+                print(incident_pred.shape)
+                print(test.head)
 
                 assert (incident_pred["forecast_start"] == test["time_end"].min()).all()
-
-                test = iup.IncidentUptakeData(test)
 
                 score = eval.score(test, incident_pred, score_fun)
                 score = score.with_columns(score_fun=score_name, model=model)
@@ -62,9 +65,6 @@ if __name__ == "__main__":
 
     pred_data = pl.scan_parquet(args.pred).collect()
     obs_data = pl.scan_parquet(args.obs).collect()
-
-    # ensure the same incident test data is used for all models
-    obs_data = iup.CumulativeUptakeData.to_incident(config["groups"])
 
     all_scores = eval_all_forecasts(obs_data, pred_data, config)
     all_scores.write_parquet(args.output)

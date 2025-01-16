@@ -110,9 +110,7 @@ class UptakeData(Data):
 
 
 class IncidentUptakeData(UptakeData):
-    def to_cumulative(
-        self, group_cols: List[str,] | None, last_cumulative=None
-    ) -> pl.DataFrame:
+    def to_cumulative(self, group_cols: List[str,] | None, last_cumulative=None):
         """
         Convert incident to cumulative uptake data.
 
@@ -145,7 +143,7 @@ class IncidentUptakeData(UptakeData):
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
             ).drop("last_cumulative")
 
-        return out
+        return CumulativeUptakeData(out)
 
 
 class CumulativeUptakeData(UptakeData):
@@ -178,9 +176,7 @@ class CumulativeUptakeData(UptakeData):
 
         return IncidentUptakeData(out)
 
-    def insert_rollouts(
-        self, rollouts: List[dt.date], group_cols: List[str] | None
-    ) -> pl.DataFrame:
+    def insert_rollouts(self, rollouts: List[dt.date], group_cols: List[str] | None):
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
 
@@ -228,7 +224,7 @@ class CumulativeUptakeData(UptakeData):
             == 0.0
         ).all()
 
-        return frame
+        return CumulativeUptakeData(frame)
 
 
 class QuantileForecast(Data):

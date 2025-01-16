@@ -23,11 +23,7 @@ def preprocess(
     assert set(data.columns).issuperset(groups)
 
     # Insert rollout dates into the data
-    # note the awkward wrapping with the class, because insert_rollouts returns
-    # a normal data frame
-    return iup.CumulativeUptakeData(
-        iup.CumulativeUptakeData(data).insert_rollouts(rollouts, groups)
-    )
+    return iup.CumulativeUptakeData(data).insert_rollouts(rollouts, groups)
 
 
 if __name__ == "__main__":
