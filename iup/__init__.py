@@ -1,5 +1,5 @@
 import datetime as dt
-from typing import List, Sequence
+from typing import List
 
 import polars as pl
 from polars.datatypes.classes import DataTypeClass
@@ -44,16 +44,14 @@ class UptakeData(Data):
         """
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
-    @staticmethod
-    def split_train_test(
-        uptake_data_list: Sequence[Data], start_date: dt.date, side: str
-    ) -> pl.DataFrame:
+    @classmethod
+    def split_train_test(cls, uptake_data, start_date: dt.date, side: str):
         """
-        Concatenate Data objects and split into training and test data.
+        Concatenate Uptake data objects and split into training and test data.
 
         Parameters
-        uptake_data_list: Sequence[Data]
-            cumulative or incident uptake data objects, often from different seasons
+        uptake_data: UptakeData
+            cumulative or incident uptake data across all seasons
         start_date: dt.date
             the first date for which projections should be made
         side: str
@@ -65,23 +63,16 @@ class UptakeData(Data):
 
         Details
         Training data are before the start date; test data are on or after.
+        Infers what type of UptakeData to return from what type was given.
         """
         if side == "train":
-            out = (
-                pl.concat(uptake_data_list)
-                .sort("time_end")
-                .filter(pl.col("time_end") < start_date)
-            )
+            out = uptake_data.sort("time_end").filter(pl.col("time_end") < start_date)
         elif side == "test":
-            out = (
-                pl.concat(uptake_data_list)
-                .sort("time_end")
-                .filter(pl.col("time_end") >= start_date)
-            )
+            out = uptake_data.sort("time_end").filter(pl.col("time_end") >= start_date)
         else:
             raise RuntimeError(f"Unrecognized side '{side}'")
 
-        return out
+        return type(uptake_data)(out)
 
     @staticmethod
     def date_to_season(

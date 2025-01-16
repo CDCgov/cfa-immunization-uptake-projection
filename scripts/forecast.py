@@ -32,7 +32,7 @@ def run_all_forecasts(clean_data, config) -> pl.DataFrame:
             forecast = run_forecast(
                 model,
                 clean_data,
-                grouping_factors=config["groups"],
+                grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["timeframe"]["end"],
             )
