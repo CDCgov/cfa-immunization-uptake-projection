@@ -45,7 +45,9 @@ class UptakeData(Data):
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
     @classmethod
-    def split_train_test(cls, uptake_data, start_date: dt.date, side: str):
+    def split_train_test(
+        cls, uptake_data: "UptakeData", start_date: dt.date, side: str
+    ) -> "UptakeData":
         """
         Concatenate Uptake data objects and split into training and test data.
 
@@ -110,7 +112,9 @@ class UptakeData(Data):
 
 
 class IncidentUptakeData(UptakeData):
-    def to_cumulative(self, group_cols: List[str,] | None, last_cumulative=None):
+    def to_cumulative(
+        self, group_cols: List[str,] | None, last_cumulative=None
+    ) -> "CumulativeUptakeData":
         """
         Convert incident to cumulative uptake data.
 
@@ -176,7 +180,9 @@ class CumulativeUptakeData(UptakeData):
 
         return IncidentUptakeData(out)
 
-    def insert_rollouts(self, rollouts: List[dt.date], group_cols: List[str] | None):
+    def insert_rollouts(
+        self, rollouts: List[dt.date], group_cols: List[str] | None
+    ) -> "CumulativeUptakeData":
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
 

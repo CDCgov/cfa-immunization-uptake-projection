@@ -89,9 +89,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = pl.scan_parquet(args.input).collect()
-
-    input_data = iup.CumulativeUptakeData(input_data)
+    input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
 
     all_forecast = run_all_forecasts(config=config, clean_data=input_data)
     all_forecast.write_parquet(args.output)
