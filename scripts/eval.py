@@ -38,16 +38,14 @@ def eval_all_forecasts(data, pred, config):
                     )
                 ).to_incident(config["data"]["groups"])
 
-                print(incident_pred.head)
-                print(incident_pred.shape)
-                print(test.head)
-
                 assert incident_pred["forecast_start"][0] == test["time_end"].min(), (
                     "Dates do not match between the forecast and the test data"
                 )
 
-                score = eval.score(test, incident_pred, score_fun)
-                score = score.with_columns(score_fun=score_name, model=model)
+                score = eval.score(test, incident_pred, score_fun).with_columns(
+                    score_fun=pl.lit(score_name),
+                    model=pl.lit(model),
+                )
 
                 all_scores = pl.concat([all_scores, score])
 
