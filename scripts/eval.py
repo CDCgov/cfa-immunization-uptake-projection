@@ -66,4 +66,5 @@ if __name__ == "__main__":
     pred = pl.scan_parquet(args.pred).collect()
     data = pl.scan_parquet(args.obs).collect()
 
-    eval_all_forecasts(data, pred, config).write_parquet(args.output)
+    if config["evaluation_timeframe"]["interval"] is not None:
+        eval_all_forecasts(data, pred, config).write_parquet(args.output)

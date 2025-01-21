@@ -16,21 +16,31 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
     models = [getattr(iup.models, model_name) for model_name in config["models"]]
     assert all(issubclass(model, iup.models.UptakeModel) for model in models)
 
+    if config["evaluation_timeframe"]["interval"] is not None:
+        forecast_dates = pl.date_range(
+            config["forecast_timeframe"]["start"],
+            config["forecast_timeframe"]["end"],
+            config["evaluation_timeframe"]["interval"],
+            eager=True,
+        ).to_list()
+    else:
+        forecast_dates = [config["forecast_timeframe"]["start"]]
+
     all_forecast = pl.DataFrame()
 
     for model in models:
-        for forecast_date in config["timeframe"]["start"]:
+        for forecast_date in forecast_dates:
             forecast = run_forecast(
                 model,
                 data,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
-                forecast_end=config["timeframe"]["end"],
+                forecast_end=config["forecast_timeframe"]["end"],
             )
 
             forecast = forecast.with_columns(
                 forecast_start=forecast_date,
-                forecast_end=config["timeframe"]["end"],
+                forecast_end=config["forecast_timeframe"]["end"],
                 model=pl.lit(model.__name__),
             )
 
@@ -62,7 +72,7 @@ def run_forecast(
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
-        config["timeframe"]["interval"],
+        config["forecast_timeframe"]["interval"],
         grouping_factors,
     )
 
