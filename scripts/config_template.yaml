@@ -15,11 +15,15 @@ data:
   # use these columns as grouping factors
   groups: [geography]
 
-# The timeframe over which to generate projections
-timeframe:
-  start: [2024-02-03, 2024-02-10]
+# Timeframe for the longest desired forecast
+forecast_timeframe:
+  start: 2024-02-03
   end: 2024-04-30
   interval: 7d
+
+# Spacing between multiple forecasts, for evaluation
+evaluation_timeframe:
+  interval: 14d
 
 models: [LinearIncidentUptakeModel]
 
