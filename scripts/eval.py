@@ -38,11 +38,6 @@ def eval_all_forecasts(data, pred, config):
                     )
                 ).to_incident(config["data"]["groups"])
 
-                # print("TEST")
-                # print(test)
-                # print("DATA")
-                # print(incident_pred)
-
                 assert incident_pred.shape[0] == test.shape[0], (
                     "The forecast and the test data do not have the same number of dates."
                 )
