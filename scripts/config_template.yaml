@@ -23,7 +23,7 @@ forecast_timeframe:
 
 # Spacing between multiple forecasts, for evaluation
 evaluation_timeframe:
-  interval: 14d
+  interval: 14d # Leave this blank if you don't want evaluation
 
 models: [LinearIncidentUptakeModel]
 
