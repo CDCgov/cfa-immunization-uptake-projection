@@ -24,7 +24,7 @@ def frame() -> iup.UptakeData:
                 "2020-01-21",
                 "2020-01-21",
             ],
-            "estimate": [0.0, 0.0, 1.0, 0.1, 3.0, 0.3, 4.0, 0.4],
+            "estimate": [0.0, 0.0, 0.01, 0.001, 0.03, 0.003, 0.04, 0.004],
         }
     )
 
@@ -40,9 +40,11 @@ def test_split_train_test_handles_train(frame):
     frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "train")
+    output = iup.UptakeData.split_train_test(
+        iup.CumulativeUptakeData(pl.concat([frame, frame2])), start_date, "train"
+    )
 
-    assert output.equals(frame)
+    assert output.equals(iup.CumulativeUptakeData(frame))
 
 
 def test_split_train_test_handles_test(frame):
@@ -52,7 +54,9 @@ def test_split_train_test_handles_test(frame):
     frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
     start_date = dt.date(2020, 6, 1)
 
-    output = iup.UptakeData.split_train_test([frame, frame2], start_date, "test")
+    output = iup.UptakeData.split_train_test(
+        iup.CumulativeUptakeData(pl.concat([frame, frame2])), start_date, "test"
+    )
 
     assert output.equals(frame2)
 
@@ -75,12 +79,12 @@ def test_to_cumulative_handles_no_last(frame):
             [
                 0.0,
                 0.0,
-                1.0,
-                0.1,
-                4.0,
-                0.4,
-                8.0,
-                0.8,
+                0.01,
+                0.001,
+                0.04,
+                0.004,
+                0.08,
+                0.008,
             ]
         )
     )
@@ -93,7 +97,7 @@ def test_to_cumulative_handles_last(frame):
     frame = iup.IncidentUptakeData(frame)
 
     last_cumulative = pl.DataFrame(
-        {"last_cumulative": [1.0, 0.1], "geography": ["USA", "PA"]}
+        {"last_cumulative": [0.01, 0.001], "geography": ["USA", "PA"]}
     )
 
     output = frame.to_cumulative(
@@ -104,17 +108,17 @@ def test_to_cumulative_handles_last(frame):
     )
 
     assert all(
-        output["estimate"]
+        output["estimate"].round(10)
         == pl.Series(
             [
-                1.0,
-                0.1,
-                2.0,
-                0.2,
-                5.0,
-                0.5,
-                9.0,
-                0.9,
+                0.01,
+                0.001,
+                0.02,
+                0.002,
+                0.05,
+                0.005,
+                0.09,
+                0.009,
             ]
         )
     )
@@ -130,11 +134,12 @@ def test_to_cumulative_handles_no_groups(frame):
 
     output = frame.to_cumulative(group_cols=None)
 
-    assert all(output["estimate"] == pl.Series([0.0, 1.0, 4.0, 8.0]))
+    assert all(output["estimate"] == pl.Series([0.0, 0.01, 0.04, 0.08]))
 
 
 def test_cumulative_uptake_is_proportion(frame):
     # should have an error if cumulative uptake is >1
+    frame = frame.with_columns(estimate=pl.col("estimate") + 1.0)
     assert frame["estimate"].max() > 1.0
     with pytest.raises(AssertionError, match="proportion"):
         iup.CumulativeUptakeData(frame)
@@ -147,7 +152,7 @@ def test_to_incident_handles_groups(frame):
     """
     If there are groups, successive differences are taken over the groups.
     """
-    frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 1.0))
+    frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 0.01))
 
     output = frame.to_incident(
         group_cols=[
@@ -156,7 +161,7 @@ def test_to_incident_handles_groups(frame):
     )
 
     assert all(
-        output["estimate"].round(10) == pl.Series([0.0, 0.0, 1.0, 0.1, 0.2, 0.1])
+        output["estimate"].round(10) == pl.Series([0.0, 0.0, 0.01, 0.001, 0.002, 0.001])
     )
 
 
@@ -165,11 +170,11 @@ def test_to_incident_handles_no_groups(frame):
     If there are no groups, successive differences are taken over the entire data frame.
     """
     frame = iup.CumulativeUptakeData(
-        frame.filter(pl.col("geography") == "USA", pl.col("estimate") <= 1.0).drop(
+        frame.filter(pl.col("geography") == "USA", pl.col("estimate") <= 0.01).drop(
             "geography"
         )
     )
 
     output = frame.to_incident(group_cols=None)
 
-    assert all(output["estimate"].round(10) == pl.Series([0.0, 1.0]))
+    assert all(output["estimate"].round(10) == pl.Series([0.0, 0.01]))
