@@ -15,8 +15,7 @@ data:
   # use these columns as grouping factors
   groups: [geography]
 
-# Timeframe for the longest desired forecast
-forecast_timeframe:
+forecast_dates:
   start: 2024-02-03
   end: 2024-04-30
   interval: 7d

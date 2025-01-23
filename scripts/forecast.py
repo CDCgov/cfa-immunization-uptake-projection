@@ -1,4 +1,7 @@
 import argparse
+import datetime
+import warnings
+from typing import List
 
 import polars as pl
 import yaml
@@ -6,83 +9,44 @@ import yaml
 import iup.models
 
 
-def run_all_forecasts(data, config) -> pl.DataFrame:
-    """Run all forecasts
-
-    Returns:
-        pl.DataFrame: data frame of forecasts, organized by model and forecast date
-    """
-
-    models = [getattr(iup.models, model_name) for model_name in config["models"]]
-    assert all(issubclass(model, iup.models.UptakeModel) for model in models)
-
-    if config["evaluation_timeframe"]["interval"] is not None:
-        forecast_dates = pl.date_range(
-            config["forecast_timeframe"]["start"],
-            config["forecast_timeframe"]["end"],
-            config["evaluation_timeframe"]["interval"],
-            eager=True,
-        ).to_list()
-    else:
-        forecast_dates = [config["forecast_timeframe"]["start"]]
-
-    all_forecast = pl.DataFrame()
-
-    for model in models:
-        for forecast_date in forecast_dates:
-            forecast = run_forecast(
-                model,
-                data,
-                grouping_factors=config["data"]["groups"],
-                forecast_start=forecast_date,
-                forecast_end=config["forecast_timeframe"]["end"],
-            )
-
-            forecast = forecast.with_columns(
-                forecast_start=forecast_date,
-                forecast_end=config["forecast_timeframe"]["end"],
-                model=pl.lit(model.__name__),
-            )
-
-            all_forecast = pl.concat([all_forecast, forecast])
-
-    return all_forecast
-
-
 def run_forecast(
-    model,
-    data,
+    dataset_path: str,
+    model_name: str,
+    forecast_date: datetime.date,
+    target_dates: List[datetime.date],
     grouping_factors,
-    forecast_start,
-    forecast_end,
+    output_path: str,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
+    # check that target dates are after the forecast date
+    warnings.warn("not implemented")
 
-    # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
-    incident_data = data.to_incident(grouping_factors)
+    # get model object from name
+    model = getattr(iup.models, model_name)
+    assert issubclass(model, iup.models.UptakeModel)
 
-    # Prune to only the training portion
-    incident_train_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, forecast_start, "train"
+    # get data to use for forecast
+    data = pl.scan_parquet(dataset_path)
+    training_data = iup.IncidentUptakeData.split_train_test(
+        data, forecast_date, "train"
     )
 
-    # Fit models using the training data and make projections
-    fit_model = model().fit(incident_train_data, grouping_factors)
+    # check that target dates are not present in the training data
+    warnings.warn("not implemented")
 
-    cumulative_projections = fit_model.predict(
-        forecast_start,
-        forecast_end,
-        config["forecast_timeframe"]["interval"],
-        grouping_factors,
-    )
+    # fit model and run predictions
+    fit = model().fit(training_data)
+    pred = fit.predict(target_dates, grouping_factors)
 
-    return cumulative_projections
+    # write output
+    pred.write_parquet(output_path)
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file", default="scripts/config.yaml")
-    p.add_argument("--input", help="input data")
+    p.add_argument("--input", help="input dataset")
+    p.add_argument("--model", help="model to forecast with")
+    p.add_argument("--forecast_date", help="forecast date")
     p.add_argument("--output", help="output parquet file")
     args = p.parse_args()
 
@@ -91,4 +55,16 @@ if __name__ == "__main__":
 
     input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
 
-    run_all_forecasts(input_data, config).write_parquet(args.output)
+    target_dates = None
+    warnings.warn("need to figure out target dates")
+    grouping_factors = None
+    warnings.warn("need to figure out grouping factors")
+
+    run_forecast(
+        dataset_path=args.input,
+        model_name=args.model,
+        forecast_date=datetime.date.fromisoformat(args.forecast_date),
+        target_dates=target_dates,
+        grouping_factors=grouping_factors,
+        output_path=args.output,
+    )
