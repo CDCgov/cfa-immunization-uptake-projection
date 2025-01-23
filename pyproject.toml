@@ -6,7 +6,7 @@ authors = ["Edward Schrom <tec0@cdc.gov>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.11,<4.0"
 polars = "^1.7.1"
 numpy = "^2.1.1"
 datetime = "^5.5"
@@ -16,6 +16,7 @@ vl-convert-python = "^1.7.0"
 pyyaml = "^6.0.2"
 pytest = "^8.3.3"
 nisapi = {git = "https://github.com/CDCgov/nis-py-api"}
+snakemake = "^8.27.1"
 
 [tool.poetry.group.dev.dependencies]
 detect-secrets = "^1.5.0"
