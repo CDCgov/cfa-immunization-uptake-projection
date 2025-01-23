@@ -13,9 +13,6 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
 
-    models = [getattr(iup.models, model_name) for model_name in config["models"]]
-    assert all(issubclass(model, iup.models.UptakeModel) for model in models)
-
     if config["evaluation_timeframe"]["interval"] is not None:
         forecast_dates = pl.date_range(
             config["forecast_timeframe"]["start"],
@@ -28,7 +25,7 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
 
     all_forecast = pl.DataFrame()
 
-    for model in models:
+    for model in config["models"]:
         for forecast_date in forecast_dates:
             forecast = run_forecast(
                 model,
@@ -41,7 +38,7 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
             forecast = forecast.with_columns(
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
-                model=pl.lit(model.__name__),
+                model=pl.lit(model["name"]),
             )
 
             all_forecast = pl.concat([all_forecast, forecast])
@@ -66,14 +63,29 @@ def run_forecast(
         incident_data, forecast_start, "train"
     )
 
-    # Fit models using the training data and make projections
-    fit_model = model().fit(incident_train_data, grouping_factors)
+    # Make an instance of the model, fit it using training data, and make projections
+    assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
+        f"{model['name']} is not a valid model type!"
+    )
+    ""
+    fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
+        incident_train_data,
+        grouping_factors,
+        model["params"],
+        model["mcmc"],
+    )
 
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
         config["forecast_timeframe"]["interval"],
         grouping_factors,
+    )
+
+    cumulative_projections = (
+        cumulative_projections.group_by(config["data"]["groups"] + ["time_end"])
+        .agg(pl.col("estimate").mean().alias("estimate"))
+        .sort("time_end")
     )
 
     return cumulative_projections

@@ -1,10 +1,8 @@
 import datetime as dt
 
-import numpy as np
 import polars as pl
 import polars.testing
 import pytest
-from sklearn.linear_model import LinearRegression
 
 import iup
 import iup.models
@@ -43,6 +41,37 @@ def frame():
     frame = iup.IncidentUptakeData(frame)
 
     return frame
+
+
+@pytest.fixture
+def params():
+    """
+    Mock set of parameter values to specify the LIUM prior distributions.
+    """
+
+    params = {
+        "a_mn": 0.0,
+        "a_sd": 1.0,
+        "bP_mn": 0.0,
+        "bP_sd": 1.0,
+        "bE_mn": 0.0,
+        "bE_sd": 1.0,
+        "bPE_mn": 0.0,
+        "bPE_sd": 1.0,
+        "sig_mn": 1.0,
+    }
+
+    return params
+
+
+@pytest.fixture
+def mcmc_params():
+    """
+    Mock set of mcmc control parameters.
+    """
+    mcmc = {"num_warmup": 10, "num_samples": 10, "num_chains": 1}
+
+    return mcmc
 
 
 def test_extract_starting_conditions(frame):
@@ -86,18 +115,19 @@ def test_extract_standards(frame):
     assert output == correct
 
 
-def test_fit(frame):
+def test_fit(frame, params, mcmc_params):
     """
-    Model should fit a line to two points, giving a 'perfect' fit
+    Model should produce posterior samples for each parameter.
     """
 
     data = iup.IncidentUptakeData(frame)
-    model = iup.models.LinearIncidentUptakeModel().fit(
-        data,
-        ["geography"],
+    model = iup.models.LinearIncidentUptakeModel(0).fit(
+        data, ["geography"], params, mcmc_params
     )
 
-    assert model.model.score(model.x, model.y) == 1.0
+    dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
+
+    assert all(d == 10 for d in dimensions)
 
 
 def test_build_scaffold_handles_no_groups():
@@ -148,32 +178,6 @@ def test_build_scaffold_handles_groups():
     )
 
     assert output.shape == (10, 8)
-
-
-def test_project_sequentially():
-    """
-    Model with coef 0 for previous and 1 for elapsed gives elapsed back
-    """
-    elapsed = tuple([10.0, 17.0])
-    start = 3
-    standards = {
-        "previous": {"mean": 0, "std": 1},
-        "elapsed": {"mean": 0, "std": 1},
-        "daily": {"mean": 0, "std": 1},
-    }
-    model = LinearRegression()
-    x = np.reshape(np.array([0, 0, 0, 0, 1, 0]), (2, 3))
-    y = np.reshape(np.array([0, 1]), (2, 1))
-    model.fit(x, y)
-
-    output = iup.models.LinearIncidentUptakeModel.project_sequentially(
-        elapsed, start, standards, model
-    )
-
-    assert all(
-        np.round(np.delete(output, 0), decimals=10)
-        == np.round(np.array(elapsed), decimals=10)
-    )
 
 
 def test_trim_outlier_intervals_handles_two_rows(frame):

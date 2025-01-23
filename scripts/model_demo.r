@@ -21,7 +21,7 @@ library(lubridate)
 library(brms)
 
 # Set the user-controlled parameters
-disease <- "flu" # "covid" or "flu"
+disease <- "covid" # "covid" or "flu"
 forecast_date <- as.Date("2024-10-25")
 end_date <- as.Date("2025-05-31")
 
@@ -160,8 +160,8 @@ lim_proj$elapsed <- as.numeric(lim_proj$date -
 lim_proj$interval <- c(as.numeric(lim_proj$date[1] -
     train$date[nrow(train)]), as.numeric(diff(lim_proj$date)))
 
-# Run 1000 trajectories from the LIM
-proj <- matrix(0, nrow(lim_proj), 1000)
+# Run trajectories from the LIM, one per posterior draw
+proj <- matrix(0, nrow(lim_proj), ndraws(lim))
 for (i in 1:nrow(proj)) {
     elapsed_std <- rep(
         (lim_proj$elapsed[i] - mean(train_lim$elapsed)) /
@@ -180,9 +180,7 @@ for (i in 1:nrow(proj)) {
             sd(train_lim$previous)
     }
     input <- data.frame(elapsed_std = elapsed_std, previous_std = previous_std)
-    proj[i, ] <- as.vector(brms::posterior_predict(lim,
-        newdata = input, ndraws = 1
-    )) *
+    proj[i, ] <- diag(brms::posterior_predict(lim, newdata = input)) *
         sd(train_lim$daily) + mean(train_lim$daily)
 }
 proj <- sweep(proj, 1, lim_proj$interval, FUN = `*`)
