@@ -3,11 +3,14 @@ import datetime as dt
 from typing import List
 
 import numpy as np
+import numpyro
+import numpyro.distributions as dist
 import polars as pl
-from sklearn.linear_model import LinearRegression
+from jax import random
+from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import CumulativeUptakeData, IncidentUptakeData, UptakeData
+from iup import IncidentUptakeData, SampleForecast, UptakeData
 
 
 class UptakeModel(abc.ABC):
@@ -34,11 +37,65 @@ class LinearIncidentUptakeModel(UptakeModel):
     - interaction of "elapsed" and "previous"
     """
 
-    def __init__(self):
+    def __init__(self, seed: int):
         """
-        Initialize the model as a scikit-learn linear regression.
+        Initialize with a seed and the model structure.
+
+        Parameters
+        seed: int
+            The random seed for stochastic elements of the model.
         """
-        self.model = LinearRegression()
+        self.rng_key = random.PRNGKey(seed)
+        self.model = LinearIncidentUptakeModel.lium
+
+    @staticmethod
+    def lium(
+        previous=None,
+        elapsed=None,
+        daily=None,
+        a_mn=0.0,
+        a_sd=1.0,
+        bP_mn=0.0,
+        bP_sd=1.0,
+        bE_mn=0.0,
+        bE_sd=1.0,
+        bPE_mn=0.0,
+        bPE_sd=1.0,
+        sig_mn=1.0,
+    ):
+        """
+        Declare the linear incident uptake model structure.
+
+        Parameters
+        previous: numpy array
+            standardized values of previous daily average incident uptake, a predictor
+        elapsed: numpy array
+            standardized values of number of days since rollout, a predictor
+        daily: numpy array
+            standardized values of daily average incident uptake, the outcome
+        other parameters: float
+            means and standard deviations to specify the prior distributions
+
+        Returns
+        Nothing
+
+        Details
+        Provides the model structure and priors for a linear incident uptake model.
+        """
+        a = numpyro.sample("a", dist.Normal(a_mn, a_sd))
+        P, E, PE = 0.0, 0.0, 0.0
+        if previous is not None:
+            bP = numpyro.sample("bP", dist.Normal(bP_mn, bP_sd))
+            P = bP * previous
+        if elapsed is not None:
+            bE = numpyro.sample("bE", dist.Normal(bE_mn, bE_sd))
+            E = bE * elapsed
+        if previous is not None and elapsed is not None:
+            bPE = numpyro.sample("bEP", dist.Normal(bPE_mn, bPE_sd))
+            PE = bPE * previous * elapsed
+        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
+        mu = a + P + E + PE
+        numpyro.sample("obs", dist.Normal(mu, sig), obs=daily)
 
     @staticmethod
     def extract_starting_conditions(
@@ -103,7 +160,13 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         return standards
 
-    def fit(self, data: IncidentUptakeData, group_cols: List[str,] | None) -> Self:
+    def fit(
+        self,
+        data: IncidentUptakeData,
+        group_cols: List[str,] | None,
+        params: dict,
+        mcmc: dict,
+    ) -> Self:
         """
         Fit a linear incident uptake model on training data.
 
@@ -112,12 +175,15 @@ class LinearIncidentUptakeModel(UptakeModel):
             training data on which to fit the model
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
+        params: dict
+            parameter names and values to specify prior distributions
+        mcmc: dict
+            control parameters for mcmc fitting
 
         Returns
         LinearIncidentUptakeModel
             model object with projection starting conditions, standardization
-            constants, predictor and outcome variables, and the model fit
-            all stored as attributes
+            constants, and the model fit all stored as attributes
 
         Details
         Extra columns for fitting this model are added to the incident data,
@@ -132,9 +198,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         complete pooling will be used to recognize the groups as distinct but
         to assume they behave identically except for initial conditions.
 
-        Finally, the model is fit using the scikit-learn module.
+        Finally, the model is fit using numpyro.
         """
-        # validate data
         data = IncidentUptakeData(data)
 
         data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
@@ -151,15 +216,28 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         self.standards = self.extract_standards(data, ("previous", "elapsed", "daily"))
 
-        self.x = (
-            data.select(["previous_std", "elapsed_std"])
-            .with_columns(interact=pl.col("previous_std") * pl.col("elapsed_std"))
-            .to_numpy()
+        self.kernel = NUTS(self.model)
+        self.mcmc = MCMC(
+            self.kernel,
+            num_warmup=mcmc["num_warmup"],
+            num_samples=mcmc["num_samples"],
+            num_chains=mcmc["num_chains"],
         )
-
-        self.y = data.select(["daily_std"]).to_numpy()
-
-        self.model.fit(self.x, self.y)
+        self.mcmc.run(
+            self.rng_key,
+            previous=data["previous_std"].to_numpy(),
+            elapsed=data["elapsed_std"].to_numpy(),
+            daily=data["daily_std"].to_numpy(),
+            a_mn=params["a_mn"],
+            a_sd=params["a_sd"],
+            bP_mn=params["bP_mn"],
+            bP_sd=params["bP_sd"],
+            bE_mn=params["bE_mn"],
+            bE_sd=params["bE_sd"],
+            bPE_mn=params["bPE_mn"],
+            bPE_sd=params["bPE_sd"],
+            sig_mn=params["sig_mn"],
+        )
 
         return self
 
@@ -348,7 +426,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @classmethod
     def project_sequentially(
-        cls, elapsed: tuple, start: float, standards: dict, model: LinearRegression
+        cls, elapsed: tuple, start: float, standards: dict, model, mcmc, rng_key
     ) -> np.ndarray:
         """
         Perform sequential projections from a linear incident uptake model.
@@ -360,8 +438,8 @@ class LinearIncidentUptakeModel(UptakeModel):
             starting value for the first projection
         standards: dict
             means and standard deviations for the predictor and outcome variables
-        model: LinearRegression
-            model that predicts next daily-avg uptake from the current
+        model: Predictive
+            fit model that predicts next daily-avg uptake from the current
 
         Returns
         IncidentUptakeProjection
@@ -377,50 +455,54 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Projections are made separately by group, if grouping factors exist.
         This function handles one group at a time.
-
-        This does not yet incorporate uncertainty, but it should in the future.
         """
-        # Vector to hold the last known uptake and each sequential projection
-        proj = np.zeros(len(elapsed) + 1)
+        # Make a prediction machine using the fit model
+        predictive = Predictive(model, mcmc.get_samples())
 
-        # First entry is the last known uptake value
-        proj[0] = start
+        # Array to hold the last known uptake and each sequential projection (cols)
+        # for each MCMC sample in fit model (rows)
+        proj = np.zeros((mcmc.get_samples()["a"].shape[0], len(elapsed) + 1))
+
+        # First entry of each row is the last known uptake value
+        proj[:, 0] = start
 
         # To make each sequential projection
-        for i in range(proj.shape[0] - 1):
-            # Predictors are the standardized uptake on the previous projection date
-            # and the standardized days-elapsed on the current projection date
-            x = np.reshape(
-                np.array(
-                    [
-                        cls.standardize(
-                            proj[i],
-                            standards["previous"]["mean"],
-                            standards["previous"]["std"],
-                        ),
-                        cls.standardize(
-                            elapsed[i],
-                            standards["elapsed"]["mean"],
-                            standards["elapsed"]["std"],
-                        ),
-                    ]
-                ),
-                (-1, 2),
+        for i in range(proj.shape[1] - 1):
+            # Predictors are standardized uptake on the previous projection date,
+            # standardized days-elapsed on the current projection date, & interaction.
+            prev = np.array(
+                cls.standardize(
+                    proj[:, i],
+                    standards["previous"]["mean"],
+                    standards["previous"]["std"],
+                )
             )
-            # Include the interaction of the two 1st-order predictors
-            x = np.insert(x, 2, np.array((x[:, 0] * x[:, 1])), axis=1)
-            # Predict the uptake on the projection date
-            y = model.predict(x)
+            elap = np.repeat(
+                cls.standardize(
+                    elapsed[i],
+                    standards["elapsed"]["mean"],
+                    standards["elapsed"]["std"],
+                ),
+                proj.shape[0],
+            )
+
+            # Predict the uptake on the next date:
+            # One prediction per MCMC sample (row) for each prev*elap combo (col)
+            # The diagonal has the next date predicted with the same parameter draw
+            # used to predict the input date.
+            y = (predictive(rng_key, previous=prev, elapsed=elap)["obs"]).diagonal()
+
             # Unstandardize the projection onto its natural scale
-            proj[i + 1] = cls.unstandardize(
-                y[(0, 0)],
+            proj[:, i + 1] = cls.unstandardize(
+                y,
                 standards["daily"]["mean"],
                 standards["daily"]["std"],
             )
-            # This projection becomes the previous projection
-            # in the next loop iteration.
+            # This projection becomes 'previous' in the next loop iteration.
 
-        return proj
+        # Sequential projections become rows and sample trajectories cols.
+        # Remove the first row, which is the last known uptake value.
+        return proj.transpose()[1:, :]
 
     def predict(
         self,
@@ -428,7 +510,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         group_cols: List[str,] | None,
-    ) -> CumulativeUptakeData:
+    ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
 
@@ -463,14 +545,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
-        incident_projection = self.build_scaffold(
+        cumulative_projection = self.build_scaffold(
             self.start, start_date, end_date, interval, group_cols
-        )
+        ).drop("estimate")
 
         if group_cols is not None:
-            groups = incident_projection.partition_by(group_cols)
+            groups = cumulative_projection.partition_by(group_cols)
         else:
-            groups = [incident_projection]
+            groups = [cumulative_projection]
 
         for g in range(len(groups)):
             if group_cols is not None:
@@ -481,29 +563,38 @@ class LinearIncidentUptakeModel(UptakeModel):
                 start = self.start["last_daily"][0]
 
             proj = self.project_sequentially(
-                tuple(groups[g]["elapsed"]), start, self.standards, self.model
+                tuple(groups[g]["elapsed"]),
+                start,
+                self.standards,
+                self.model,
+                self.mcmc,
+                self.rng_key,
             )
 
-            groups[g] = groups[g].with_columns(daily=pl.Series(np.delete(proj, 0)))
+            proj = proj * groups[g]["interval"].to_numpy().reshape(-1, 1)
 
-        incident_projection = pl.concat(groups).with_columns(
-            estimate=pl.col("daily") * pl.col("interval")
-        )
+            proj = (
+                np.cumsum(proj, 0)
+                + self.start.join(groups[g], on=group_cols, how="semi")[
+                    "last_cumulative"
+                ][0]
+            )
 
-        incident_projection = IncidentUptakeData(incident_projection)
+            proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
 
-        if group_cols is not None:
-            cumulative_projection = incident_projection.to_cumulative(
-                group_cols, self.start.select(list(group_cols) + ["last_cumulative"])
-            ).select(list(group_cols) + ["time_end", "estimate"])
-        else:
-            cumulative_projection = incident_projection.to_cumulative(
-                group_cols, self.start.select(["last_cumulative"])
-            ).select(["time_end", "estimate"])
+            groups[g] = (
+                pl.concat([groups[g], proj], how="horizontal")
+                .unpivot(
+                    index=groups[g].columns,
+                    variable_name="sample_id",
+                    value_name="estimate",
+                )
+                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
+            )
 
-        cumulative_projection = CumulativeUptakeData(cumulative_projection)
+        cumulative_projection = pl.concat(groups)
 
-        return cumulative_projection
+        return SampleForecast(cumulative_projection)
 
     @classmethod
     def trim_outlier_intervals(
