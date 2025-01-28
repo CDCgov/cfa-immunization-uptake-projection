@@ -8,7 +8,7 @@ A _forecast_ is:
 
 - a model, including its parameters and training data,
 - a _forecast date_,
-- a set of reference dates after the future relative to the forecast date, and
+- a set of reference dates after the forecast date, and
 - the predicted values for each reference date.
 
 In _prospective_ forecasting, the forecast date is the moment that the forecast was actually run. The training data is all the data that is available as of that moment, and the predictions are for reference dates after the forecast date.
@@ -25,6 +25,7 @@ Perform retrospective forecasting to compare model performance:
 
 - Define the _start of season_ as September 1(?) and _end of season_ as April 1(?) or similar, TBD
 - For the 3(?) most recent seasons, let the forecast dates be every Saturday from the start of the season to the end of the season
+- Optimistically assume that the most recent report date for any reference date is equal to the reference date (i.e., for a forecast, use all data with reference dates before the forecast date)
 - For each model, forecast season, and forecast date: predict uptake for each week from the forecast date to the end of the season
   - Note that this includes training data from prior seasons as well as that season up to the forecast date
   - Note that earlier forecasts will produce more predictions (and horizons) than later forecasts
