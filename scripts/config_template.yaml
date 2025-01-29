@@ -27,21 +27,21 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  - name: LinearIncidentUptakeModel,
-    seed: 0,
+  - name: LinearIncidentUptakeModel
+    seed: 0
     params:
-      a_mn: 0.0,
-      a_sd: 1.0,
-      bP_mn: 0.0,
-      bP_sd: 1.0,
-      bE_mn: 0.0,
-      bE_sd: 1.0,
-      bPE_mn: 0.0,
-      bPE_sd: 1.0,
-      sig_mn: 1.0,
+      a_mn: 0.0
+      a_sd: 0.1
+      bP_mn: 0.0
+      bP_sd: 0.1
+      bE_mn: 0.0
+      bE_sd: 0.1
+      bPE_mn: 0.0
+      bPE_sd: 0.1
+      sig_mn: 0.1
     mcmc:
-      num_warmup: 1000,
-      num_samples: 100,
+      num_warmup: 1000
+      num_samples: 100
       num_chains: 4
 
 # score metrics
