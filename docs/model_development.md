@@ -1,0 +1,149 @@
+# Purpose
+
+This is a summary of the vaccine uptake models under consideration, as well as some issues and development priorities for each.
+
+# Basic Structures
+
+There are two broad types of models under consideration: autoregressive (AR) and full-curve (FC) models.
+
+- AR: Incident uptake at time $t$, $u_t$, is a function previous incident uptake value(s), among other predictors.
+- FC: Cumulative uptake at time $t$, $c_t$, is a function of time, among other predictors.
+
+Several facets of each model are discussed, including misspecification, hyperparameters, forecast uncertainty, and developmental priorities.
+
+# Autoregressive (AR) Models
+
+Let $u_t$ be the incident uptake at time $t$, where $t$ is measured in weeks since rollout.
+
+A generic AR model of the I<sup>th</sup> order has the form:
+
+$$
+\begin{align*}
+&u_t \sim N(\mu, \sigma) \\
+&\mu = \sum_{i=1}^{I} \beta_{i}u_{t-i} \\
+&\beta_{i},~\sigma \sim \text{prior distributions} \\
+&\end{align*}
+$$
+
+The "linear incident uptake model" currently implemented is a first-order AR model, but with the added complexity of absolute time as a predictor, too:
+
+$$
+\begin{align*}
+&u_t \sim N(\mu, \sigma) \\
+&\mu = \alpha + \beta_{u}u_{t-1} + \beta_{t}t + \beta_{tu}tu_{t-1} \\
+&\alpha,~\beta_x,~\sigma \sim \text{prior distributions} \\
+&\end{align*}
+$$
+
+Essentially, this model says that the uptake rate changes through time ($\beta_t$) with some inertia ($\beta_u$), and that the inertia itself can change through time ($\beta_{tu}$).
+
+## Misspecification
+
+Incident uptake $u_t$ is naturally bounded by $[0,~1-c_{t-1}]$, meaning that over the course of a week $t$, the number of people who get vaccinated cannot be fewer than 0 or exceed the number of people who were unvaccinated in week $t-1$
+
+However, the distribution $N(\mu, \sigma)$ is unbounded, meaning that the model is free to predict $u_t$ outside its natural bounds. In fact, even the mean of this distribution $\mu$ could lie outside these natural bounds: because the parameters $\alpha$ and $\beta_x$ are currently assigned Gaussian priors, they are also unbounded and could take on extreme values. All together, this is misspecification.
+
+Practically, nonsensical predictions as a result of this misspecification can be avoided by choosing priors carefully. In particular,
+
+- Priors for $\alpha$ and $\beta_x$ should have a zero mean and small variance.
+- The prior for $\sigma$ should have a small expectation.
+
+Under these conditions, parameter combinations that predict nonsensical future incident uptake are unlikely to be drawn from the posterior.
+
+Nonetheless, refactoring the linear incident uptake model to avoid misspecification altogether is desirable. Here is an idea...
+
+An alternative formulation might replace the incident uptake $u_t$ with the fractional incident uptake $f_t$, where $f_t$ is the _fraction_ of the unvaccinated population in week $t-1$ who got vaccinated in week $t$. Mathematically, $f_t = \frac{u_t}{1-c_{t-1}} = \frac{c_t - c_{t-1}}{1-c_{t-1}}$. Notice that $f_t$ is bounded by $[0,~1]$. Thus, the following model would not be misspecified:
+
+$$
+\begin{align*}
+&f_t \sim Beta(\mu, \nu) \\
+&\text{logit}(\mu) = \alpha + \beta_{f}f_{t-1} + \beta_{t}t + \beta_{tf}tf_{t-1} \\
+&\alpha,~\beta_x,~\nu \sim \text{prior distributions} \\
+&\end{align*}
+$$
+
+The logit link function prevents $\mu$ from escaping the bounds $(0,~1)$, and the Beta likelihood also cannot escape these bounds.
+
+One problem remains. Although _true_ fractional incident uptake $f_t$ is never less than 0, the _true_ uptake is not the same as the _reported_ uptake. In fact, there are instances of negative uptake reported in the data. To handle this, a separate term for observation error is necessary. If Gaussian error is assumed, the problem of misspecification is reintroduced (though perhaps with minimal consequences). Further thought is necessary.
+
+## Hyperparameters
+
+Realistically, the $\alpha$ and $\beta_x$ parameters that control uptake rate probably differ slightly but systematically from season to season (where "season" refers to an overwinter disease season, e.g. "2024/2025"). And multiple past seasons of data are available for training models (two past seasons for covid, and many more for flu). Therefore, it would be wise to introduce hyperparameters with a subscript "s" for season:
+
+$$
+\begin{align*}
+&u_t \sim N(\mu, \sigma) \\
+&\mu = \alpha_s + \beta_{u,s}u_{t-1} + \beta_{t,s}t + \beta_{tu,s}tu_{t-1} \\
+&\alpha_s \sim N(\alpha,~\sigma_{\alpha}) \\
+&\beta_{t,s} \sim N(\beta_t,~\sigma_{\beta_t}) \\
+&\beta_{u,s} \sim N(\beta_u,~\sigma_{\beta_u}) \\
+&\beta_{tu,s} \sim N(\beta_{tu},~\sigma_{\beta_{tu}})  \\
+&\alpha,~\beta_x,~\sigma_{\alpha},~\sigma_{\beta_x},~\sigma \sim \text{prior distributions} \\
+\end{align*}
+$$
+
+Here, $\alpha$ and $\beta_x$ are hyperparameters: they govern hyperdistributions, from which a separate draw is made for each season.
+
+Factors other than season could also be used to group the data. For example, further hyperparameters could be used to infer different parameter values (drawn from a common distribution) that describe the uptake in different geographic regions or among different demographic groups.
+
+## Forecast Uncertainty
+
+Forecasting with AR models naturally produces a cone of uncertainty that expands into the future. Each draw from the posterior distribution is a unique combination of parameter values that defines a trajectory of uptake going forward (still with some stochastic influence on observations, from $\sigma$). All these trajectories sprout from the last observed data point and diverge as they move into the future.
+
+## Priorities
+
+The top priority for refining the linear incident uptake model is to incorporate hyperparameters to group the data by season. After this, refactoring to solve misspecification may be desired, but the exact refactoring likely depends on how observation uncertainty is reported in the data.
+
+# Full Curve (FC) Models
+
+Let $c_t$ be the cumulative uptake at time $t$, where $t$ is measured in weeks since rollout.
+
+Many families of sigmoid curves might reasonably capture cumulative uptake. A simple choice is the Hill function. Such a model would be written:
+
+$$
+\begin{align*}
+&c_t \sim N(\mu, \sigma) \\
+&\mu = \frac{A~t^n}{H^n + t^n} \\
+&A,~H,~n \sim \text{prior distributions} \\
+\end{align*}
+$$
+
+Essentially, this model says that uptake will asymptote to a maximum of $A$ and reach half maximal at time $t=H$, with steepness controlled by $n$.
+
+## Misspecification
+
+Cumulative uptake $c_t$ is naturally bounded by $[0,~1]$, meaning that the number of people who get vaccinated cannot be fewer than 0 or exceed the number of people in the population. The Hill model naturally obeys these constraints.
+
+However, the Hill model is misspecified in another way: while $c_t$ can never be exactly 0, it must be true that uptake is 0 before the rollout date. That said, the Hill function can get arbitrarily close to 0, so this is not likely a problem in practice.
+
+## Hyperparameters
+
+Again, the $A,~H,~n$ parameters that control uptake probably differ slightly but systematically from season to season. So hyperparameters can again be introduced with a subscript "s":
+
+$$
+\begin{align*}
+&c_t \sim N(\mu, \sigma) \\
+&\mu = \frac{A_s~t^{n_s}}{H_s^{n_s} + t^{n_s}} \\
+&A_s \sim N(A,~\sigma_A) \\
+&H_s \sim N(H,~\sigma_H) \\
+&n_s \sim N(n,~\sigma_n) \\
+&A,~H,~n,~\sigma_A,~\sigma_H,~\sigma_n,~\sigma \sim \text{prior distributions} \\
+\end{align*}
+$$
+
+And again, factors other than season, such as geographic area or demographic group, could be used to group the data.
+
+## Forecasting Uncertainty
+
+Sensible forecast uncertainty is the biggest challenge for FC models. Because the model parameters control the shape of the whole uptake curve (not just the value of the "next" data point, as in AR models), uncertainty in the posterior distribution means that:
+
+- A forecast may not "pick up" exactly where the last observed data point "left off."
+- A forecast may have wide uncertainty immediately after the forecast date, which does not expand much into the future.
+
+Suppose the last observed data point is $c_{T}$. Rather than treating $c_T$ as known (as an AR model would treat $u_{T}$ as known), an FC model still predicts $c_{T}$. If the current season does not look much like the average of past seasons in the training data, the mean model prediction for $c_{T}$ will be far from the reported value of $c_{T}$.
+
+Hyperparameters for season will help address this problem but will not solve it entirely, due to shrinkage toward the mean during partial pooling. Further thought is necessary to solve these problems.
+
+## Priorities
+
+The top priority for choosing and building an FC model is to explore how well the problems with forecasting uncertainty could be minimized. The effect of hyperparameters for season should be explored first, followed by a search for FC models constructed with more reasonable forecasting uncertainty in mind (e.g. hypertabastic models?). If/when a sensible FC model is identified, it must be built into the codebase.
