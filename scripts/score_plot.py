@@ -21,8 +21,6 @@ def plot_score(scores):
     None. The graph is saved.
 
     """
-
-    scores = scores.collect()
     score_names = scores["score_fun"].unique()
 
     score_dict = config["score_dict"]
@@ -43,7 +41,7 @@ def plot_score(scores):
 
         charts = charts + [score_chart]
 
-    return alt.hconcat(*charts).configure_title(fontSize=30)
+    return alt.hconcat(*charts).configure_title(fontSize=20)
 
 
 if __name__ == "__main__":

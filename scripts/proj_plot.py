@@ -69,7 +69,7 @@ def plot_projections(obs, pred, config):
         )
         rows.append(row)
 
-    return alt.vconcat(*rows).configure_title(fontSize=30)
+    return alt.vconcat(*rows).configure_title(fontSize=20)
 
 
 if __name__ == "__main__":
@@ -90,6 +90,4 @@ if __name__ == "__main__":
     pred = pred.drop([col for col in pred.columns if "estimate_" in col])
 
     if config["projection_plot"]["plot"]:
-        plot_projections(data, pred, config["projection_plot"]["subplot_ncols"]).save(
-            args.output
-        )
+        plot_projections(data, pred, config).save(args.output)

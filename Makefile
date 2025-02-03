@@ -10,7 +10,7 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(SCORE_PLOTS)
+all: $(SCORE_PLOTS) $(PROJ_PLOTS)
 
 $(SCORE_PLOTS): scripts/score_plot.py $(SCORES)
 	python $< --score=$(SCORES) --output=$@
