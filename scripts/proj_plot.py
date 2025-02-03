@@ -1,6 +1,7 @@
+import argparse
+
 import altair as alt
 import polars as pl
-import argparse
 import yaml
 
 

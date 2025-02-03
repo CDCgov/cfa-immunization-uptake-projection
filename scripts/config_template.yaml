@@ -53,10 +53,9 @@ score_dict:
   eos_abe: End-of-season Absolute Error
 
 # Path to save the plots
-projection_plot: 
+projection_plot:
   plot: True
   subplot_ncols: 4
 
-score_plot: 
+score_plot:
   plot: True
-
