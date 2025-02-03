@@ -5,10 +5,18 @@ CONFIG = scripts/config.yaml
 RAW_DATA = data/nis_raw.parquet
 FORECASTS = data/forecasts.parquet
 SCORES = data/scores.parquet
+PROJ_PLOTS = output/projections.png
+SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(SCORES)
+all: $(SCORE_PLOTS)
+
+$(SCORE_PLOTS): scripts/score_plot.py $(SCORES)
+	python $< --score=$(SCORES) --output=$@
+
+$(PROJ_PLOTS): scripts/proj_plot.py $(FORECASTS)
+	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
 
 $(SCORES): scripts/eval.py $(FORECASTS)
 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@

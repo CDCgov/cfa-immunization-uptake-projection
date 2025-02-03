@@ -46,3 +46,17 @@ models:
 
 # score metrics
 score_funs: [mspe, mean_bias, eos_abe]
+
+score_dict:
+  mspe: Mean Squared Prediction Error
+  mean_bias: Mean Bias
+  eos_abe: End-of-season Absolute Error
+
+# Path to save the plots
+projection_plot: 
+  plot: True
+  subplot_ncols: 4
+
+score_plot: 
+  plot: True
+
