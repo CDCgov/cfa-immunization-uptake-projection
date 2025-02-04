@@ -54,7 +54,7 @@ Under these conditions, parameter combinations that predict nonsensical future i
 
 The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution, denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$.
 
-$$
+```math
 \begin{align*}
 &c_t \sim TruncNorm(\hat{c}_t, \sigma_t, 0, 1) \\
 &\hat{c}_t = \sum_{i=0}^{t} \hat{u}_i \\
@@ -62,7 +62,7 @@ $$
 &\mu_i = \alpha + \beta_{u}\hat{u}_{i-1} + \beta_{t}t + \beta_{tu}t\hat{u}_{t-1} \\
 &\alpha,~\beta_x,~\sigma \sim \text{prior distributions} \\
 \end{align*}
-$$
+```
 
 Even still, $\hat{u}_i$ might escape $[0,~1-\hat{c}_i]$, so $\hat{c}_t$ might escape $[0,~1]$. The truncated normal distribution for $c_t$ prevents this from ultimately manifesting in nonsensical observed cumulative uptake, but some misspecification still lurks.
 
