@@ -22,9 +22,9 @@ A generic AR model of the I<sup>th</sup> order has the form:
 $$
 \begin{align*}
 &u_t \sim N(\mu_t, \sigma) \\
-&\mu_t = \sum_{i=1}^{I} \beta_{i}u_{t-i} \\
+&\mu_t = \sum_{i=0}^{t} \beta_{i}u_{i} \\
 &\beta_{i},~\sigma \sim \text{prior distributions} \\
-&\end{align*}
+\end{align*}
 $$
 
 The "linear incident uptake model" currently implemented is a first-order AR model, but with the added complexity of absolute time as a predictor, too:
@@ -34,7 +34,7 @@ $$
 &u_t \sim N(\mu_t, \sigma) \\
 &\mu_t = \alpha + \beta_{u}u_{t-1} + \beta_{t}t + \beta_{tu}tu_{t-1} \\
 &\alpha,~\beta_x,~\sigma \sim \text{prior distributions} \\
-&\end{align*}
+\end{align*}
 $$
 
 Essentially, this model says that the uptake rate changes through time ($\beta_t$) with some inertia ($\beta_u$), and that the inertia itself can change through time ($\beta_{tu}$).
@@ -52,7 +52,7 @@ Practically, nonsensical predictions as a result of this misspecification can be
 
 Under these conditions, parameter combinations that predict nonsensical future incident uptake are unlikely to be drawn from the posterior. Nonetheless, refactoring the linear incident uptake model to avoid misspecification altogether is desirable.
 
-The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution (denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$):
+The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution (denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$ ):
 
 $$
 \begin{align*}
@@ -61,7 +61,7 @@ $$
 &\hat{u}_i \sim N(\mu_i, \sigma) \\
 &\mu_i = \alpha + \beta_{u}\hat{u}_{i-1} + \beta_{t}t + \beta_{tu}t\hat{u}_{t-1} \\
 &\alpha,~\beta_x,~\sigma \sim \text{prior distributions} \\
-&\end{align*}
+\end{align*}
 $$
 
 Even still, $\hat{u}_i$ might escape $[0,~1-\hat{c}_i]$, so $\hat{c}_t$ might escape $[0,~1]$. The truncated normal distribution for $c_t$ prevents this from ultimately manifesting in nonsensical observed cumulative uptake, but some misspecification still lurks.
