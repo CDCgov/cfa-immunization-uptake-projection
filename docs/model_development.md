@@ -52,7 +52,7 @@ Practically, nonsensical predictions as a result of this misspecification can be
 
 Under these conditions, parameter combinations that predict nonsensical future incident uptake are unlikely to be drawn from the posterior. Nonetheless, refactoring the linear incident uptake model to avoid misspecification altogether is desirable.
 
-The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution (denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$ ):
+The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution, denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$.
 
 $$
 \begin{align*}
