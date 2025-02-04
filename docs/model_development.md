@@ -11,6 +11,8 @@ There are two broad types of models under consideration: autoregressive (AR) and
 
 Several facets of each model are discussed, including misspecification, hyperparameters, forecast uncertainty, and developmental priorities.
 
+Importantly, for the first version of each model, the observed cumulative uptake $c_t$, and the incident uptake $u_t = c_t - c_{t-1}$ that it implies, are considered synonymous with true uptake. In future versions of each model, it will be important to separate latent true uptake from the observed uptake. The former is never observed and the latter is subject to error, which is estimated in the NIS data.
+
 # Autoregressive (AR) Models
 
 Let $u_t$ be the incident uptake at time $t$, where $t$ is measured in weeks since rollout.
@@ -48,9 +50,19 @@ Practically, nonsensical predictions as a result of this misspecification can be
 - Priors for $\alpha$ and $\beta_x$ should have a zero mean and small variance.
 - The prior for $\sigma$ should have a small expectation.
 
-Under these conditions, parameter combinations that predict nonsensical future incident uptake are unlikely to be drawn from the posterior.
+Under these conditions, parameter combinations that predict nonsensical future incident uptake are unlikely to be drawn from the posterior. Nonetheless, refactoring the linear incident uptake model to avoid misspecification altogether is desirable.
 
-Nonetheless, refactoring the linear incident uptake model to avoid misspecification altogether is desirable. Here is an idea...
+The best approach may involve separating latent true uptake (cumulative $\hat{c}_t$ and incident $\hat{u}_t$) from observed uptake (cumulative $c_t$ and incident $u_t$), and making use of the observed variability ($\sigma_t$) that is also reported alongside $c_t$ in the data. This allows the natural limits of $[0,~1]$ to be imposed on the observed uptake $c_t$, via a truncated normal distribution (denoted $TruncNorm(\text{mean, variance, lower bound, upper bound})$):
+
+$$
+\begin{align*}
+&c_t \sim TruncNorm(\hat{c}_t, \sigma_t, 0, 1) \\
+&\hat{c}_t = \sum_{i=0}^{t} \hat{u}_i \\
+&\hat{u}_i \sim N(\mu_i, \sigma) \\
+&\mu_i = \alpha + \beta_{u}\hat{u}_{i-1} + \beta_{t}t + \beta_{tu}t\hat{u}_{t-1} \\
+&\alpha,~\beta_x,~\sigma \sim \text{prior distributions} \\
+&\end{align*}
+$$
 
 An alternative formulation might replace the incident uptake $u_t$ with the fractional incident uptake $f_t$, where $f_t$ is the _fraction_ of the unvaccinated population in week $t-1$ who got vaccinated in week $t$. Mathematically, $f_t = \frac{u_t}{1-c_{t-1}} = \frac{c_t - c_{t-1}}{1-c_{t-1}}$. Notice that $f_t$ is bounded by $[0,~1]$. Thus, the following model would not be misspecified:
 
