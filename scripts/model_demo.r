@@ -21,7 +21,7 @@ library(lubridate)
 library(brms)
 
 # Set the user-controlled parameters
-disease <- "covid" # "covid" or "flu"
+disease <- "flu" # "covid" or "flu"
 forecast_date <- as.Date("2024-10-25")
 end_date <- as.Date("2025-05-31")
 
