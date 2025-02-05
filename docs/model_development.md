@@ -22,7 +22,7 @@ A generic AR model of the I<sup>th</sup> order has the form:
 $$
 \begin{align*}
 &u_t \sim N(\mu_t, \sigma) \\
-&\mu_t = \sum_{i=0}^{t} \beta_{i}u_{i} \\
+&\mu_t = \sum_{i=0}^{t-1} \beta_{i}u_{i} \\
 &\beta_{i},~\sigma \sim \text{prior distributions} \\
 \end{align*}
 $$
