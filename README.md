@@ -31,7 +31,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 #### Evaluation scores
 - Mean squared prediction error on incident projections ("mspe")
 - Mean bias on incident projections ("mean_bias")
-- Absolute error of end-of-season uptake on incident projections ("eos_abe)
+- Absolute error of end-of-season uptake on incident projections ("eos_abe")
 
 #### Package workflow:
 
