@@ -23,7 +23,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
     - data: specify the type of vaccine data in terms of: rollout time frame, grouping factors including geography, demography (domain_type, domain), and vaccine type(indicator_type, indicator).
     - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (*d).
-    - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned. 
+    - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
     - score_funs: specify the evaluation metrics. Can be a list including "mspe", "mean_bias" and "eos_abe".
 6. `make all` to get cleaned data "data/nis_raw.parquet", forecasts "data/forecasts.parquet", evaluation scores "data/scores.parquet", forecast plot "output/projections.png", and evaluation score plot "output/scores.png".
