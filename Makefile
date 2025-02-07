@@ -10,13 +10,16 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(SCORE_PLOTS) $(PROJ_PLOTS)
+all: $(PROJ_PLOTS) $(SCORE_PLOTS)
 
-$(SCORE_PLOTS): scripts/score_plot.py $(SCORES)
-	python $< --score=$(SCORES) --output=$@
+$(PROJ_PLOTS) $(SCORE_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA) $(SCORES)
+	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) --proj_output=$(PROJ_PLOTS)  --score_output=$(SCORE_PLOTS)
 
-$(PROJ_PLOTS): scripts/proj_plot.py $(FORECASTS)
-	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
+# $(SCORE_PLOTS): scripts/score_plot.py $(SCORES)
+# 	python $< --score=$(SCORES) --output=$@
+
+# $(PROJ_PLOTS): scripts/proj_plot.py $(FORECASTS)
+# 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
 
 $(SCORES): scripts/eval.py $(FORECASTS)
 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
