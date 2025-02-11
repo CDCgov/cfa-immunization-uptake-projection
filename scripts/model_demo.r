@@ -21,7 +21,7 @@ library(lubridate)
 library(brms)
 
 # Set the user-controlled parameters
-disease <- "covid" # "covid" or "flu"
+disease <- "flu" # "covid" or "flu"
 forecast_date <- as.Date("2024-10-25")
 end_date <- as.Date("2025-05-31")
 
@@ -140,9 +140,15 @@ train_lim$elapsed_std <- scale(train_lim$elapsed)[, 1]
 train_lim$previous_std <- scale(train_lim$previous)[, 1]
 
 # Build the LIM
+priors <- c(
+    prior(normal(0, 0.2), class = "Intercept"),
+    prior(normal(0, 0.2), class = "b"),
+    prior(cauchy(0, 0.5), class = "sigma")
+)
 lim <- brms::brm(daily_std ~ previous_std * elapsed_std,
     data = train_lim,
-    family = gaussian()
+    family = gaussian(),
+    prior = priors
 )
 
 # Set up data frame for LIM projection
@@ -215,11 +221,30 @@ chm_proj$cumulative <- rowMeans(proj)
 chm_proj$cumulative_uci <- apply(proj, 1, quantile, 0.975)
 chm_proj$cumulative_lci <- apply(proj, 1, quantile, 0.025)
 
+# Build the CHM with hyperparameters for season
+hill_season <- bf(cumulative ~ (A * elapsed^n) / (H^n + elapsed^n),
+    A + H ~ 1 + (1 | season), n ~ 1,
+    nl = T
+)
+chms <- brms::brm(hill_season, data = train, prior = priors)
+
+# Set up data frame for CHM projection
+chms_proj <- lim_proj[, c("date", "season", "elapsed")]
+
+# Draw 1000 samples per timepoint from the CHM
+proj <- t(brms::posterior_predict(chms, newdata = chms_proj, ndraws = 1000))
+
+# Record mean & conf int for cumulative uptake predicted by CHM
+chms_proj$cumulative <- rowMeans(proj)
+chms_proj$cumulative_uci <- apply(proj, 1, quantile, 0.975)
+chms_proj$cumulative_lci <- apply(proj, 1, quantile, 0.025)
+
 # Combine LIM and CHM predictions for a single plot
 lim_proj <- select(lim_proj, -interval, )
 lim_proj$model <- rep("LIM", nrow(lim_proj))
 chm_proj$model <- rep("CHM", nrow(chm_proj))
-proj <- rbind(lim_proj, chm_proj)
+chms_proj$model <- rep("CHM by Season", nrow(chms_proj))
+proj <- rbind(lim_proj, chm_proj, chms_proj)
 data <- select(data, date, season, elapsed, cumulative)
 data$cumulative_uci <- data$cumulative
 data$cumulative_lci <- data$cumulative
@@ -254,11 +279,11 @@ ggplot() +
     theme_bw() +
     theme(text = element_text(size = 15)) +
     scale_color_manual(
-        values = c("firebrick", "black", "dodgerblue"),
+        values = c("lightpink", "firebrick", "black", "dodgerblue"),
         name = ""
     ) +
     scale_fill_manual(
-        values = c("firebrick", "black", "dodgerblue"),
+        values = c("lightpink", "firebrick", "black", "dodgerblue"),
         name = ""
     ) +
     geom_vline(
