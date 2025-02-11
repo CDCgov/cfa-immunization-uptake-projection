@@ -46,3 +46,12 @@ models:
 
 # score metrics
 score_funs: [mspe, mean_bias, eos_abe]
+
+
+
+# Path to save the plots
+projection_plot:
+  plot: True
+
+score_plot:
+  plot: True

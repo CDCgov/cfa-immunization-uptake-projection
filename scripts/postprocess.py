@@ -41,14 +41,6 @@ def plot_projections(obs, pred, n_columns):
     pred = pred.with_columns(
         date_str=("Forecast Date:" + pl.col("forecast_start").cast(pl.Utf8))
     )
-    obs_chart = (
-        alt.Chart(obs)
-        .mark_point()
-        .encode(
-            x="time_end:T",
-            y="estimate:Q",
-        )
-    )
 
     pred_chart = (
         alt.Chart()
