@@ -156,6 +156,32 @@ Suppose the last observed data point is $c_{T}$. Rather than treating $c_T$ as k
 
 Hyperparameters for season will help address this problem but will not solve it entirely, due to shrinkage toward the mean during partial pooling. Further thought is necessary to solve these problems.
 
+## Hypertabastic Models
+
+Above, the example of a full curve model is the Hill model. But this is not the only choice. Another intriguing choice is a hypertabastic model, which is a subclass of survival models.
+
+The hypertabastic distribution is a continuous distribution of waiting times $t > 0$ until an event. If that event is defined as vaccination, then the cumulative uptake curve can be considered an observation of the hypertabastic cumulative distribution function ("cdf"). The hypertabastic cdf for $t > 0$ is given by:
+
+$H(t) = 1 - Sech[\alpha(1 - t^\beta Coth(t^\beta)) / \beta]$
+
+Like an cdf, the hypertabastic cdf is monotonically increasing and asymptotes at 1. Within these constraints, changing the values of the $\alpha > 0$ and $\beta > 0$ parameters can produce many different cdf shapes - this is the primary advantage of hypertabastic models.
+
+Because vaccine uptake does not asymptote at 1, another parameter $\gamma > 0$ must be introduced, which merely changes the asymptotic maximum uptake:
+
+$H(t) = \gamma - \gamma * Sech[\alpha(1 - t^\beta Coth(t^\beta)) / \beta]$
+
+With this adjustment, the hypertabastic model of vaccine uptake can be written:
+
+$$
+\begin{align*}
+&c_t \sim N(\mu_t, \sigma) \\
+&\mu_t = H(t, \alpha, \beta, \gamma) \\
+&\alpha,~\beta,~\gamma \sim \text{prior distributions} \\
+\end{align*}
+$$
+
+As mentioned above for the other models, hyperparameters can be introduced for season, observed errors $\sigma_t$ can be used in place of a constant unobserved error $\sigma$, and the rollout date $t_0$ can be treated as a parameter to fit rather than a known datum.
+
 ## Priorities
 
 The top priority for choosing and building an FC model is to explore how well the problems with forecasting uncertainty could be minimized. The effect of hyperparameters for season should be explored first, followed by a search for FC models constructed with more reasonable forecasting uncertainty in mind (e.g. hypertabastic models?). If/when a sensible FC model is identified, it must be built into the codebase.
