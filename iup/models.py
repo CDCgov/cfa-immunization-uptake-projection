@@ -394,6 +394,10 @@ class LinearIncidentUptakeModel(UptakeModel):
         - daily-average uptake in the interval preceding each date
         - daily-average uptake in the interval preceding the previous date
         """
+        assert df["time_end"].is_sorted(), (
+            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
+        )
+
         return (
             IncidentUptakeData(df)
             .with_columns(
@@ -409,6 +413,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
         """
         Extract a time elapsed column from a date column, as polars expressions.
+        This ought to be called .over(season)
 
         Parameters
         date_col: pl.Expr
@@ -422,6 +427,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Date column should be chronologically sorted in advance.
         Time difference is always in days.
         """
+
         return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
 
     @classmethod
@@ -633,6 +639,10 @@ class LinearIncidentUptakeModel(UptakeModel):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
+        assert df["time_end"].is_sorted(), (
+            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
+        )
+
         rank = pl.col("time_end").rank().over(group_cols)
         shifted_standard_interval = (
             pl.col("time_end")
@@ -657,6 +667,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def date_to_interval(date_col: pl.Expr) -> pl.Expr:
         """
         Extract a time interval column from a date column, as polars expressions.
+        Should be called .over(season)
 
         Parameters
         date_col: pl.Expr
