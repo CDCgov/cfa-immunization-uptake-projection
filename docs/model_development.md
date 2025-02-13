@@ -164,7 +164,7 @@ The hypertabastic distribution is a continuous distribution of waiting times $t 
 
 $H(t) = 1 - Sech[\alpha(1 - t^\beta Coth(t^\beta)) / \beta]$
 
-Like an cdf, the hypertabastic cdf is monotonically increasing and asymptotes at 1. Within these constraints, changing the values of the $\alpha > 0$ and $\beta > 0$ parameters can produce many different cdf shapes - this is the primary advantage of hypertabastic models.
+Like any cdf, the hypertabastic cdf is monotonically increasing and asymptotes at 1. Within these constraints, changing the values of the $\alpha > 0$ and $\beta > 0$ parameters can produce many different cdf shapes - this is the primary advantage of hypertabastic models.
 
 Because vaccine uptake does not asymptote at 1, another parameter $\gamma > 0$ must be introduced, which merely changes the asymptotic maximum uptake:
 
