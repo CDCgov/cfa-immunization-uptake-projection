@@ -21,7 +21,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
 4. Cache NIS data with `make cache`
 5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-    - data: specify the type of vaccine data in terms of: rollout time frame, grouping factors including geography, demography (domain_type, domain), and vaccine type(indicator_type, indicator).
+    - data: specify the type of vaccine data in terms of: rollout dates, grouping factors including geography, demography (`domain_type` and `domain`), and metric (`indicator_type`, `indicator`).
     - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (*d).
     - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
