@@ -21,11 +21,80 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
 4. Cache NIS data with `make cache`
 5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-    - data: specify the type of vaccine data in terms of: geography, demography (domain), and vaccine status(indicator).
-    - timeframe: specify the start and the end of time in predicted projections or evaluation.
-    - option: specify the returned output. Can be either "prediction" or "evaluation".
-    - metrics: specify the evaluation metrics. Only valid when option is "evaluation". Can be one of "mspe", "mean_bias","end_of_season_error", or "all".
-6. `make run`
+    - data: specify the type of vaccine data in terms of: rollout dates, grouping factors including geography, demography (`domain_type` and `domain`), and metric (`indicator_type`, `indicator`).
+    - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
+    - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
+    - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
+    - score_funs: specify the evaluation metrics. Can be a list including "mspe", "mean_bias" and "eos_abe".
+6. `make all` to get cleaned data "data/nis_raw.parquet", forecasts "data/forecasts.parquet", evaluation scores "data/scores.parquet", forecast plot "output/projections.png", and evaluation score plot "output/scores.png".
+
+#### Evaluation scores
+- Mean squared prediction error on incident projections ("mspe")
+- Mean bias on incident projections ("mean_bias")
+- Absolute error of end-of-season uptake on incident projections ("eos_abe")
+
+#### Package workflow:
+
+```mermaid
+
+flowchart TB
+
+nis_data(nis_raw.parquet)
+forecast(forecasts.parquet)
+scores(scores.parquet)
+config{{config.yaml}}
+proj_plot[projections.png]
+score_plot[scores.png]
+
+subgraph raw data
+NIS
+end
+
+subgraph clean data with seasons
+nis_data
+end
+
+subgraph prediction by seasons
+forecast
+end
+
+subgraph evaluation scores
+scores
+end
+
+subgraph prediction plots
+proj_plot
+end
+
+subgraph score plots
+score_plot
+end
+
+NIS -->preprocess.py --> nis_data
+nis_data --> forecast.py --> forecast
+forecast --> eval.py --> scores
+scores --> postprocess.py --> score_plot
+nis_data --> postprocess.py --> proj_plot
+forecast --> postprocess.py
+
+config --> preprocess.py
+config --> forecast.py
+config --> eval.py
+
+
+style nis_data fill:#7f00ff
+style forecast fill:#7f00ff
+style scores fill:#7f00ff
+style config fill:#f58742
+style preprocess.py fill:#0080ff
+style forecast.py fill:#0080ff
+style eval.py fill:#0080ff
+style postprocess.py fill:#0080ff
+style proj_plot fill:#ff6666
+style score_plot fill: #ff6666
+
+
+```
 
 ## Project admins
 
