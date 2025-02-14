@@ -22,7 +22,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 4. Cache NIS data with `make cache`
 5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
     - data: specify the type of vaccine data in terms of: rollout dates, grouping factors including geography, demography (`domain_type` and `domain`), and metric (`indicator_type`, `indicator`).
-    - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (*d).
+    - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
     - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
     - score_funs: specify the evaluation metrics. Can be a list including "mspe", "mean_bias" and "eos_abe".
