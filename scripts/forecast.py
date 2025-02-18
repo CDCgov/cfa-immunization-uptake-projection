@@ -93,7 +93,7 @@ def run_forecast(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file", default="scripts/config.yaml")
+    p.add_argument("--config", help="config file")
     p.add_argument("--input", help="input data")
     p.add_argument("--output", help="output parquet file")
     args = p.parse_args()

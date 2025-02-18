@@ -54,13 +54,13 @@ def eval_all_forecasts(data, pred, config):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file", default="scripts/config.yaml")
+    p.add_argument("--config", help="config file")
     p.add_argument("--pred", help="forecast data")
     p.add_argument("--obs", help="observed data")
     p.add_argument("--output", help="output parquet file")
     args = p.parse_args()
 
-    with open(args.config, "r") as f:
+    with open(args.config) as f:
         config = yaml.safe_load(f)
 
     pred = pl.scan_parquet(args.pred).collect()

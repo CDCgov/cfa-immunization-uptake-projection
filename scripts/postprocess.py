@@ -1,11 +1,11 @@
 import argparse
+import datetime
 
 import altair as alt
 import polars as pl
-import yaml
 
 
-def plot_projections(obs, pred, n_columns):
+def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     """
     Save a multiple-grid graph with the comparison between the observed uptake and the prediction,
     initiated over the season.
@@ -15,55 +15,55 @@ def plot_projections(obs, pred, n_columns):
     obs: polars.Dataframe
         The observed uptake data frame, indicating the cumulative vaccine uptake as of `time_end`.
     pred: polars.Dataframe
-        The predicted daily uptake, differed by forecast date, must include columns `forecast_start` and `estimate`.
-    n_columns: int
-        The number of columns in the multiple-grid graph.
+        The predicted daily uptake, differed by forecast date, must include columns
+        `forecast_start` and `estimate`.
 
     Return:
     -------------
-    None. The graph is saved.
-
+    chart object
     """
 
-    # input check #
+    # input check
     if "time_end" not in obs.columns or "estimate" not in obs.columns:
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
-    # plot weekly initiated prediction #
-    time_axis = alt.Axis(format="%Y-%m", tickCount="month")
+    assert obs["geography"].unique().to_list() == ["nation"], "Geography is not unique"
+    assert pred["geography"].unique().to_list() == ["nation"], "Geography is not unique"
 
-    obs_chart = (
-        alt.Chart(obs)
-        .mark_circle(color="black")
-        .encode(alt.X("time_end", axis=time_axis), alt.Y("estimate"))
+    # get every model/forecast date combo
+    models_forecasts = pred.select(["model", "forecast_start"]).unique()
+
+    # for every model and forecast date, merge in the observed value
+    # column "type" will be either "obs" or "pred"
+    plot_obs = (
+        obs.join(models_forecasts, how="cross")
+        .with_columns(pl.lit("obs").alias("type"))
+        .select(["type", "model", "forecast_start", "time_end", "estimate"])
     )
 
-    pred = pred.with_columns(
-        date_str=("Forecast Date:" + pl.col("forecast_start").cast(pl.Utf8))
+    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(
+        ["type", "model", "forecast_start", "time_end", "estimate"]
     )
 
-    pred_chart = (
-        alt.Chart()
-        .mark_line(color="red")
-        .encode(
-            x="time_end:T",
-            y="estimate:Q",
-        )
+    plot_data = pl.concat([plot_obs, plot_pred]).with_columns(
+        (pl.col("time_end") < datetime.date(2024, 9, 1)).alias("season_kludge")
     )
 
     return (
-        alt.layer(obs_chart, pred_chart, data=pred)
-        .facet(
-            facet=alt.Facet(
-                "date_str:N", title=None, header=alt.Header(labelFontSize=16)
-            ),
-            columns=n_columns,
+        alt.Chart(plot_data)
+        .mark_line()
+        .encode(
+            alt.X("time_end:T", axis=alt.Axis(format="%Y-%m", tickCount="month")),
+            alt.Y("estimate:Q"),
+            alt.Column("model"),
+            alt.Row("forecast_start:T"),
+            alt.Color("type"),
+            alt.Detail("season_kludge"),
         )
-        .resolve_axis(x="independent")
     )
 
 
-def plot_score(scores):
+def plot_score(scores: pl.DataFrame):
     """
     Save a evaluation score plot, varied by forecast start date.
 
@@ -76,8 +76,7 @@ def plot_score(scores):
 
     Return:
     -------------
-    None. The graph is saved.
-
+    chart object
     """
     score_names = scores["score_fun"].unique()
 
@@ -87,28 +86,23 @@ def plot_score(scores):
         "eos_abe": "End-of-season Absolute Error",
     }
 
-    charts = []
-    for score_name in score_names:
-        score = scores.filter(pl.col("score_fun") == score_name)
+    # every score name should have a label for the plot
+    assert set(score_names).issubset(score_dict.keys())
 
-        score_chart = (
-            alt.Chart(score)
-            .mark_point()
-            .encode(
-                alt.X("forecast_start:T", title="Forecast Start"),
-                alt.Y("score:Q", title="Score"),
-            )
-            .properties(title=score_dict[score_name])
+    return (
+        alt.Chart(scores.with_columns(pl.col("score_fun").replace_strict(score_dict)))
+        .mark_point()
+        .encode(
+            alt.X("forecast_start:T", title="Forecast Start"),
+            alt.Y("score:Q", title="Score"),
+            alt.Column("score_fun", header=alt.Header(labelFontSize=20), title=None),
         )
-
-        charts = charts + [score_chart]
-
-    return alt.hconcat(*charts).configure_title(fontSize=20)
+        .resolve_scale(y="independent")
+    )
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file", default="scripts/config.yaml")
     p.add_argument("--pred", help="forecast data")
     p.add_argument("--obs", help="observed data")
     p.add_argument("--score", help="evaluation scores")
@@ -116,16 +110,9 @@ if __name__ == "__main__":
     p.add_argument("--score_output", help="png file of score plot")
     args = p.parse_args()
 
-    with open(args.config, "r") as f:
-        config = yaml.safe_load(f)
+    pred = pl.read_parquet(args.pred)
+    data = pl.read_parquet(args.obs)
+    plot_projections(data, pred).save(args.proj_output)
 
-    pred = pl.scan_parquet(args.pred).collect()
-    data = pl.scan_parquet(args.obs).collect()
-
-    if config["projection_plot"]["plot"]:
-        plot_projections(data, pred, 4).save(args.proj_output)
-
-    score = pl.scan_parquet(args.score).collect()
-
-    if config["score_plot"]["plot"]:
-        plot_score(score).save(args.score_output)
+    score = pl.read_parquet(args.score)
+    plot_score(score).save(args.score_output)

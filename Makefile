@@ -13,22 +13,18 @@ SCORE_PLOTS = output/scores.png
 all: $(PROJ_PLOTS) $(SCORE_PLOTS)
 
 $(PROJ_PLOTS) $(SCORE_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA) $(SCORES)
-	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) --proj_output=$(PROJ_PLOTS)  --score_output=$(SCORE_PLOTS)
+	python $< \
+		--pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) \
+		--proj_output=$(PROJ_PLOTS) --score_output=$(SCORE_PLOTS)
 
-# $(SCORE_PLOTS): scripts/score_plot.py $(SCORES)
-# 	python $< --score=$(SCORES) --output=$@
+$(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
+	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
-# $(PROJ_PLOTS): scripts/proj_plot.py $(FORECASTS)
-# 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
+$(FORECASTS): scripts/forecast.py $(RAW_DATA) $(CONFIG)
+	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
-$(SCORES): scripts/eval.py $(FORECASTS)
-	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
-
-$(FORECASTS): scripts/forecast.py $(RAW_DATA)
-	python $< --input=$(RAW_DATA) --output=$@
-
-$(RAW_DATA): scripts/preprocess.py cache
-	python $< --cache=$(NIS_CACHE)/clean --output=$@
+$(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
+	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
 
 cache: $(NIS_CACHE)/status.txt
 
