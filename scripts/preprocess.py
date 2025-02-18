@@ -16,8 +16,12 @@ def preprocess(
     groups: List[str],
     rollouts: List[datetime.date],
 ) -> iup.CumulativeUptakeData:
-    # Prune data to correct rows and columns
-    data = raw_data.filter(**filters).select(keep).sort("time_end").collect()
+    data = (
+        raw_data.filter([pl.col(k).is_in(v) for k, v in filters.items()])
+        .select(keep)
+        .sort("time_end")
+        .collect()
+    )
 
     # Ensure that the desired grouping factors are found in all data sets
     assert set(data.columns).issuperset(groups)
@@ -49,3 +53,5 @@ if __name__ == "__main__":
     )
 
     clean_data.write_parquet(args.output)
+
+    print(clean_data)
