@@ -10,7 +10,7 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import IncidentUptakeData, SampleForecast, UptakeData
+from iup import IncidentUptakeData, SampleForecast
 
 
 class UptakeModel(abc.ABC):
@@ -121,16 +121,17 @@ class LinearIncidentUptakeModel(UptakeModel):
         - Days elapsed since rollout on this date
         - Cumulative uptake since rollout on this date
         """
-        start = data.group_by(group_cols).agg(
-            [
-                pl.col("time_end").last().alias("last_date"),
-                pl.col("daily").last().alias("last_daily"),
-                pl.col("elapsed").last().alias("last_elapsed"),
-                (pl.col("estimate"))
-                .filter(pl.col("season") == pl.col("season").max())
-                .sum()
-                .alias("last_cumulative"),
-            ]
+        start = (
+            data.group_by(group_cols)
+            .agg(
+                [
+                    pl.col("time_end").last().alias("last_date"),
+                    pl.col("daily").last().alias("last_daily"),
+                    pl.col("elapsed").last().alias("last_elapsed"),
+                    (pl.col("estimate")).sum().alias("last_cumulative"),
+                ]
+            )
+            .filter(pl.col("season") == pl.col("season").max())
         )
 
         return start
@@ -401,7 +402,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         return (
             IncidentUptakeData(df)
             .with_columns(
-                season=pl.col("time_end").pipe(UptakeData.date_to_season),
+                # season=pl.col("time_end").pipe(UptakeData.date_to_season),
                 elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
                 interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
             )
@@ -429,6 +430,26 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
 
         return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
+
+    @staticmethod
+    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract a time interval column from a date column, as polars expressions.
+        Should be called .over(season)
+
+        Parameters
+        date_col: pl.Expr
+            column of dates
+
+        Returns
+        pl.Expr
+            column of the number of days between each date and the previous
+
+        Details
+        Date column should be chronologically sorted in advance.
+        Time difference is always in days.
+        """
+        return date_col.diff().dt.total_days().cast(pl.Float64)
 
     @classmethod
     def project_sequentially(
@@ -662,23 +683,3 @@ class LinearIncidentUptakeModel(UptakeModel):
                 (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
             )
         )
-
-    @staticmethod
-    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time interval column from a date column, as polars expressions.
-        Should be called .over(season)
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days between each date and the previous
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        """
-        return date_col.diff().dt.total_days().cast(pl.Float64)

@@ -3,6 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
+import iup
 import iup.models
 
 
@@ -54,9 +55,16 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
+    # Include season as a grouping factor
+    grouping_factors = grouping_factors + ["season"]
 
     # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
-    incident_data = data.to_incident(grouping_factors)
+    cumulative_data = data.with_columns(
+        season=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
+    )
+    incident_data = iup.CumulativeUptakeData(cumulative_data).to_incident(
+        grouping_factors
+    )
 
     # Prune to only the training portion
     incident_train_data = iup.IncidentUptakeData.split_train_test(
@@ -83,7 +91,7 @@ def run_forecast(
     )
 
     cumulative_projections = (
-        cumulative_projections.group_by(config["data"]["groups"] + ["time_end"])
+        cumulative_projections.group_by(grouping_factors + ["time_end"])
         .agg(pl.col("estimate").mean().alias("estimate"))
         .sort("time_end")
     )
