@@ -5,19 +5,26 @@ CONFIG = scripts/config.yaml
 RAW_DATA = data/nis_raw.parquet
 FORECASTS = data/forecasts.parquet
 SCORES = data/scores.parquet
+PROJ_PLOTS = output/projections.png
+SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(SCORES)
+all: $(PROJ_PLOTS) $(SCORE_PLOTS)
 
-$(SCORES): scripts/eval.py $(FORECASTS)
-	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --output=$@
+$(PROJ_PLOTS) $(SCORE_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA) $(SCORES)
+	python $< \
+		--pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) \
+		--proj_output=$(PROJ_PLOTS) --score_output=$(SCORE_PLOTS)
 
-$(FORECASTS): scripts/forecast.py $(RAW_DATA)
-	python $< --input=$(RAW_DATA) --output=$@
+$(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
+	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
-$(RAW_DATA): scripts/preprocess.py cache
-	python $< --cache=$(NIS_CACHE)/clean --output=$@
+$(FORECASTS): scripts/forecast.py $(RAW_DATA) $(CONFIG)
+	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
+
+$(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
+	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
 
 cache: $(NIS_CACHE)/status.txt
 
