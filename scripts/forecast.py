@@ -85,10 +85,18 @@ def run_forecast(
         model["mcmc"],
     )
 
+    # Get test data, if there is any, to know exact dates for projection
+    incident_test_data = iup.IncidentUptakeData.split_train_test(
+        incident_data, forecast_start, "test"
+    )
+    if incident_test_data.height == 0:
+        incident_test_data = None
+
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
         config["forecast_timeframe"]["interval"],
+        incident_test_data,
         grouping_factors,
     )
 

@@ -35,8 +35,6 @@ def eval_all_forecasts(data, pred, config):
                     data.filter(
                         pl.col("time_end") >= forecast_start,
                         pl.col("time_end") <= config["forecast_timeframe"]["end"],
-                    ).with_columns(
-                        season=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
                     )
                 ).to_incident(config["data"]["groups"] + ["season"])
 

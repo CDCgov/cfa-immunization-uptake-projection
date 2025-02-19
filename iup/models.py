@@ -303,6 +303,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
+        test_data: pl.DataFrame | None,
         group_cols: List[str,],
     ) -> pl.DataFrame:
         """
@@ -318,6 +319,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
         group_cols: (str,)
             name(s) of the columns for the grouping factors
 
@@ -329,17 +332,30 @@ class LinearIncidentUptakeModel(UptakeModel):
         The desired time frame for projections is repeated over grouping factors,
         if any grouping factors exist.
         """
-        scaffold = (
-            pl.date_range(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                eager=True,
+        # If there is test data such that evaluation will be performed,
+        # use exactly the dates that are in the test data
+        if test_data is not None:
+            scaffold = (
+                test_data.filter(
+                    (pl.col("time_end") >= start_date)
+                    & (pl.col("time_end") <= end_date)
+                )
+                .select("time_end")
+                .with_columns(estimate=pl.lit(0.0))
             )
-            .alias("time_end")
-            .to_frame()
-            .with_columns(estimate=pl.lit(0.0))
-        )
+        # If there are no test data, use exactly the dates that were provided
+        else:
+            scaffold = (
+                pl.date_range(
+                    start=start_date,
+                    end=end_date,
+                    interval=interval,
+                    eager=True,
+                )
+                .alias("time_end")
+                .to_frame()
+                .with_columns(estimate=pl.lit(0.0))
+            )
 
         if len(group_cols) > 0:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
@@ -535,6 +551,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
+        test_data: pl.DataFrame | None,
         group_cols: List[str,],
     ) -> pl.DataFrame:
         """
@@ -548,6 +565,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
         group_cols: (str,)
             name(s) of the columns for the grouping factors
 
@@ -567,12 +586,17 @@ class LinearIncidentUptakeModel(UptakeModel):
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
         """
+        # If there are test data, the actual start date for projections should
+        # be the first date in the test data
+        if test_data is not None:
+            start_date = min(test_data["time_end"])
+
         self.start = self.start.with_columns(
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
         cumulative_projection = self.build_scaffold(
-            self.start, start_date, end_date, interval, group_cols
+            self.start, start_date, end_date, interval, test_data, group_cols
         ).drop("estimate")
 
         if len(group_cols) > 0:
