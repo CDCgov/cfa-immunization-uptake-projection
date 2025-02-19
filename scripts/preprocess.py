@@ -16,7 +16,7 @@ def preprocess(
     groups: List[str],
     rollouts: List[datetime.date],
 ) -> iup.CumulativeUptakeData:
-    data = (
+    data = iup.CumulativeUptakeData(
         raw_data.filter([pl.col(k).is_in(v) for k, v in filters.items()])
         .select(keep)
         .sort("time_end")
@@ -27,7 +27,15 @@ def preprocess(
     assert set(data.columns).issuperset(groups)
 
     # Insert rollout dates into the data
-    return iup.CumulativeUptakeData(data).insert_rollouts(rollouts, groups)
+    return iup.CumulativeUptakeData(
+        data.insert_rollouts(rollouts, groups).with_columns(
+            season=pl.col("time_end").pipe(
+                iup.UptakeData.date_to_season,
+                season_start_month=min([d.month for d in config["data"]["rollouts"]]),
+                season_start_day=min([d.day for d in config["data"]["rollouts"]]),
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

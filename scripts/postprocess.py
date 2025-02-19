@@ -3,8 +3,6 @@ import argparse
 import altair as alt
 import polars as pl
 
-import iup
-
 
 def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     """
@@ -35,10 +33,7 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     # column "type" will be either "obs" or "pred"
     plot_obs = (
         obs.join(models_forecasts, how="cross")
-        .with_columns(
-            type=pl.lit("obs"),
-            season=pl.col("time_end").pipe(iup.UptakeData.date_to_season),
-        )
+        .with_columns(type=pl.lit("obs"))
         .select(["type", "model", "forecast_start", "time_end", "estimate", "season"])
         .filter(pl.col("season").is_in(pred["season"].unique()))
     )
