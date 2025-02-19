@@ -219,7 +219,11 @@ class CumulativeUptakeData(UptakeData):
         assert (
             (
                 frame.with_columns(
-                    season=pl.col("time_end").pipe(UptakeData.date_to_season)
+                    season=pl.col("time_end").pipe(
+                        UptakeData.date_to_season,
+                        season_start_month=min([d.month for d in rollouts]),
+                        season_start_day=min([d.day for d in rollouts]),
+                    )
                 )
                 .with_columns(
                     min=(pl.col("estimate") - pl.min("estimate")).over(group_cols)

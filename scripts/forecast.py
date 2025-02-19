@@ -57,8 +57,13 @@ def run_forecast(
     """Run a single model for a single forecast date"""
     # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
     cumulative_data = data.with_columns(
-        season=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
+        season=pl.col("time_end").pipe(
+            iup.UptakeData.date_to_season,
+            season_start_month=min([d.month for d in config["data"]["rollouts"]]),
+            season_start_day=min([d.day for d in config["data"]["rollouts"]]),
+        )
     )
+
     incident_data = iup.CumulativeUptakeData(cumulative_data).to_incident(
         grouping_factors
     )
