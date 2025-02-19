@@ -153,10 +153,22 @@ def test_build_scaffold_handles_groups():
     start_date = dt.date(2020, 2, 1)
     end_date = dt.date(2020, 2, 29)
     interval = "7d"
+    test_data = pl.DataFrame(
+        {
+            "time_end": [
+                dt.date(2020, 2, 1),
+                dt.date(2020, 2, 8),
+                dt.date(2020, 2, 15),
+                dt.date(2020, 2, 22),
+                dt.date(2020, 2, 29),
+            ],
+            "estimate": 0.0,
+        }
+    )
     group_cols = ["geography", "season"]
 
     output = iup.models.LinearIncidentUptakeModel.build_scaffold(
-        start, start_date, end_date, interval, group_cols
+        start, start_date, end_date, interval, test_data, group_cols
     )
 
     assert output.shape == (10, 8)
