@@ -31,7 +31,7 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
             forecast = run_forecast(
                 model,
                 data,
-                grouping_factors=config["data"]["groups"],
+                grouping_factors=config["data"]["groups"] + ["season"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
             )
@@ -55,9 +55,6 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    # Include season as a grouping factor
-    grouping_factors = grouping_factors + ["season"]
-
     # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
     cumulative_data = data.with_columns(
         season=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
@@ -75,7 +72,7 @@ def run_forecast(
     assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
         f"{model['name']} is not a valid model type!"
     )
-    ""
+
     fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
         incident_train_data,
         grouping_factors,

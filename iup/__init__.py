@@ -113,13 +113,13 @@ class UptakeData(Data):
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
-        self, group_cols: List[str,] | None, last_cumulative=None
+        self, group_cols: List[str,], last_cumulative=None
     ) -> "CumulativeUptakeData":
         """
         Convert incident to cumulative uptake data.
 
         Parameters
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns of grouping factors
         last_cumulative: pl.DataFrame
             additional cumulative uptake absent from the incident data, for each group
@@ -136,7 +136,7 @@ class IncidentUptakeData(UptakeData):
         out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
 
         if last_cumulative is not None:
-            if group_cols is not None:
+            if len(group_cols) > 0:
                 out = out.join(last_cumulative, on=group_cols)
             else:
                 out = out.with_columns(
@@ -159,12 +159,12 @@ class CumulativeUptakeData(UptakeData):
             "cumulative uptake `estimate` must be a proportion"
         )
 
-    def to_incident(self, group_cols: List[str,] | None) -> IncidentUptakeData:
+    def to_incident(self, group_cols: List[str,]) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
 
         Parameters
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns of grouping factors
 
         Returns
@@ -181,7 +181,7 @@ class CumulativeUptakeData(UptakeData):
         return IncidentUptakeData(out)
 
     def insert_rollouts(
-        self, rollouts: List[dt.date], group_cols: List[str] | None
+        self, rollouts: List[dt.date], group_cols: List[str]
     ) -> "CumulativeUptakeData":
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
@@ -189,7 +189,7 @@ class CumulativeUptakeData(UptakeData):
         Parameters
         rollout: List[dt.date]
             list of rollout dates
-        group_cols: tuple[str] | None
+        group_cols: tuple[str]
             names of grouping factor columns
 
         Returns
@@ -200,7 +200,7 @@ class CumulativeUptakeData(UptakeData):
         """
         frame = self
 
-        if group_cols is not None:
+        if len(group_cols) > 0:
             rollout_rows = (
                 frame.select(group_cols)
                 .unique()

@@ -28,9 +28,6 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     if "time_end" not in obs.columns or "estimate" not in obs.columns:
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
-    assert obs["geography"].unique().to_list() == ["nation"], "Geography is not unique"
-    assert pred["geography"].unique().to_list() == ["nation"], "Geography is not unique"
-
     # get every model/forecast date combo
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
 

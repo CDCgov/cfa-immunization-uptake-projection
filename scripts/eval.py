@@ -27,7 +27,7 @@ def eval_all_forecasts(data, pred, config):
                             pl.col("forecast_start") == forecast_start,
                         )
                     )
-                    .to_incident(config["data"]["groups"])
+                    .to_incident(config["data"]["groups"] + ["season"])
                     .with_columns(quantile=0.5)
                 )
 
@@ -35,8 +35,10 @@ def eval_all_forecasts(data, pred, config):
                     data.filter(
                         pl.col("time_end") >= forecast_start,
                         pl.col("time_end") <= config["forecast_timeframe"]["end"],
+                    ).with_columns(
+                        season=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
                     )
-                ).to_incident(config["data"]["groups"])
+                ).to_incident(config["data"]["groups"] + ["season"])
 
                 assert incident_pred.shape[0] == test.shape[0], (
                     "The forecast and the test data do not have the same number of dates."

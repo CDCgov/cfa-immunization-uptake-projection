@@ -99,7 +99,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def extract_starting_conditions(
-        data: IncidentUptakeData, group_cols: List[str,] | None
+        data: IncidentUptakeData, group_cols: List[str,]
     ) -> pl.DataFrame:
         """
         Extract from incident uptake data the last observed values of several variables, by group.
@@ -107,7 +107,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             incident uptake data containing final observations of interest
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns for the grouping factors
 
         Returns
@@ -164,7 +164,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def fit(
         self,
         data: IncidentUptakeData,
-        group_cols: List[str,] | None,
+        group_cols: List[str,],
         params: dict,
         mcmc: dict,
     ) -> Self:
@@ -174,7 +174,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns for the grouping factors
         params: dict
             parameter names and values to specify prior distributions
@@ -303,7 +303,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        group_cols: List[str,] | None,
+        group_cols: List[str,],
     ) -> pl.DataFrame:
         """
         Build a scaffold data frame to hold projections of a linear incident uptake model.
@@ -318,7 +318,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns for the grouping factors
 
         Returns
@@ -341,14 +341,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             .with_columns(estimate=pl.lit(0.0))
         )
 
-        if group_cols is not None:
+        if len(group_cols) > 0:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
 
         scaffold = cls.augment_implicit_columns(
             IncidentUptakeData(scaffold), group_cols
         )
 
-        if group_cols is not None:
+        if len(group_cols) > 0:
             scaffold = scaffold.join(
                 start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
                 on=group_cols,
@@ -372,7 +372,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @classmethod
     def augment_implicit_columns(
-        cls, df: IncidentUptakeData, group_cols: List[str,] | None
+        cls, df: IncidentUptakeData, group_cols: List[str,]
     ) -> pl.DataFrame:
         """
         Add explicit columns for information that is implicitly contained.
@@ -380,7 +380,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             data containing dates and incident uptake estimates
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns for the grouping factors
 
         Returns
@@ -402,7 +402,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         return (
             IncidentUptakeData(df)
             .with_columns(
-                # season=pl.col("time_end").pipe(UptakeData.date_to_season),
                 elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
                 interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
             )
@@ -536,7 +535,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        group_cols: List[str,] | None,
+        group_cols: List[str,],
     ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
@@ -549,7 +548,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
-        group_cols: (str,) | None
+        group_cols: (str,)
             name(s) of the columns for the grouping factors
 
         Returns
@@ -576,7 +575,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             self.start, start_date, end_date, interval, group_cols
         ).drop("estimate")
 
-        if group_cols is not None:
+        if len(group_cols) > 0:
             groups = cumulative_projection.partition_by(group_cols)
         else:
             groups = [cumulative_projection]
@@ -627,14 +626,14 @@ class LinearIncidentUptakeModel(UptakeModel):
     def trim_outlier_intervals(
         cls,
         df: IncidentUptakeData,
-        group_cols: List[str,] | None,
+        group_cols: List[str,],
         threshold: float = 1.0,
     ) -> pl.DataFrame:
         """
         Remove rows from incident uptake data with intervals that are too large.
 
         Parameters
-          group_cols (tuple) | None: names of grouping factor columns
+          group_cols (tuple): names of grouping factor columns
           threshold (float): maximum standardized interval between first two dates
 
         Returns
