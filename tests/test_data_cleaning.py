@@ -57,7 +57,7 @@ def test_insert_rollouts_handles_no_groups(frame):
         time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d")
     )
     rollouts = [dt.date(2020, 1, 1), dt.date(2021, 1, 1)]
-    group_cols = None
+    group_cols = []
     frame = iup.CumulativeUptakeData(frame.drop(["indicator", "geography"]))
 
     output = frame.insert_rollouts(rollouts, group_cols)
