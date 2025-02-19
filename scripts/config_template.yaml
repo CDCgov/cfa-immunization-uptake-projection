@@ -12,7 +12,7 @@ data:
     time_type: [week]
   # keep only these data columns
   keep: [geography, estimate, time_end]
-  # use these columns as grouping factors
+  # use these columns as grouping factors. Use an empty list if there are none.
   groups: [geography]
 
 # Timeframe for the longest desired forecast

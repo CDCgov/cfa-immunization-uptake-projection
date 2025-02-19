@@ -82,6 +82,7 @@ def test_extract_starting_conditions(frame):
         frame,
         [
             "geography",
+            "season",
         ],
     )
 
@@ -89,6 +90,7 @@ def test_extract_starting_conditions(frame):
         pl.DataFrame(
             {
                 "geography": ["USA", "PA"],
+                "season": ["2019/2020", "2019/2020"],
                 "last_date": [dt.date(2020, 1, 21), dt.date(2020, 1, 21)],
                 "last_daily": [4.0 / 7, 0.4 / 7],
                 "last_elapsed": [21, 21],
@@ -122,37 +124,12 @@ def test_fit(frame, params, mcmc_params):
 
     data = iup.IncidentUptakeData(frame)
     model = iup.models.LinearIncidentUptakeModel(0).fit(
-        data, ["geography"], params, mcmc_params
+        data, ["geography", "season"], params, mcmc_params
     )
 
     dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
 
     assert all(d == 10 for d in dimensions)
-
-
-def test_build_scaffold_handles_no_groups():
-    """
-    Set up a data frame with 5 rows and 7 columns if no grouping factors are given
-    """
-    start = pl.DataFrame(
-        {
-            "last_date": dt.date(2020, 1, 31),
-            "last_daily": 0.1,
-            "last_elapsed": 31,
-            "last_cumulative": 4.0,
-            "last_interval": 1,
-        }
-    )
-    start_date = dt.date(2020, 2, 1)
-    end_date = dt.date(2020, 2, 29)
-    interval = "7d"
-    group_cols = None
-
-    output = iup.models.LinearIncidentUptakeModel.build_scaffold(
-        start, start_date, end_date, interval, group_cols
-    )
-
-    assert output.shape == (5, 7)
 
 
 def test_build_scaffold_handles_groups():
@@ -167,11 +144,16 @@ def test_build_scaffold_handles_groups():
             "last_cumulative": 4.0,
             "last_interval": 1,
         }
-    ).join(pl.DataFrame({"geography": ["USA", "PA"]}), how="cross")
+    ).join(
+        pl.DataFrame(
+            {"geography": ["USA", "PA"], "season": ["2019/2020", "2019/2020"]}
+        ),
+        how="cross",
+    )
     start_date = dt.date(2020, 2, 1)
     end_date = dt.date(2020, 2, 29)
     interval = "7d"
-    group_cols = ["geography"]
+    group_cols = ["geography", "season"]
 
     output = iup.models.LinearIncidentUptakeModel.build_scaffold(
         start, start_date, end_date, interval, group_cols
