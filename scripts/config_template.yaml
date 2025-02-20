@@ -1,6 +1,8 @@
 # The data sets to load and how to interpret them
 data:
-  rollouts: [2023-09-01, 2024-09-01]
+  rollouts: [2022-09-01, 2023-09-01, 2024-09-01]
+  season_start_month: 9
+  season_start_day: 1
   # filter data; eg `vaccine: covid` means filter column "vaccine" for value "covid"
   filters:
     vaccine: [covid]
@@ -11,9 +13,9 @@ data:
     indicator: [received a vaccination, Received updated bivalent booster dose (among adults who completed primary series)]
     time_type: [week]
   # keep only these data columns
-  keep: [geography, estimate, time_end]
-  # use these columns as grouping factors. Use an empty list if there are none.
-  groups: [geography]
+  keep: [estimate, time_end]
+  # use these columns as grouping factors. Almost always use at least "season", but use None if there are truly none.
+  groups: [season]
 
 # Timeframe for the longest desired forecast
 forecast_timeframe:

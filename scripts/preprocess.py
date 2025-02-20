@@ -13,29 +13,38 @@ def preprocess(
     raw_data: pl.LazyFrame,
     filters: dict,
     keep: List[str],
-    groups: List[str],
+    groups: List[str] | None,
     rollouts: List[datetime.date],
+    season_start_month: int,
+    season_start_day: int,
 ) -> iup.CumulativeUptakeData:
+    if groups is None:
+        groups = []
+
+    # Filter to correct rows and columns
     data = iup.CumulativeUptakeData(
         raw_data.filter([pl.col(k).is_in(v) for k, v in filters.items()])
         .select(keep)
         .sort("time_end")
         .collect()
+        .with_columns(
+            season=pl.col("time_end").pipe(
+                iup.UptakeData.date_to_season,
+                season_start_month=season_start_month,
+                season_start_day=season_start_day,
+            )
+        )
+    )
+
+    # Insert rollout dates into the data
+    data = iup.CumulativeUptakeData(
+        data.insert_rollouts(rollouts, groups, season_start_month, season_start_day)
     )
 
     # Ensure that the desired grouping factors are found in all data sets
     assert set(data.columns).issuperset(groups)
 
-    # Insert rollout dates into the data
-    return iup.CumulativeUptakeData(
-        data.insert_rollouts(rollouts, groups).with_columns(
-            season=pl.col("time_end").pipe(
-                iup.UptakeData.date_to_season,
-                season_start_month=min([d.month for d in config["data"]["rollouts"]]),
-                season_start_day=min([d.day for d in config["data"]["rollouts"]]),
-            )
-        )
-    )
+    return data
 
 
 if __name__ == "__main__":
@@ -58,6 +67,8 @@ if __name__ == "__main__":
         keep=config["data"]["keep"],
         groups=config["data"]["groups"],
         rollouts=config["data"]["rollouts"],
+        season_start_month=config["data"]["season_start_month"],
+        season_start_day=config["data"]["season_start_day"],
     )
 
     clean_data.write_parquet(args.output)

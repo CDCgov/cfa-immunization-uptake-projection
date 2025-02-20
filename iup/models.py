@@ -99,7 +99,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def extract_starting_conditions(
-        data: IncidentUptakeData, group_cols: List[str,]
+        data: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
         """
         Extract from incident uptake data the last observed values of several variables, by group.
@@ -107,7 +107,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             incident uptake data containing final observations of interest
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -121,6 +121,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - Days elapsed since rollout on this date
         - Cumulative uptake since rollout on this date
         """
+        if group_cols is None:
+            group_cols = []
+
         start = (
             data.group_by(group_cols)
             .agg(
@@ -164,7 +167,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def fit(
         self,
         data: IncidentUptakeData,
-        group_cols: List[str,],
+        group_cols: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
@@ -174,7 +177,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
         params: dict
             parameter names and values to specify prior distributions
@@ -201,6 +204,9 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
+        if group_cols is None:
+            group_cols = []
+
         data = IncidentUptakeData(data)
 
         data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
@@ -304,7 +310,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         test_data: pl.DataFrame | None,
-        group_cols: List[str,],
+        group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
         Build a scaffold data frame to hold projections of a linear incident uptake model.
@@ -321,7 +327,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             following timedelta convention (e.g. '7d' = seven days)
         test_data: pl.DataFrame | None
             test data, if evaluation is being done, to provide exact dates
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -332,6 +338,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         The desired time frame for projections is repeated over grouping factors,
         if any grouping factors exist.
         """
+        if group_cols is None:
+            group_cols = []
+
         # If there is test data such that evaluation will be performed,
         # use exactly the dates that are in the test data
         if test_data is not None:
@@ -388,7 +397,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @classmethod
     def augment_implicit_columns(
-        cls, df: IncidentUptakeData, group_cols: List[str,]
+        cls, df: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
         """
         Add explicit columns for information that is implicitly contained.
@@ -396,7 +405,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             data containing dates and incident uptake estimates
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -411,6 +420,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - daily-average uptake in the interval preceding each date
         - daily-average uptake in the interval preceding the previous date
         """
+        if group_cols is None:
+            group_cols = []
+
         assert df["time_end"].is_sorted(), (
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )
@@ -552,7 +564,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         test_data: pl.DataFrame | None,
-        group_cols: List[str,],
+        group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
@@ -567,7 +579,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             following timedelta convention (e.g. '7d' = seven days)
         test_data: pl.DataFrame | None
             test data, if evaluation is being done, to provide exact dates
-        group_cols: (str,)
+        group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -586,6 +598,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
         """
+        if group_cols is None:
+            group_cols = []
+
         # If there are test data, the actual start date for projections should
         # be the first date in the test data
         if test_data is not None:
@@ -605,7 +620,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             groups = [cumulative_projection]
 
         for g in range(len(groups)):
-            if group_cols is not None:
+            if len(group_cols) > 0:
                 start = self.start.join(groups[g], on=group_cols, how="semi")[
                     "last_daily"
                 ][0]
@@ -650,14 +665,14 @@ class LinearIncidentUptakeModel(UptakeModel):
     def trim_outlier_intervals(
         cls,
         df: IncidentUptakeData,
-        group_cols: List[str,],
+        group_cols: List[str,] | None,
         threshold: float = 1.0,
     ) -> pl.DataFrame:
         """
         Remove rows from incident uptake data with intervals that are too large.
 
         Parameters
-          group_cols (tuple): names of grouping factor columns
+          group_cols (tuple) | None: names of grouping factor columns
           threshold (float): maximum standardized interval between first two dates
 
         Returns
@@ -683,6 +698,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
+        if group_cols is None:
+            group_cols = []
+
         assert df["time_end"].is_sorted(), (
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )

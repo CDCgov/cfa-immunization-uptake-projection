@@ -31,7 +31,7 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
             forecast = run_forecast(
                 model,
                 data,
-                grouping_factors=config["data"]["groups"] + ["season"],
+                grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
             )
