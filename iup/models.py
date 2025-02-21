@@ -346,10 +346,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         # use exactly the dates that are in the test data
         if test_data is not None:
             scaffold = (
-                test_data.filter(
-                    (pl.col("time_end") >= start_date)
-                    & (pl.col("time_end") <= end_date)
-                )
+                test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
                 .select("time_end")
                 .with_columns(estimate=pl.lit(0.0))
             )
