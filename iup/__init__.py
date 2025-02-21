@@ -134,12 +134,14 @@ class IncidentUptakeData(UptakeData):
         To fix this, cumulative uptake from the removed rows may be supplied separately.
         """
         if group_cols is None:
-            group_cols = []
-
-        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
+            out = self.with_columns(estimate=pl.col("estimate").cum_sum())
+        else:
+            out = self.with_columns(
+                estimate=pl.col("estimate").cum_sum().over(group_cols)
+            )
 
         if last_cumulative is not None:
-            if len(group_cols) > 0:
+            if group_cols is not None:
                 out = out.join(last_cumulative, on=group_cols)
             else:
                 out = out.with_columns(
@@ -178,11 +180,11 @@ class CumulativeUptakeData(UptakeData):
         Because the first date for each group is rollout, incident uptake is 0.
         """
         if group_cols is None:
-            group_cols = []
-
-        out = self.with_columns(
-            estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
-        )
+            out = self.with_columns(estimate=pl.col("estimate").diff().fill_null(0))
+        else:
+            out = self.with_columns(
+                estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
+            )
 
         return IncidentUptakeData(out)
 
@@ -235,26 +237,6 @@ class CumulativeUptakeData(UptakeData):
         )
 
         frame = frame.vstack(rollout_rows.select(frame.columns)).sort("time_end")
-
-        # Check that, after adding rollout, the first date for each group and season
-        # is the one with the minimum estimate.
-        assert (
-            (
-                frame.with_columns(
-                    season=pl.col("time_end").pipe(
-                        UptakeData.date_to_season,
-                        season_start_month=season_start_month,
-                        season_start_day=season_start_day,
-                    )
-                )
-                .with_columns(
-                    min=(pl.col("estimate") - pl.min("estimate")).over(group_cols)
-                )
-                .group_by(group_cols)
-                .first()
-            )["min"]
-            == 0.0
-        ).all()
 
         return CumulativeUptakeData(frame)
 

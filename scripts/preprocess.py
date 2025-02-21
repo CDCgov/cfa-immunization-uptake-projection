@@ -18,9 +18,6 @@ def preprocess(
     season_start_month: int,
     season_start_day: int,
 ) -> iup.CumulativeUptakeData:
-    if groups is None:
-        groups = []
-
     # Filter to correct rows and columns
     data = iup.CumulativeUptakeData(
         raw_data.filter([pl.col(k).is_in(v) for k, v in filters.items()])
@@ -42,7 +39,8 @@ def preprocess(
     )
 
     # Ensure that the desired grouping factors are found in all data sets
-    assert set(data.columns).issuperset(groups)
+    if groups is not None:
+        assert set(data.columns).issuperset(groups)
 
     return data
 

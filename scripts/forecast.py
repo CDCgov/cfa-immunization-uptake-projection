@@ -59,8 +59,8 @@ def run_forecast(
     cumulative_data = data.with_columns(
         season=pl.col("time_end").pipe(
             iup.UptakeData.date_to_season,
-            season_start_month=min([d.month for d in config["data"]["rollouts"]]),
-            season_start_day=min([d.day for d in config["data"]["rollouts"]]),
+            season_start_month=config["data"]["season_start_month"],
+            season_start_day=config["data"]["season_start_day"],
         )
     )
 

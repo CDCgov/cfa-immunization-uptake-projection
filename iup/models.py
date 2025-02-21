@@ -121,21 +121,28 @@ class LinearIncidentUptakeModel(UptakeModel):
         - Days elapsed since rollout on this date
         - Cumulative uptake since rollout on this date
         """
-        if group_cols is None:
-            group_cols = []
-
-        start = (
-            data.group_by(group_cols)
-            .agg(
+        if group_cols is not None:
+            start = (
+                data.group_by(group_cols)
+                .agg(
+                    [
+                        pl.col("time_end").last().alias("last_date"),
+                        pl.col("daily").last().alias("last_daily"),
+                        pl.col("elapsed").last().alias("last_elapsed"),
+                        pl.col("estimate").sum().alias("last_cumulative"),
+                    ]
+                )
+                .filter(pl.col("season") == pl.col("season").max())
+            )
+        else:
+            start = data.select(
                 [
                     pl.col("time_end").last().alias("last_date"),
                     pl.col("daily").last().alias("last_daily"),
                     pl.col("elapsed").last().alias("last_elapsed"),
-                    (pl.col("estimate")).sum().alias("last_cumulative"),
+                    pl.col("estimate").sum().alias("last_cumulative"),
                 ]
-            )
-            .filter(pl.col("season") == pl.col("season").max())
-        )
+            ).filter(pl.col("season") == pl.col("season").max())
 
         return start
 
@@ -204,9 +211,6 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
-        if group_cols is None:
-            group_cols = []
-
         data = IncidentUptakeData(data)
 
         data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
@@ -338,9 +342,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         The desired time frame for projections is repeated over grouping factors,
         if any grouping factors exist.
         """
-        if group_cols is None:
-            group_cols = []
-
         # If there is test data such that evaluation will be performed,
         # use exactly the dates that are in the test data
         if test_data is not None:
@@ -366,14 +367,14 @@ class LinearIncidentUptakeModel(UptakeModel):
                 .with_columns(estimate=pl.lit(0.0))
             )
 
-        if len(group_cols) > 0:
+        if group_cols is not None:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
 
         scaffold = cls.augment_implicit_columns(
             IncidentUptakeData(scaffold), group_cols
         )
 
-        if len(group_cols) > 0:
+        if group_cols is not None:
             scaffold = scaffold.join(
                 start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
                 on=group_cols,
@@ -420,22 +421,36 @@ class LinearIncidentUptakeModel(UptakeModel):
         - daily-average uptake in the interval preceding each date
         - daily-average uptake in the interval preceding the previous date
         """
-        if group_cols is None:
-            group_cols = []
-
         assert df["time_end"].is_sorted(), (
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )
 
-        return (
-            IncidentUptakeData(df)
-            .with_columns(
-                elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
-                interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
+        if group_cols is not None:
+            data = (
+                IncidentUptakeData(df)
+                .with_columns(
+                    elapsed=pl.col("time_end")
+                    .pipe(cls.date_to_elapsed)
+                    .over(group_cols),
+                    interval=pl.col("time_end")
+                    .pipe(cls.date_to_interval)
+                    .over(group_cols),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
             )
-            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-            .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
-        )
+        else:
+            data = (
+                IncidentUptakeData(df)
+                .with_columns(
+                    elapsed=pl.col("time_end").pipe(cls.date_to_elapsed),
+                    interval=pl.col("time_end").pipe(cls.date_to_interval),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1))
+            )
+
+        return data
 
     @staticmethod
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
@@ -598,9 +613,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
         """
-        if group_cols is None:
-            group_cols = []
-
         # If there are test data, the actual start date for projections should
         # be the first date in the test data
         if test_data is not None:
@@ -614,13 +626,13 @@ class LinearIncidentUptakeModel(UptakeModel):
             self.start, start_date, end_date, interval, test_data, group_cols
         ).drop("estimate")
 
-        if len(group_cols) > 0:
+        if group_cols is not None:
             groups = cumulative_projection.partition_by(group_cols)
         else:
             groups = [cumulative_projection]
 
         for g in range(len(groups)):
-            if len(group_cols) > 0:
+            if group_cols is not None:
                 start = self.start.join(groups[g], on=group_cols, how="semi")[
                     "last_daily"
                 ][0]
@@ -698,21 +710,27 @@ class LinearIncidentUptakeModel(UptakeModel):
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
         """
-        if group_cols is None:
-            group_cols = []
-
         assert df["time_end"].is_sorted(), (
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )
 
-        rank = pl.col("time_end").rank().over(group_cols)
-        shifted_standard_interval = (
-            pl.col("time_end")
-            .pipe(cls.date_to_interval)
-            .pipe(cls.standardize)
-            .shift(1)
-            .over(group_cols)
-        )
+        if group_cols is not None:
+            rank = pl.col("time_end").rank().over(group_cols)
+            shifted_standard_interval = (
+                pl.col("time_end")
+                .pipe(cls.date_to_interval)
+                .pipe(cls.standardize)
+                .shift(1)
+                .over(group_cols)
+            )
+        else:
+            rank = pl.col("time_end").rank()
+            shifted_standard_interval = (
+                pl.col("time_end")
+                .pipe(cls.date_to_interval)
+                .pipe(cls.standardize)
+                .shift(1)
+            )
 
         return (
             # validate input
