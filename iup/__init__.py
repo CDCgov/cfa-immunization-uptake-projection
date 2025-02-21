@@ -133,7 +133,12 @@ class IncidentUptakeData(UptakeData):
         such that the sum of incident does not reflect the entire cumulative uptake.
         To fix this, cumulative uptake from the removed rows may be supplied separately.
         """
-        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
+        if group_cols is None:
+            out = self.with_columns(estimate=pl.col("estimate").cum_sum())
+        else:
+            out = self.with_columns(
+                estimate=pl.col("estimate").cum_sum().over(group_cols)
+            )
 
         if last_cumulative is not None:
             if group_cols is not None:
@@ -174,14 +179,21 @@ class CumulativeUptakeData(UptakeData):
         Details
         Because the first date for each group is rollout, incident uptake is 0.
         """
-        out = self.with_columns(
-            estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
-        )
+        if group_cols is None:
+            out = self.with_columns(estimate=pl.col("estimate").diff().fill_null(0))
+        else:
+            out = self.with_columns(
+                estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
+            )
 
         return IncidentUptakeData(out)
 
     def insert_rollouts(
-        self, rollouts: List[dt.date], group_cols: List[str] | None
+        self,
+        rollouts: List[dt.date],
+        group_cols: List[str] | None,
+        season_start_month: int,
+        season_start_day: int,
     ) -> "CumulativeUptakeData":
         """
         Insert into cumulative uptake data rows with 0 uptake on rollout dates.
@@ -198,37 +210,33 @@ class CumulativeUptakeData(UptakeData):
         Details
         A separate rollout row is added for every grouping factor combination.
         """
+        if group_cols is None:
+            group_cols = []
+
         frame = self
 
-        if group_cols is not None:
-            rollout_rows = (
-                frame.select(group_cols)
-                .unique()
-                .join(pl.DataFrame({"time_end": rollouts}), how="cross")
-                .with_columns(estimate=0.0)
+        # do not use season as a grouping column to insert rollouts
+        if len([g for g in group_cols if g != "season"]) > 0:
+            rollout_rows = frame.select(group_cols)
+            if "season" in rollout_rows.columns:
+                rollout_rows = rollout_rows.drop("season")
+            rollout_rows = rollout_rows.unique().join(
+                pl.DataFrame({"time_end": rollouts}), how="cross"
             )
-            group_cols = group_cols + ["season"]
         else:
             rollout_rows = pl.DataFrame({"time_end": rollouts, "estimate": 0.0})
-            group_cols = ["season"]
+
+        # add season as a column only after making rollout rows
+        rollout_rows = rollout_rows.with_columns(
+            estimate=0.0,
+            season=pl.col("time_end").pipe(
+                UptakeData.date_to_season,
+                season_start_month=season_start_month,
+                season_start_day=season_start_day,
+            ),
+        )
 
         frame = frame.vstack(rollout_rows.select(frame.columns)).sort("time_end")
-
-        # Check that, after adding rollout, the first date for each group and season
-        # is the one with the minimum estimate.
-        assert (
-            (
-                frame.with_columns(
-                    season=pl.col("time_end").pipe(UptakeData.date_to_season)
-                )
-                .with_columns(
-                    min=(pl.col("estimate") - pl.min("estimate")).over(group_cols)
-                )
-                .group_by(group_cols)
-                .first()
-            )["min"]
-            == 0.0
-        ).all()
 
         return CumulativeUptakeData(frame)
 

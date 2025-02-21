@@ -18,6 +18,7 @@ def frame():
             "time_end": ["2020-01-07", "2020-01-14", "2020-01-21"],
             "estimate": [0.0, 0.1, 0.2],
             "indicator": ["refused", "booster", "booster"],
+            "season": ["2019/2020", "2019/2020", "2019/2020"],
         }
     )
 
@@ -37,7 +38,7 @@ def test_insert_rollouts_handles_groups(frame):
     ]
     frame = iup.CumulativeUptakeData(frame.drop("indicator"))
 
-    output = frame.insert_rollouts(rollouts, group_cols)
+    output = frame.insert_rollouts(rollouts, group_cols, 9, 1)
 
     assert output.shape[0] == 7
     assert (
@@ -60,7 +61,7 @@ def test_insert_rollouts_handles_no_groups(frame):
     group_cols = None
     frame = iup.CumulativeUptakeData(frame.drop(["indicator", "geography"]))
 
-    output = frame.insert_rollouts(rollouts, group_cols)
+    output = frame.insert_rollouts(rollouts, group_cols, 9, 1)
 
     assert output.shape[0] == 5
     assert (

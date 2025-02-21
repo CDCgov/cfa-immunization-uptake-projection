@@ -1,5 +1,4 @@
 import argparse
-import datetime
 
 import altair as alt
 import polars as pl
@@ -27,9 +26,6 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     if "time_end" not in obs.columns or "estimate" not in obs.columns:
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
-    assert obs["geography"].unique().to_list() == ["nation"], "Geography is not unique"
-    assert pred["geography"].unique().to_list() == ["nation"], "Geography is not unique"
-
     # get every model/forecast date combo
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
 
@@ -37,17 +33,16 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     # column "type" will be either "obs" or "pred"
     plot_obs = (
         obs.join(models_forecasts, how="cross")
-        .with_columns(pl.lit("obs").alias("type"))
-        .select(["type", "model", "forecast_start", "time_end", "estimate"])
+        .with_columns(type=pl.lit("obs"))
+        .select(["type", "model", "forecast_start", "time_end", "estimate", "season"])
+        .filter(pl.col("season").is_in(pred["season"].unique()))
     )
 
     plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(
-        ["type", "model", "forecast_start", "time_end", "estimate"]
+        ["type", "model", "forecast_start", "time_end", "estimate", "season"]
     )
 
-    plot_data = pl.concat([plot_obs, plot_pred]).with_columns(
-        (pl.col("time_end") < datetime.date(2024, 9, 1)).alias("season_kludge")
-    )
+    plot_data = pl.concat([plot_obs, plot_pred])
 
     return (
         alt.Chart(plot_data)
@@ -58,7 +53,7 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
             alt.Column("model"),
             alt.Row("forecast_start:T"),
             alt.Color("type"),
-            alt.Detail("season_kludge"),
+            alt.Detail("season"),
         )
     )
 

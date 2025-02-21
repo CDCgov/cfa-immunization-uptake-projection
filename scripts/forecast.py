@@ -3,6 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
+import iup
 import iup.models
 
 
@@ -54,9 +55,18 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-
     # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
-    incident_data = data.to_incident(grouping_factors)
+    cumulative_data = data.with_columns(
+        season=pl.col("time_end").pipe(
+            iup.UptakeData.date_to_season,
+            season_start_month=config["data"]["season_start_month"],
+            season_start_day=config["data"]["season_start_day"],
+        )
+    )
+
+    incident_data = iup.CumulativeUptakeData(cumulative_data).to_incident(
+        grouping_factors
+    )
 
     # Prune to only the training portion
     incident_train_data = iup.IncidentUptakeData.split_train_test(
@@ -67,7 +77,7 @@ def run_forecast(
     assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
         f"{model['name']} is not a valid model type!"
     )
-    ""
+
     fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
         incident_train_data,
         grouping_factors,
@@ -75,15 +85,23 @@ def run_forecast(
         model["mcmc"],
     )
 
+    # Get test data, if there is any, to know exact dates for projection
+    incident_test_data = iup.IncidentUptakeData.split_train_test(
+        incident_data, forecast_start, "test"
+    )
+    if incident_test_data.height == 0:
+        incident_test_data = None
+
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
         config["forecast_timeframe"]["interval"],
+        incident_test_data,
         grouping_factors,
     )
 
     cumulative_projections = (
-        cumulative_projections.group_by(config["data"]["groups"] + ["time_end"])
+        cumulative_projections.group_by(grouping_factors + ["time_end"])
         .agg(pl.col("estimate").mean().alias("estimate"))
         .sort("time_end")
     )

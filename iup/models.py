@@ -10,7 +10,7 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import IncidentUptakeData, SampleForecast, UptakeData
+from iup import IncidentUptakeData, SampleForecast
 
 
 class UptakeModel(abc.ABC):
@@ -121,17 +121,28 @@ class LinearIncidentUptakeModel(UptakeModel):
         - Days elapsed since rollout on this date
         - Cumulative uptake since rollout on this date
         """
-        start = data.group_by(group_cols).agg(
-            [
-                pl.col("time_end").last().alias("last_date"),
-                pl.col("daily").last().alias("last_daily"),
-                pl.col("elapsed").last().alias("last_elapsed"),
-                (pl.col("estimate"))
+        if group_cols is not None:
+            start = (
+                data.group_by(group_cols)
+                .agg(
+                    [
+                        pl.col("time_end").last().alias("last_date"),
+                        pl.col("daily").last().alias("last_daily"),
+                        pl.col("elapsed").last().alias("last_elapsed"),
+                        pl.col("estimate").sum().alias("last_cumulative"),
+                    ]
+                )
                 .filter(pl.col("season") == pl.col("season").max())
-                .sum()
-                .alias("last_cumulative"),
-            ]
-        )
+            )
+        else:
+            start = data.select(
+                [
+                    pl.col("time_end").last().alias("last_date"),
+                    pl.col("daily").last().alias("last_daily"),
+                    pl.col("elapsed").last().alias("last_elapsed"),
+                    pl.col("estimate").sum().alias("last_cumulative"),
+                ]
+            ).filter(pl.col("season") == pl.col("season").max())
 
         return start
 
@@ -302,6 +313,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
+        test_data: pl.DataFrame | None,
         group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
@@ -317,6 +329,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
@@ -328,17 +342,27 @@ class LinearIncidentUptakeModel(UptakeModel):
         The desired time frame for projections is repeated over grouping factors,
         if any grouping factors exist.
         """
-        scaffold = (
-            pl.date_range(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                eager=True,
+        # If there is test data such that evaluation will be performed,
+        # use exactly the dates that are in the test data
+        if test_data is not None:
+            scaffold = (
+                test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
+                .select("time_end")
+                .with_columns(estimate=pl.lit(0.0))
             )
-            .alias("time_end")
-            .to_frame()
-            .with_columns(estimate=pl.lit(0.0))
-        )
+        # If there are no test data, use exactly the dates that were provided
+        else:
+            scaffold = (
+                pl.date_range(
+                    start=start_date,
+                    end=end_date,
+                    interval=interval,
+                    eager=True,
+                )
+                .alias("time_end")
+                .to_frame()
+                .with_columns(estimate=pl.lit(0.0))
+            )
 
         if group_cols is not None:
             scaffold = scaffold.join(start.select(group_cols), how="cross")
@@ -398,16 +422,32 @@ class LinearIncidentUptakeModel(UptakeModel):
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )
 
-        return (
-            IncidentUptakeData(df)
-            .with_columns(
-                season=pl.col("time_end").pipe(UptakeData.date_to_season),
-                elapsed=pl.col("time_end").pipe(cls.date_to_elapsed).over(group_cols),
-                interval=pl.col("time_end").pipe(cls.date_to_interval).over(group_cols),
+        if group_cols is not None:
+            data = (
+                IncidentUptakeData(df)
+                .with_columns(
+                    elapsed=pl.col("time_end")
+                    .pipe(cls.date_to_elapsed)
+                    .over(group_cols),
+                    interval=pl.col("time_end")
+                    .pipe(cls.date_to_interval)
+                    .over(group_cols),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
             )
-            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-            .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
-        )
+        else:
+            data = (
+                IncidentUptakeData(df)
+                .with_columns(
+                    elapsed=pl.col("time_end").pipe(cls.date_to_elapsed),
+                    interval=pl.col("time_end").pipe(cls.date_to_interval),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1))
+            )
+
+        return data
 
     @staticmethod
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
@@ -429,6 +469,26 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
 
         return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
+
+    @staticmethod
+    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
+        """
+        Extract a time interval column from a date column, as polars expressions.
+        Should be called .over(season)
+
+        Parameters
+        date_col: pl.Expr
+            column of dates
+
+        Returns
+        pl.Expr
+            column of the number of days between each date and the previous
+
+        Details
+        Date column should be chronologically sorted in advance.
+        Time difference is always in days.
+        """
+        return date_col.diff().dt.total_days().cast(pl.Float64)
 
     @classmethod
     def project_sequentially(
@@ -515,6 +575,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
+        test_data: pl.DataFrame | None,
         group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
@@ -528,6 +589,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
 
@@ -547,12 +610,17 @@ class LinearIncidentUptakeModel(UptakeModel):
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
         """
+        # If there are test data, the actual start date for projections should
+        # be the first date in the test data
+        if test_data is not None:
+            start_date = min(test_data["time_end"])
+
         self.start = self.start.with_columns(
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
         cumulative_projection = self.build_scaffold(
-            self.start, start_date, end_date, interval, group_cols
+            self.start, start_date, end_date, interval, test_data, group_cols
         ).drop("estimate")
 
         if group_cols is not None:
@@ -643,14 +711,23 @@ class LinearIncidentUptakeModel(UptakeModel):
             "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
         )
 
-        rank = pl.col("time_end").rank().over(group_cols)
-        shifted_standard_interval = (
-            pl.col("time_end")
-            .pipe(cls.date_to_interval)
-            .pipe(cls.standardize)
-            .shift(1)
-            .over(group_cols)
-        )
+        if group_cols is not None:
+            rank = pl.col("time_end").rank().over(group_cols)
+            shifted_standard_interval = (
+                pl.col("time_end")
+                .pipe(cls.date_to_interval)
+                .pipe(cls.standardize)
+                .shift(1)
+                .over(group_cols)
+            )
+        else:
+            rank = pl.col("time_end").rank()
+            shifted_standard_interval = (
+                pl.col("time_end")
+                .pipe(cls.date_to_interval)
+                .pipe(cls.standardize)
+                .shift(1)
+            )
 
         return (
             # validate input
@@ -662,23 +739,3 @@ class LinearIncidentUptakeModel(UptakeModel):
                 (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
             )
         )
-
-    @staticmethod
-    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time interval column from a date column, as polars expressions.
-        Should be called .over(season)
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days between each date and the previous
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        """
-        return date_col.diff().dt.total_days().cast(pl.Float64)
