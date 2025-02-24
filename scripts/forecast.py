@@ -61,12 +61,10 @@ def run_forecast(
 
     # Format training data according to the type of model desired
     if model["name"] == "LinearIncidentUptakeModel":
-        train_data = data.to_incident(grouping_factors)
-        train_data = iup.UptakeData.split_train_test(
-            train_data, forecast_start, "train"
-        )
+        data = data.to_incident(grouping_factors)
+        train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
     elif model["name"] == "Hill":
-        train_data = iup.CumulativeUptakeData(
+        data = iup.CumulativeUptakeData(
             data.with_columns(
                 elapsed=iup.models.HillModel.date_to_elapsed(
                     pl.col("date"),
@@ -85,14 +83,12 @@ def run_forecast(
         model["mcmc"],
     )
 
-    # LEFT OFF HERE - MAY BE MISTAKES BELOW
     # Get test data, if there is any, to know exact dates for projection
-    incident_test_data = iup.IncidentUptakeData.split_train_test(
-        data, forecast_start, "test"
-    )
-    if incident_test_data.height == 0:
+    test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
+    if test_data.height == 0:
         incident_test_data = None
 
+    # LEFT OFF HERE - MAY BE MISTAKES BELOW
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
