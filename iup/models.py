@@ -98,6 +98,48 @@ class LinearIncidentUptakeModel(UptakeModel):
         numpyro.sample("obs", dist.Normal(mu, sig), obs=daily)
 
     @staticmethod
+    def hill(
+        cum_uptake,
+        elapsed,
+        season=None,
+        n_low=1.0,
+        n_high=5.0,
+        A_low=0.0,
+        A_high=1.0,
+        H_low=0.0,
+        H_high=1.0,
+        sig_mn=1.0,
+    ):
+        """
+        Declare the Hill model structure.
+
+        Parameters
+        cum_uptake: numpy array
+            cumulative uptake, between 0 and 1
+        elapsed: numpy array
+            number of days since the start of season
+        season: numpy array
+            season that each data point belongs to
+        other parameters: float
+            means and standard deviations to specify the prior distributions
+
+        Returns
+        Nothing
+
+        Details
+        Provides the model structure and priors for a Hill model.
+        """
+        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
+        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
+        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
+        if season is not None:
+            mu = A[season] * (elapsed ^ n) / (H[season] ^ n + elapsed ^ n)
+        else:
+            mu = A * (elapsed ^ n) / (H ^ n + elapsed ^ n)
+        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
+        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+
+    @staticmethod
     def extract_starting_conditions(
         data: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
