@@ -904,12 +904,22 @@ class HillModel(UptakeModel):
             start_date, end_date, interval, test_data, self.group_combos
         ).drop("estimate")
 
+        # Left off here! Must produce Hill Model predictions, which won't require project_sequentially
+        predictive = Predictive(self.model, self.mcmc.get_samples())
+        predictions = predictive(
+            self.rng_key,
+            elapsed=scaffold["elapsed"].to_numpy(),
+            season=scaffold["season"].to_numpy(),
+        )["obs"]
+
+        return predictions
+
+        # Use what's above with predictive, not what's below. MUST STILL ADD elapsed & season to scaffold!
+
         if group_cols is not None:
             groups = scaffold.partition_by(group_cols)
         else:
             groups = [scaffold]
-
-        # Left off here! Must produce Hill Model predictions, which won't require project_sequentially
 
         for g in range(len(groups)):
             if group_cols is not None:
