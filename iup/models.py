@@ -537,7 +537,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         )
 
         scaffold = build_scaffold(
-            start_date, end_date, interval, test_data, group_cols, self.group_combos
+            start_date, end_date, interval, test_data, self.group_combos
         ).drop("estimate")
 
         scaffold = LinearIncidentUptakeModel.augment_implicit_columns(
@@ -901,7 +901,7 @@ class HillModel(UptakeModel):
             start_date = min(test_data["time_end"])
 
         scaffold = build_scaffold(
-            start_date, end_date, interval, test_data, group_cols, self.group_combos
+            start_date, end_date, interval, test_data, self.group_combos
         ).drop("estimate")
 
         if group_cols is not None:
@@ -981,7 +981,6 @@ def build_scaffold(
     end_date: dt.date,
     interval: str,
     test_data: pl.DataFrame | None,
-    group_cols: List[str,] | None,
     group_combos: pl.DataFrame | None,
 ) -> pl.DataFrame:
     """
@@ -997,8 +996,6 @@ def build_scaffold(
         following timedelta convention (e.g. '7d' = seven days)
     test_data: pl.DataFrame | None
         test data, if evaluation is being done, to provide exact dates
-    group_cols: (str,) | None
-        name(s) of the columns for the grouping factors
     group_combos: pl.DataFrame | None
         all unique combinations of grouping factors in the data
 
