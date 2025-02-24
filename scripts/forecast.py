@@ -86,14 +86,14 @@ def run_forecast(
     # Get test data, if there is any, to know exact dates for projection
     test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
     if test_data.height == 0:
-        incident_test_data = None
+        test_data = None
 
     # LEFT OFF HERE - MAY BE MISTAKES BELOW
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
         config["forecast_timeframe"]["interval"],
-        incident_test_data,
+        test_data,
         grouping_factors,
     )
 
