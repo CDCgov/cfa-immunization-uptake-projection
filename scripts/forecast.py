@@ -55,39 +55,40 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
-    cumulative_data = data.with_columns(
-        season=pl.col("time_end").pipe(
-            iup.UptakeData.date_to_season,
-            season_start_month=config["data"]["season_start_month"],
-            season_start_day=config["data"]["season_start_day"],
-        )
-    )
-
-    incident_data = iup.CumulativeUptakeData(cumulative_data).to_incident(
-        grouping_factors
-    )
-
-    # Prune to only the training portion
-    incident_train_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, forecast_start, "train"
-    )
-
-    # Make an instance of the model, fit it using training data, and make projections
     assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
         f"{model['name']} is not a valid model type!"
     )
 
+    # Format training data according to the type of model desired
+    if model["name"] == "LinearIncidentUptakeModel":
+        train_data = data.to_incident(grouping_factors)
+        train_data = iup.UptakeData.split_train_test(
+            train_data, forecast_start, "train"
+        )
+    elif model["name"] == "Hill":
+        train_data = iup.CumulativeUptakeData(
+            data.with_columns(
+                elapsed=iup.models.HillModel.date_to_elapsed(
+                    pl.col("date"),
+                    config["data"]["season_start_month"],
+                    config["data"]["season_start_day"],
+                )
+            )
+        )
+        train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
+
+    # Make an instance of the model, fit it using training data, and make projections
     fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
-        incident_train_data,
+        train_data,
         grouping_factors,
         model["params"],
         model["mcmc"],
     )
 
+    # LEFT OFF HERE - MAY BE MISTAKES BELOW
     # Get test data, if there is any, to know exact dates for projection
     incident_test_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, forecast_start, "test"
+        data, forecast_start, "test"
     )
     if incident_test_data.height == 0:
         incident_test_data = None

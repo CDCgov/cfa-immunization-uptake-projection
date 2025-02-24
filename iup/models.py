@@ -10,7 +10,7 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import IncidentUptakeData, SampleForecast
+from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast
 
 
 class UptakeModel(abc.ABC):
@@ -96,48 +96,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         sig = numpyro.sample("sig", dist.Exponential(sig_mn))
         mu = a + P + E + PE
         numpyro.sample("obs", dist.Normal(mu, sig), obs=daily)
-
-    @staticmethod
-    def hill(
-        cum_uptake,
-        elapsed,
-        season=None,
-        n_low=1.0,
-        n_high=5.0,
-        A_low=0.0,
-        A_high=1.0,
-        H_low=0.0,
-        H_high=1.0,
-        sig_mn=1.0,
-    ):
-        """
-        Declare the Hill model structure.
-
-        Parameters
-        cum_uptake: numpy array
-            cumulative uptake, between 0 and 1
-        elapsed: numpy array
-            number of days since the start of season
-        season: numpy array
-            season that each data point belongs to
-        other parameters: float
-            means and standard deviations to specify the prior distributions
-
-        Returns
-        Nothing
-
-        Details
-        Provides the model structure and priors for a Hill model.
-        """
-        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
-        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
-        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
-        if season is not None:
-            mu = A[season] * (elapsed ^ n) / (H[season] ^ n + elapsed ^ n)
-        else:
-            mu = A * (elapsed ^ n) / (H ^ n + elapsed ^ n)
-        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
-        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
 
     @staticmethod
     def extract_starting_conditions(
@@ -781,3 +739,175 @@ class LinearIncidentUptakeModel(UptakeModel):
                 (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
             )
         )
+
+
+class HillModel(UptakeModel):
+    """
+    Subclass of UptakeModel for a Hill function model constructed as follows:
+    Outcome: cumulative uptake as of a report date
+    Predictors:
+    - number of days "elapsed" between the start of the season and the report date
+    Possible Random Effects:
+    - season
+    """
+
+    def __init__(self, seed: int):
+        """
+        Initialize with a seed and the model structure.
+
+        Parameters
+        seed: int
+            The random seed for stochastic elements of the model.
+        """
+        self.rng_key = random.PRNGKey(seed)
+        self.model = HillModel.hill
+
+    @staticmethod
+    def hill(
+        cum_uptake,
+        elapsed,
+        season=None,
+        n_low=1.0,
+        n_high=5.0,
+        A_low=0.0,
+        A_high=1.0,
+        H_low=0.0,
+        H_high=1.0,
+        sig_mn=1.0,
+    ):
+        """
+        Declare the Hill model structure.
+
+        Parameters
+        cum_uptake: numpy array
+            cumulative uptake, between 0 and 1
+        elapsed: numpy array
+            number of days since the start of season
+        season: numpy array
+            season that each data point belongs to
+        other parameters: float
+            means and standard deviations to specify the prior distributions
+
+        Returns
+        Nothing
+
+        Details
+        Provides the model structure and priors for a Hill model.
+        """
+        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
+        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
+        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
+        if season is not None:
+            mu = A[season] * (elapsed ^ n) / (H[season] ^ n + elapsed ^ n)
+        else:
+            mu = A * (elapsed ^ n) / (H ^ n + elapsed ^ n)
+        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
+        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+
+    def fit(
+        self,
+        data: CumulativeUptakeData,
+        group_cols: List[str,] | None,
+        params: dict,
+        mcmc: dict,
+    ) -> Self:
+        """
+        Fit a hill model on training data.
+
+        Parameters
+        data: CumulativeUptakeData
+            training data on which to fit the model
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+        params: dict
+            parameter names and values to specify prior distributions
+        mcmc: dict
+            control parameters for mcmc fitting
+
+        Returns
+        LinearIncidentUptakeModel
+            model object with projection starting conditions, standardization
+            constants, and the model fit all stored as attributes
+
+        Details
+        Extra columns for fitting this model are added to the incident data,
+        including daily-average uptake. This is modeled rather than total uptake
+        to account for slight variations in interval lengths (e.g. 6 vs. 7 days).
+
+        To enable projections later on, some starting conditions as well as
+        standardization constants for the model's outcome and first-order predictors
+        are recorded and stored as model attributes.
+
+        If the training data spans multiple (combinations of) groups,
+        complete pooling will be used to recognize the groups as distinct but
+        to assume they behave identically except for initial conditions.
+
+        Finally, the model is fit using numpyro.
+        """
+        if group_cols is None:
+            group_cols = []
+
+        if "season" in group_cols:
+            season = data["season"].to_numpy()
+        else:
+            season = None
+
+        self.kernel = NUTS(self.model)
+        self.mcmc = MCMC(
+            self.kernel,
+            num_warmup=mcmc["num_warmup"],
+            num_samples=mcmc["num_samples"],
+            num_chains=mcmc["num_chains"],
+        )
+        self.mcmc.run(
+            self.rng_key,
+            cum_uptake=data["estimate"].to_numpy(),
+            elapsed=data["elapsed"].to_numpy(),
+            season=season,
+            n_low=params["n_low"],
+            n_high=params["n_high"],
+            A_low=params["A_low"],
+            A_high=params["A_high"],
+            H_low=params["H_low"],
+            H_high=params["H_high"],
+            sig_mn=params["sig_mn"],
+        )
+
+        return self
+
+    @staticmethod
+    def date_to_elapsed(
+        date_col: pl.Expr, season_start_month: int, season_start_day: int
+    ) -> pl.Expr:
+        """
+        Extract a time elapsed column from a date column, as polars expressions.
+
+        Parameters
+        date_col: pl.Expr
+            column of dates
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+
+        Returns
+        pl.Expr
+            column of the number of days elapsed since the first date
+
+        Details
+        Time difference is always in days.
+        """
+        # for every date, figure out the season breakpoint in that year
+        season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
+
+        # for dates before the season breakpoint in year, subtract a year
+        year = date_col.dt.year()
+        season_start_year = (
+            pl.when(date_col < season_start).then(year - 1).otherwise(year)
+        )
+
+        # rewrite the season breakpoints to that immediately before each date
+        season_start = pl.date(season_start_year, season_start_month, season_start_day)
+
+        # return the number of days from season start to each date
+        return (date_col - season_start).dt.total_days().cast(pl.Float64)
