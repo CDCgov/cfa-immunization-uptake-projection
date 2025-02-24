@@ -211,7 +211,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
-        data = IncidentUptakeData(data)
+        self.group_combos = extract_group_combos(data, group_cols)
 
         data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
 
@@ -306,96 +306,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         return x * sd + mn
 
-    @classmethod
-    def build_scaffold(
-        cls,
-        start: pl.DataFrame,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_data: pl.DataFrame | None,
-        group_cols: List[str,] | None,
-    ) -> pl.DataFrame:
-        """
-        Build a scaffold data frame to hold projections of a linear incident uptake model.
-
-        Parameters
-        start: pl.DataFrame
-            starting conditions for making projections
-        start_date: dt.date
-            the date on which projections should begin
-        end_date: dt.date
-            the date on which projections should end
-        interval: str
-            the time interval between projection dates,
-            following timedelta convention (e.g. '7d' = seven days)
-        test_data: pl.DataFrame | None
-            test data, if evaluation is being done, to provide exact dates
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
-
-        Returns
-        pl.DataFrame
-            scaffold to hold model projections
-
-        Details
-        The desired time frame for projections is repeated over grouping factors,
-        if any grouping factors exist.
-        """
-        # If there is test data such that evaluation will be performed,
-        # use exactly the dates that are in the test data
-        if test_data is not None:
-            scaffold = (
-                test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
-                .select("time_end")
-                .with_columns(estimate=pl.lit(0.0))
-            )
-        # If there are no test data, use exactly the dates that were provided
-        else:
-            scaffold = (
-                pl.date_range(
-                    start=start_date,
-                    end=end_date,
-                    interval=interval,
-                    eager=True,
-                )
-                .alias("time_end")
-                .to_frame()
-                .with_columns(estimate=pl.lit(0.0))
-            )
-
-        if group_cols is not None:
-            scaffold = scaffold.join(start.select(group_cols), how="cross")
-
-        scaffold = cls.augment_implicit_columns(
-            IncidentUptakeData(scaffold), group_cols
-        )
-
-        if group_cols is not None:
-            scaffold = scaffold.join(
-                start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
-                on=group_cols,
-            )
-        else:
-            scaffold = scaffold.with_columns(
-                last_elapsed=start["last_elapsed"][0],
-                last_interval=start["last_interval"][0],
-            )
-
-        scaffold = scaffold.with_columns(
-            elapsed=pl.col("elapsed")
-            + pl.col("last_elapsed")
-            + pl.col("last_interval"),
-            interval=pl.when(pl.col("interval").is_null())
-            .then(pl.col("last_interval"))
-            .otherwise(pl.col("interval")),
-        ).drop(["last_elapsed", "last_interval"])
-
-        return scaffold
-
-    @classmethod
+    @staticmethod
     def augment_implicit_columns(
-        cls, df: IncidentUptakeData, group_cols: List[str,] | None
+        df: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
         """
         Add explicit columns for information that is implicitly contained.
@@ -427,10 +340,10 @@ class LinearIncidentUptakeModel(UptakeModel):
                 IncidentUptakeData(df)
                 .with_columns(
                     elapsed=pl.col("time_end")
-                    .pipe(cls.date_to_elapsed)
+                    .pipe(LinearIncidentUptakeModel.date_to_elapsed)
                     .over(group_cols),
                     interval=pl.col("time_end")
-                    .pipe(cls.date_to_interval)
+                    .pipe(LinearIncidentUptakeModel.date_to_interval)
                     .over(group_cols),
                 )
                 .with_columns(daily=pl.col("estimate") / pl.col("interval"))
@@ -440,8 +353,12 @@ class LinearIncidentUptakeModel(UptakeModel):
             data = (
                 IncidentUptakeData(df)
                 .with_columns(
-                    elapsed=pl.col("time_end").pipe(cls.date_to_elapsed),
-                    interval=pl.col("time_end").pipe(cls.date_to_interval),
+                    elapsed=pl.col("time_end").pipe(
+                        LinearIncidentUptakeModel.date_to_elapsed
+                    ),
+                    interval=pl.col("time_end").pipe(
+                        LinearIncidentUptakeModel.date_to_interval
+                    ),
                 )
                 .with_columns(daily=pl.col("estimate") / pl.col("interval"))
                 .with_columns(previous=pl.col("daily").shift(1))
@@ -619,14 +536,38 @@ class LinearIncidentUptakeModel(UptakeModel):
             last_interval=(start_date - pl.col("last_date")).dt.total_days()
         )
 
-        cumulative_projection = self.build_scaffold(
-            self.start, start_date, end_date, interval, test_data, group_cols
+        scaffold = build_scaffold(
+            start_date, end_date, interval, test_data, group_cols, self.group_combos
         ).drop("estimate")
 
+        scaffold = LinearIncidentUptakeModel.augment_implicit_columns(
+            IncidentUptakeData(scaffold, group_cols), group_cols
+        )
+
         if group_cols is not None:
-            groups = cumulative_projection.partition_by(group_cols)
+            scaffold = scaffold.join(
+                self.start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
+                on=group_cols,
+            )
         else:
-            groups = [cumulative_projection]
+            scaffold = scaffold.with_columns(
+                last_elapsed=self.start["last_elapsed"][0],
+                last_interval=self.start["last_interval"][0],
+            )
+
+        scaffold = scaffold.with_columns(
+            elapsed=pl.col("elapsed")
+            + pl.col("last_elapsed")
+            + pl.col("last_interval"),
+            interval=pl.when(pl.col("interval").is_null())
+            .then(pl.col("last_interval"))
+            .otherwise(pl.col("interval")),
+        ).drop(["last_elapsed", "last_interval"])
+
+        if group_cols is not None:
+            groups = scaffold.partition_by(group_cols)
+        else:
+            groups = [scaffold]
 
         for g in range(len(groups)):
             if group_cols is not None:
@@ -798,9 +739,9 @@ class HillModel(UptakeModel):
         A = numpyro.sample("A", dist.Uniform(A_low, A_high))
         H = numpyro.sample("H", dist.Uniform(H_low, H_high))
         if season is not None:
-            mu = A[season] * (elapsed ^ n) / (H[season] ^ n + elapsed ^ n)
+            mu = A[season] * (elapsed**n) / (H[season] ** n + elapsed**n)
         else:
-            mu = A * (elapsed ^ n) / (H ^ n + elapsed ^ n)
+            mu = A * (elapsed**n) / (H**n + elapsed**n)
         sig = numpyro.sample("sig", dist.Exponential(sig_mn))
         numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
 
@@ -844,6 +785,8 @@ class HillModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
+        self.group_combos = extract_group_combos(data, group_cols)
+
         if group_cols is None:
             group_cols = []
 
@@ -911,3 +854,185 @@ class HillModel(UptakeModel):
 
         # return the number of days from season start to each date
         return (date_col - season_start).dt.total_days().cast(pl.Float64)
+
+    def predict(
+        self,
+        start_date: dt.date,
+        end_date: dt.date,
+        interval: str,
+        test_data: pl.DataFrame | None,
+        group_cols: List[str,] | None,
+    ) -> pl.DataFrame:
+        """
+        Make projections from a fit hill model.
+
+        Parameters
+        start_date: dt.date
+            the date on which projections should begin
+        end_date: dt.date
+            the date on which projections should end
+        interval: str
+            the time interval between projection dates,
+            following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+
+        Returns
+        LinearIncidentUptakeModel
+            the model with incident and cumulative projections as attributes
+
+        Details
+        A data frame is set up to house the incident projections over the
+        desired time window with the desired intervals.
+
+        The starting conditions derived from the last training data date
+        are used to project for the first date. From there, projections
+        are generated sequentially, because the projection for each date
+        depends on the previous date, thanks to the model structure.
+
+        After projections are completed, they are converted from daily-average
+        to total incident uptake, as well as cumulative uptake, on each date.
+        """
+        # If there are test data, the actual start date for projections should
+        # be the first date in the test data
+        if test_data is not None:
+            start_date = min(test_data["time_end"])
+
+        scaffold = build_scaffold(
+            start_date, end_date, interval, test_data, group_cols, self.group_combos
+        ).drop("estimate")
+
+        if group_cols is not None:
+            groups = scaffold.partition_by(group_cols)
+        else:
+            groups = [scaffold]
+
+        # Left off here! Must produce Hill Model predictions, which won't require project_sequentially
+
+        for g in range(len(groups)):
+            if group_cols is not None:
+                start = self.start.join(groups[g], on=group_cols, how="semi")[
+                    "last_daily"
+                ][0]
+            else:
+                start = self.start["last_daily"][0]
+
+            proj = self.project_sequentially(
+                tuple(groups[g]["elapsed"]),
+                start,
+                self.standards,
+                self.model,
+                self.mcmc,
+                self.rng_key,
+            )
+
+            proj = proj * groups[g]["interval"].to_numpy().reshape(-1, 1)
+
+            proj = (
+                np.cumsum(proj, 0)
+                + self.start.join(groups[g], on=group_cols, how="semi")[
+                    "last_cumulative"
+                ][0]
+            )
+
+            proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
+
+            groups[g] = (
+                pl.concat([groups[g], proj], how="horizontal")
+                .unpivot(
+                    index=groups[g].columns,
+                    variable_name="sample_id",
+                    value_name="estimate",
+                )
+                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
+            )
+
+        cumulative_projection = pl.concat(groups)
+
+        return SampleForecast(cumulative_projection)
+
+
+def extract_group_combos(
+    data: pl.DataFrame, group_cols: List[str,] | None
+) -> pl.DataFrame | None:
+    """
+    Extract from cumulative uptake data all combinations of grouping factors.
+
+    Parameters
+    data: CumulativeUptakeData
+        cumulative uptake data containing final observations of interest
+    group_cols: (str,) | None
+        name(s) of the columns for the grouping factors
+
+    Returns
+    pl.DataFrame
+        all combinations of grouping factors
+    """
+    if group_cols is not None:
+        return data.select(group_cols).unique()
+    else:
+        return None
+
+
+def build_scaffold(
+    start_date: dt.date,
+    end_date: dt.date,
+    interval: str,
+    test_data: pl.DataFrame | None,
+    group_cols: List[str,] | None,
+    group_combos: pl.DataFrame | None,
+) -> pl.DataFrame:
+    """
+    Build a scaffold data frame to hold projections of a linear incident uptake model.
+
+    Parameters
+    start_date: dt.date
+        the date on which projections should begin
+    end_date: dt.date
+        the date on which projections should end
+    interval: str
+        the time interval between projection dates,
+        following timedelta convention (e.g. '7d' = seven days)
+    test_data: pl.DataFrame | None
+        test data, if evaluation is being done, to provide exact dates
+    group_cols: (str,) | None
+        name(s) of the columns for the grouping factors
+    group_combos: pl.DataFrame | None
+        all unique combinations of grouping factors in the data
+
+    Returns
+    pl.DataFrame
+        scaffold to hold model projections
+
+    Details
+    The desired time frame for projections is repeated over grouping factors,
+    if any grouping factors exist.
+    """
+    # If there is test data such that evaluation will be performed,
+    # use exactly the dates that are in the test data
+    if test_data is not None:
+        scaffold = (
+            test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
+            .select("time_end")
+            .with_columns(estimate=pl.lit(0.0))
+        )
+    # If there are no test data, use exactly the dates that were provided
+    else:
+        scaffold = (
+            pl.date_range(
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                eager=True,
+            )
+            .alias("time_end")
+            .to_frame()
+            .with_columns(estimate=pl.lit(0.0))
+        )
+
+    if group_combos is not None:
+        scaffold = scaffold.join(group_combos, how="cross")
+
+    return scaffold
