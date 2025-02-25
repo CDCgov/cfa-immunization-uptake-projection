@@ -10,7 +10,7 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast
+from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast, UptakeData
 
 
 class UptakeModel(abc.ABC):
@@ -862,6 +862,8 @@ class HillModel(UptakeModel):
         interval: str,
         test_data: pl.DataFrame | None,
         group_cols: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
     ) -> pl.DataFrame:
         """
         Make projections from a fit hill model.
@@ -878,22 +880,18 @@ class HillModel(UptakeModel):
             test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
 
         Returns
-        LinearIncidentUptakeModel
+        HillModel
             the model with incident and cumulative projections as attributes
 
         Details
-        A data frame is set up to house the incident projections over the
+        A data frame is set up to house the projections over the
         desired time window with the desired intervals.
-
-        The starting conditions derived from the last training data date
-        are used to project for the first date. From there, projections
-        are generated sequentially, because the projection for each date
-        depends on the previous date, thanks to the model structure.
-
-        After projections are completed, they are converted from daily-average
-        to total incident uptake, as well as cumulative uptake, on each date.
         """
         # If there are test data, the actual start date for projections should
         # be the first date in the test data
@@ -904,6 +902,15 @@ class HillModel(UptakeModel):
             start_date, end_date, interval, test_data, self.group_combos
         ).drop("estimate")
 
+        scaffold = scaffold.with_columns(
+            elapsed=HillModel.date_to_elapsed(
+                pl.col("time_end"), season_start_month, season_start_day
+            ),
+            season=UptakeData.date_to_season(
+                pl.col("time_end"), season_start_month, season_start_day
+            ),
+        )
+
         # Left off here! Must produce Hill Model predictions, which won't require project_sequentially
         predictive = Predictive(self.model, self.mcmc.get_samples())
         predictions = predictive(
@@ -912,56 +919,9 @@ class HillModel(UptakeModel):
             season=scaffold["season"].to_numpy(),
         )["obs"]
 
+        print(predictions)
+
         return predictions
-
-        # Use what's above with predictive, not what's below. MUST STILL ADD elapsed & season to scaffold!
-
-        if group_cols is not None:
-            groups = scaffold.partition_by(group_cols)
-        else:
-            groups = [scaffold]
-
-        for g in range(len(groups)):
-            if group_cols is not None:
-                start = self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_daily"
-                ][0]
-            else:
-                start = self.start["last_daily"][0]
-
-            proj = self.project_sequentially(
-                tuple(groups[g]["elapsed"]),
-                start,
-                self.standards,
-                self.model,
-                self.mcmc,
-                self.rng_key,
-            )
-
-            proj = proj * groups[g]["interval"].to_numpy().reshape(-1, 1)
-
-            proj = (
-                np.cumsum(proj, 0)
-                + self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_cumulative"
-                ][0]
-            )
-
-            proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
-
-            groups[g] = (
-                pl.concat([groups[g], proj], how="horizontal")
-                .unpivot(
-                    index=groups[g].columns,
-                    variable_name="sample_id",
-                    value_name="estimate",
-                )
-                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
-            )
-
-        cumulative_projection = pl.concat(groups)
-
-        return SampleForecast(cumulative_projection)
 
 
 def extract_group_combos(
