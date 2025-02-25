@@ -712,8 +712,8 @@ class HillModel(UptakeModel):
         n_high=5.0,
         A_low=0.0,
         A_high=1.0,
-        H_low=0.0,
-        H_high=1.0,
+        H_low=10.0,
+        H_high=180.0,
         sig_mn=1.0,
     ):
         """
@@ -802,6 +802,11 @@ class HillModel(UptakeModel):
             num_samples=mcmc["num_samples"],
             num_chains=mcmc["num_chains"],
         )
+
+        print(data["estimate"].to_numpy())
+        print(data["elapsed"].to_numpy())
+        print(season)
+
         self.mcmc.run(
             self.rng_key,
             cum_uptake=data["estimate"].to_numpy(),

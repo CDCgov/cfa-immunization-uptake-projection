@@ -63,11 +63,11 @@ def run_forecast(
     if model["name"] == "LinearIncidentUptakeModel":
         data = data.to_incident(grouping_factors)
         train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
-    elif model["name"] == "Hill":
+    elif model["name"] == "HillModel":
         data = iup.CumulativeUptakeData(
             data.with_columns(
                 elapsed=iup.models.HillModel.date_to_elapsed(
-                    pl.col("date"),
+                    pl.col("time_end"),
                     config["data"]["season_start_month"],
                     config["data"]["season_start_day"],
                 )

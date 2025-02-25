@@ -30,17 +30,31 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  - name: LinearIncidentUptakeModel
+  # - name: LinearIncidentUptakeModel
+  #   seed: 0
+  #   params:
+  #     a_mn: 0.0
+  #     a_sd: 0.1
+  #     bP_mn: 0.0
+  #     bP_sd: 0.1
+  #     bE_mn: 0.0
+  #     bE_sd: 0.1
+  #     bPE_mn: 0.0
+  #     bPE_sd: 0.1
+  #     sig_mn: 0.1
+  #   mcmc:
+  #     num_warmup: 1000
+  #     num_samples: 100
+  #     num_chains: 4
+  - name: HillModel
     seed: 0
     params:
-      a_mn: 0.0
-      a_sd: 0.1
-      bP_mn: 0.0
-      bP_sd: 0.1
-      bE_mn: 0.0
-      bE_sd: 0.1
-      bPE_mn: 0.0
-      bPE_sd: 0.1
+      n_low: 1.0
+      n_high: 5.0
+      A_low: 0.0
+      A_high: 1.0
+      H_low: 10.0
+      H_high: 180.0
       sig_mn: 0.1
     mcmc:
       num_warmup: 1000
