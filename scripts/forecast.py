@@ -82,7 +82,6 @@ def run_forecast(
     if test_data.height == 0:
         test_data = None
 
-    # LEFT OFF HERE - MAY BE MISTAKES BELOW AND IN USED FUNCTIONS
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,

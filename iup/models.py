@@ -103,47 +103,28 @@ class LinearIncidentUptakeModel(UptakeModel):
         data: IncidentUptakeData, groups: List[str,] | None
     ) -> pl.DataFrame:
         """
-        Extract from incident uptake data the last observed values of several variables, by group.
-
-        Parameters
-        data: IncidentUptakeData
-            incident uptake data containing final observations of interest
-        groups: (str,) | None
-            name(s) of the columns for the grouping factors
-
-        Returns
-        pl.DataFrame
-            the last observed values of several IncidentUptakeData variables
-
-        Details
-        Starting conditions include:
-        - Last date on which uptake was observed
-        - Daily average incident uptake on this date
-        - Days elapsed since rollout on this date
-        - Cumulative uptake since rollout on this date
+        From incident uptake training data, extract the last observed:
+        - date on which uptake was reported
+        - daily average incident uptake
+        - days elapsed since rollout
+        - cumulative uptake since rollout
+        Even if no grouping variables are specified, this must group on season at least.
         """
-        if groups is not None:
-            start = (
-                data.group_by(groups)
-                .agg(
-                    [
-                        pl.col("time_end").last().alias("last_date"),
-                        pl.col("daily").last().alias("last_daily"),
-                        pl.col("elapsed").last().alias("last_elapsed"),
-                        pl.col("estimate").sum().alias("last_cumulative"),
-                    ]
-                )
-                .filter(pl.col("season") == pl.col("season").max())
-            )
-        else:
-            start = data.select(
+        if groups is None:
+            groups = ["season"]
+
+        start = (
+            data.group_by(groups)
+            .agg(
                 [
                     pl.col("time_end").last().alias("last_date"),
                     pl.col("daily").last().alias("last_daily"),
                     pl.col("elapsed").last().alias("last_elapsed"),
                     pl.col("estimate").sum().alias("last_cumulative"),
                 ]
-            ).filter(pl.col("season") == pl.col("season").max())
+            )
+            .filter(pl.col("season") == pl.col("season").max())
+        )
 
         return start
 
@@ -171,8 +152,6 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         incident_data = LinearIncidentUptakeModel.augment_columns(incident_data, groups)
 
-        # incident_data = incident_data.trim_outlier_intervals(groups)
-
         return incident_data
 
     @staticmethod
@@ -180,32 +159,21 @@ class LinearIncidentUptakeModel(UptakeModel):
         data: IncidentUptakeData,
         groups: List[str] | None,
     ) -> IncidentUptakeData:
-        if groups is not None:
-            data = IncidentUptakeData(
-                data.with_columns(
-                    elapsed=pl.col("time_end")
-                    .pipe(LinearIncidentUptakeModel.date_to_elapsed)
-                    .over(groups),
-                    interval=pl.col("time_end")
-                    .pipe(LinearIncidentUptakeModel.date_to_interval)
-                    .over(groups),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1).over(groups))
+        if groups is None:
+            groups = ["season"]
+
+        data = IncidentUptakeData(
+            data.with_columns(
+                elapsed=pl.col("time_end")
+                .pipe(LinearIncidentUptakeModel.date_to_elapsed)
+                .over(groups),
+                interval=pl.col("time_end")
+                .pipe(LinearIncidentUptakeModel.date_to_interval)
+                .over(groups),
             )
-        else:
-            data = IncidentUptakeData(
-                data.with_columns(
-                    elapsed=pl.col("time_end").pipe(
-                        LinearIncidentUptakeModel.date_to_elapsed
-                    ),
-                    interval=pl.col("time_end").pipe(
-                        LinearIncidentUptakeModel.date_to_interval
-                    ),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1))
-            )
+            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+            .with_columns(previous=pl.col("daily").shift(1).over(groups))
+        )
 
         return data
 
@@ -272,6 +240,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             num_samples=mcmc["num_samples"],
             num_chains=mcmc["num_chains"],
         )
+
         self.mcmc.run(
             self.rng_key,
             previous=data["previous_std"].to_numpy(),
@@ -541,12 +510,15 @@ class LinearIncidentUptakeModel(UptakeModel):
 
             proj = proj * combos[g]["interval"].to_numpy().reshape(-1, 1)
 
-            proj = (
-                np.cumsum(proj, 0)
-                + self.start.join(combos[g], on=groups, how="semi")["last_cumulative"][
-                    0
-                ]
-            )
+            if groups is not None:
+                proj = (
+                    np.cumsum(proj, 0)
+                    + self.start.join(combos[g], on=groups, how="semi")[
+                        "last_cumulative"
+                    ][0]
+                )
+            else:
+                proj = np.cumsum(proj, 0) + self.start["last_cumulative"][0]
 
             proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
 
@@ -937,7 +909,7 @@ def build_scaffold(
     if test_data is not None:
         scaffold = (
             test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
-            .select("time_end")
+            .select(["time_end", "season"])
             .with_columns(estimate=pl.lit(0.0))
         )
     # If there are no test data, use exactly the dates that were provided

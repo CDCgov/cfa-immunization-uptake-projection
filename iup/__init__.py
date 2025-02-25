@@ -136,19 +136,12 @@ class IncidentUptakeData(UptakeData):
         To fix this, cumulative uptake from the removed rows may be supplied separately.
         """
         if group_cols is None:
-            out = self.with_columns(estimate=pl.col("estimate").cum_sum())
-        else:
-            out = self.with_columns(
-                estimate=pl.col("estimate").cum_sum().over(group_cols)
-            )
+            group_cols = ["season"]
+
+        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
 
         if last_cumulative is not None:
-            if group_cols is not None:
-                out = out.join(last_cumulative, on=group_cols)
-            else:
-                out = out.with_columns(
-                    last_cumulative=last_cumulative["last_cumulative"][0]
-                )
+            out = out.join(last_cumulative, on=group_cols)
 
             out = out.with_columns(
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
@@ -195,16 +188,13 @@ class IncidentUptakeData(UptakeData):
             "Chronological sorting got broken during data augmentation!"
         )
 
-        if groups is not None:
-            rank = pl.col("time_end").rank().over(groups)
-            shifted_standard_interval = (
-                pl.col("interval").pipe(iup.utils.standardize).shift(1).over(groups)
-            )
-        else:
-            rank = pl.col("time_end").rank()
-            shifted_standard_interval = (
-                pl.col("interval").pipe(iup.utils.standardize).shift(1)
-            )
+        if groups is None:
+            groups = ["season"]
+
+        rank = pl.col("time_end").rank().over(groups)
+        shifted_standard_interval = (
+            pl.col("interval").pipe(iup.utils.standardize).shift(1).over(groups)
+        )
 
         return IncidentUptakeData(
             self.filter(
@@ -238,11 +228,11 @@ class CumulativeUptakeData(UptakeData):
         Because the first date for each group is rollout, incident uptake is 0.
         """
         if group_cols is None:
-            out = self.with_columns(estimate=pl.col("estimate").diff().fill_null(0))
-        else:
-            out = self.with_columns(
-                estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
-            )
+            group_cols = ["season"]
+
+        out = self.with_columns(
+            estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
+        )
 
         return IncidentUptakeData(out)
 
