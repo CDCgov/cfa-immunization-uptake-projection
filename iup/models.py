@@ -189,6 +189,39 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         incident_data = data.to_incident(groups)
 
+        assert incident_data["time_end"].is_sorted(), (
+            "Chronological sorting got broken during data augmentation!"
+        )
+
+        if groups is not None:
+            incident_data = IncidentUptakeData(
+                incident_data.with_columns(
+                    elapsed=pl.col("time_end")
+                    .pipe(LinearIncidentUptakeModel.date_to_elapsed)
+                    .over(groups),
+                    interval=pl.col("time_end")
+                    .pipe(LinearIncidentUptakeModel.date_to_interval)
+                    .over(groups),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1).over(groups))
+            )
+        else:
+            incident_data = IncidentUptakeData(
+                incident_data.with_columns(
+                    elapsed=pl.col("time_end").pipe(
+                        LinearIncidentUptakeModel.date_to_elapsed
+                    ),
+                    interval=pl.col("time_end").pipe(
+                        LinearIncidentUptakeModel.date_to_interval
+                    ),
+                )
+                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+                .with_columns(previous=pl.col("daily").shift(1))
+            )
+
+        incident_data = incident_data.trim_outlier_intervals(groups)
+
         return incident_data
 
     def fit(
@@ -273,60 +306,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         return self
 
     @staticmethod
-    def standardize(x, mn=None, sd=None):
-        """
-        Standardize: subtract mean and divide by standard deviation.
-
-        Parameters
-        x: pl.Expr | float64
-            the numbers to standardize
-        mn: float64
-            the term to subtract, if not the mean of x
-        sd: float64
-            the term to divide by, if not the standard deviation of x
-
-        Returns
-        pl.Expr | float
-            the standardized numbers
-
-        Details
-        If the standard deviation is 0, all standardized values are 0.0.
-        """
-        if type(x) is pl.Expr:
-            if mn is not None:
-                return (x - mn) / sd
-            else:
-                return (
-                    pl.when(x.drop_nulls().n_unique() == 1)
-                    .then(0.0)
-                    .otherwise((x - x.mean()) / x.std())
-                )
-        else:
-            if mn is not None:
-                return (x - mn) / sd
-            else:
-                return (x - x.mean()) / x.std()
-
-    @staticmethod
-    def unstandardize(x, mn, sd):
-        """
-        Unstandardize: add standard deviation and multiply by mean.
-
-        Parameters
-        x: pl.Expr
-            the numbers to unstandardize
-        mn: float64
-            the term to add
-        sd: float64
-            the term to multiply by
-
-        Returns
-        pl.Expr
-            the unstandardized numbers
-        """
-        return x * sd + mn
-
-    @staticmethod
     def augment_implicit_columns(
         df: IncidentUptakeData, group_cols: List[str,] | None
     ) -> pl.DataFrame:
@@ -390,6 +369,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
         """
         Extract a time elapsed column from a date column, as polars expressions.
+        Time elapsed is calculated since the first report date in a season.
         This ought to be called .over(season)
 
         Parameters
@@ -631,76 +611,6 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         return SampleForecast(cumulative_projection)
 
-    @classmethod
-    def trim_outlier_intervals(
-        cls,
-        df: IncidentUptakeData,
-        group_cols: List[str,] | None,
-        threshold: float = 1.0,
-    ) -> pl.DataFrame:
-        """
-        Remove rows from incident uptake data with intervals that are too large.
-
-        Parameters
-          group_cols (tuple) | None: names of grouping factor columns
-          threshold (float): maximum standardized interval between first two dates
-
-        Returns
-        pl.DataFrame:
-            incident uptake data with the outlier rows removed
-
-        Details
-        The first row (index 0) is always rollout, so the second row (index 1)
-        is the first actual report. Between these is often a long interval,
-        compared to the fairly regular intervals among subsequent rows.
-
-        If this interval is 1+ std dev bigger than the average interval, then
-        the first report's incident uptake is likely an inflated outlier and
-        should be excluded from the statistical model fitting.
-
-        In this case, to fit a linear incident uptake model,
-        the first three rows of the incident uptake data are dropped:
-        - The first because it is rollout, where uptake is 0 (also an outlier)
-        - The second because it is likely an outlier, as described above
-        - The third because it's previous value is the second, an outlier
-
-        Otherwise, only the first two rows of the incident uptake data are dropped:
-        - The first because it is rollout, where uptake is 0 (also an outlier)
-        - The second because it's previous value is 0, an outlier
-        """
-        assert df["time_end"].is_sorted(), (
-            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
-        )
-
-        if group_cols is not None:
-            rank = pl.col("time_end").rank().over(group_cols)
-            shifted_standard_interval = (
-                pl.col("time_end")
-                .pipe(cls.date_to_interval)
-                .pipe(cls.standardize)
-                .shift(1)
-                .over(group_cols)
-            )
-        else:
-            rank = pl.col("time_end").rank()
-            shifted_standard_interval = (
-                pl.col("time_end")
-                .pipe(cls.date_to_interval)
-                .pipe(cls.standardize)
-                .shift(1)
-            )
-
-        return (
-            # validate input
-            IncidentUptakeData(df)
-            # sort by date
-            .sort("time_end")
-            # keep only the correct rows
-            .filter(
-                (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
-            )
-        )
-
 
 class HillModel(UptakeModel):
     """
@@ -869,6 +779,7 @@ class HillModel(UptakeModel):
     ) -> pl.Expr:
         """
         Extract a time elapsed column from a date column, as polars expressions.
+        Time elapsed is calculated since the season start, regardless of the first report date.
 
         Parameters
         date_col: pl.Expr

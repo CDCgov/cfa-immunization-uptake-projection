@@ -2,6 +2,7 @@ import datetime as dt
 from typing import List
 
 import polars as pl
+import utils
 from polars.datatypes.classes import DataTypeClass
 
 
@@ -153,6 +154,62 @@ class IncidentUptakeData(UptakeData):
             ).drop("last_cumulative")
 
         return CumulativeUptakeData(out)
+
+    def trim_outlier_intervals(
+        self,
+        groups: List[str,] | None,
+        threshold: float = 1.0,
+    ) -> "IncidentUptakeData":
+        """
+        Remove rows from incident uptake data with intervals that are too large.
+
+        Parameters
+          groups (tuple) | None: names of grouping factor columns
+          threshold (float): maximum standardized interval between first two dates
+
+        Returns
+        pl.DataFrame:
+            incident uptake data with the outlier rows removed
+
+        Details
+        The first row (index 0) is always rollout, so the second row (index 1)
+        is the first actual report. Between these is often a long interval,
+        compared to the fairly regular intervals among subsequent rows.
+
+        If this interval is 1+ std dev bigger than the average interval, then
+        the first report's incident uptake is likely an inflated outlier and
+        should be excluded from the statistical model fitting.
+
+        In this case, to fit a linear incident uptake model,
+        the first three rows of the incident uptake data are dropped:
+        - The first because it is rollout, where uptake is 0 (also an outlier)
+        - The second because it is likely an outlier, as described above
+        - The third because it's previous value is the second, an outlier
+
+        Otherwise, only the first two rows of the incident uptake data are dropped:
+        - The first because it is rollout, where uptake is 0 (also an outlier)
+        - The second because it's previous value is 0, an outlier
+        """
+        assert self["time_end"].is_sorted(), (
+            "Chronological sorting got broken during data augmentation!"
+        )
+
+        if groups is not None:
+            rank = pl.col("time_end").rank().over(groups)
+            shifted_standard_interval = (
+                pl.col("interval").pipe(utils.standardize).shift(1).over(groups)
+            )
+        else:
+            rank = pl.col("time_end").rank()
+            shifted_standard_interval = (
+                pl.col("interval").pipe(utils.standardize).shift(1)
+            )
+
+        return IncidentUptakeData(
+            self.filter(
+                (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
+            ).sort("time_end")
+        )
 
 
 class CumulativeUptakeData(UptakeData):
