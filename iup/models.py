@@ -419,6 +419,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str,
         test_data: pl.DataFrame | None,
         groups: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
     ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
@@ -435,6 +437,10 @@ class LinearIncidentUptakeModel(UptakeModel):
             test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
 
         Returns
         LinearIncidentUptakeModel
@@ -560,9 +566,9 @@ class HillModel(UptakeModel):
 
     @staticmethod
     def hill(
-        cum_uptake,
         elapsed,
         season=None,
+        cum_uptake=None,
         n_low=1.0,
         n_high=5.0,
         A_low=0.0,
@@ -667,6 +673,9 @@ class HillModel(UptakeModel):
 
         if "season" in groups:
             season = data["season"].to_numpy()
+            # unique_seasons, indices = np.unique(season, return_inverse=True)
+            # season_to_index = {s: i for i, s in enumerate(unique_seasons)}
+            # season = np.array([season_to_index[s] for s in season])
         else:
             season = None
 
@@ -677,10 +686,6 @@ class HillModel(UptakeModel):
             num_samples=mcmc["num_samples"],
             num_chains=mcmc["num_chains"],
         )
-
-        print(data["estimate"].to_numpy())
-        print(data["elapsed"].to_numpy())
-        print(season)
 
         self.mcmc.run(
             self.rng_key,
@@ -792,17 +797,45 @@ class HillModel(UptakeModel):
             ),
         )
 
-        # Left off here! Must produce Hill Model predictions, which won't require project_sequentially
         predictive = Predictive(self.model, self.mcmc.get_samples())
-        predictions = predictive(
-            self.rng_key,
-            elapsed=scaffold["elapsed"].to_numpy(),
-            season=scaffold["season"].to_numpy(),
-        )["obs"]
+        if groups is not None:
+            predictions = np.array(
+                predictive(
+                    self.rng_key,
+                    elapsed=scaffold["elapsed"].to_numpy(),
+                    season=scaffold["season"].to_numpy(),
+                )["obs"]
+            ).transpose()
+        else:
+            predictions = np.array(
+                predictive(self.rng_key, elapsed=scaffold["elapsed"].to_numpy())["obs"]
+            ).transpose()
 
-        print(predictions)
+        pred = pl.concat(
+            [
+                scaffold,
+                pl.DataFrame(
+                    predictions,
+                    schema=[f"{i + 1}" for i in range(predictions.shape[1])],
+                ),
+            ],
+            how="horizontal",
+        )
 
-        return predictions
+        pred = (
+            pred.unpivot(
+                index=scaffold.columns,
+                variable_name="sample_id",
+                value_name="estimate",
+            )
+            .with_columns(
+                sample_id=pl.col("sample_id").cast(pl.Int64),
+                estimate=pl.col("estimate").cast(pl.Float64),
+            )
+            .drop("elapsed")
+        )
+
+        return SampleForecast(pred)
 
 
 def extract_group_combos(

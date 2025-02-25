@@ -89,7 +89,12 @@ def run_forecast(
         config["forecast_timeframe"]["interval"],
         test_data,
         grouping_factors,
+        config["data"]["season_start_month"],
+        config["data"]["season_start_day"],
     )
+
+    if grouping_factors is None:
+        grouping_factors = ["season"]
 
     cumulative_projections = (
         cumulative_projections.group_by(grouping_factors + ["time_end"])
