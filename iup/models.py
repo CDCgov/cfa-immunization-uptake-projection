@@ -169,9 +169,20 @@ class LinearIncidentUptakeModel(UptakeModel):
             "Chronological sorting got broken during data augmentation!"
         )
 
+        incident_data = LinearIncidentUptakeModel.augment_columns(incident_data, groups)
+
+        incident_data = incident_data.trim_outlier_intervals(groups)
+
+        return incident_data
+
+    @staticmethod
+    def augment_columns(
+        data: IncidentUptakeData,
+        groups: List[str] | None,
+    ) -> IncidentUptakeData:
         if groups is not None:
-            incident_data = IncidentUptakeData(
-                incident_data.with_columns(
+            data = IncidentUptakeData(
+                data.with_columns(
                     elapsed=pl.col("time_end")
                     .pipe(LinearIncidentUptakeModel.date_to_elapsed)
                     .over(groups),
@@ -183,8 +194,8 @@ class LinearIncidentUptakeModel(UptakeModel):
                 .with_columns(previous=pl.col("daily").shift(1).over(groups))
             )
         else:
-            incident_data = IncidentUptakeData(
-                incident_data.with_columns(
+            data = IncidentUptakeData(
+                data.with_columns(
                     elapsed=pl.col("time_end").pipe(
                         LinearIncidentUptakeModel.date_to_elapsed
                     ),
@@ -196,9 +207,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                 .with_columns(previous=pl.col("daily").shift(1))
             )
 
-        incident_data = incident_data.trim_outlier_intervals(groups)
-
-        return incident_data
+        return data
 
     def fit(
         self,
@@ -278,66 +287,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         )
 
         return self
-
-    @staticmethod
-    def augment_implicit_columns(
-        df: IncidentUptakeData, group_cols: List[str,] | None
-    ) -> pl.DataFrame:
-        """
-        Add explicit columns for information that is implicitly contained.
-
-        Parameters
-        data: IncidentUptakeData
-            data containing dates and incident uptake estimates
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
-
-        Returns
-        IncidentUptakeData
-            data provided augmented with extra explicit columns.
-
-        Details
-        Extra columns are added to the incident uptake data:
-        - disease season that each date belongs to
-        - interval of time in days between each successive date
-        - number of days elapsed between rollout and each date
-        - daily-average uptake in the interval preceding each date
-        - daily-average uptake in the interval preceding the previous date
-        """
-        assert df["time_end"].is_sorted(), (
-            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
-        )
-
-        if group_cols is not None:
-            data = (
-                IncidentUptakeData(df)
-                .with_columns(
-                    elapsed=pl.col("time_end")
-                    .pipe(LinearIncidentUptakeModel.date_to_elapsed)
-                    .over(group_cols),
-                    interval=pl.col("time_end")
-                    .pipe(LinearIncidentUptakeModel.date_to_interval)
-                    .over(group_cols),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
-            )
-        else:
-            data = (
-                IncidentUptakeData(df)
-                .with_columns(
-                    elapsed=pl.col("time_end").pipe(
-                        LinearIncidentUptakeModel.date_to_elapsed
-                    ),
-                    interval=pl.col("time_end").pipe(
-                        LinearIncidentUptakeModel.date_to_interval
-                    ),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1))
-            )
-
-        return data
 
     @staticmethod
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
@@ -428,14 +377,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             # Predictors are standardized uptake on the previous projection date,
             # standardized days-elapsed on the current projection date, & interaction.
             prev = np.array(
-                cls.standardize(
+                utils.standardize(
                     proj[:, i],
                     standards["previous"]["mean"],
                     standards["previous"]["std"],
                 )
             )
             elap = np.repeat(
-                cls.standardize(
+                utils.standardize(
                     elapsed[i],
                     standards["elapsed"]["mean"],
                     standards["elapsed"]["std"],
@@ -450,7 +399,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             y = (predictive(rng_key, previous=prev, elapsed=elap)["obs"]).diagonal()
 
             # Unstandardize the projection onto its natural scale
-            proj[:, i + 1] = cls.unstandardize(
+            proj[:, i + 1] = utils.unstandardize(
                 y,
                 standards["daily"]["mean"],
                 standards["daily"]["std"],
@@ -514,7 +463,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             start_date, end_date, interval, test_data, self.group_combos
         ).drop("estimate")
 
-        scaffold = LinearIncidentUptakeModel.augment_implicit_columns(
+        scaffold = LinearIncidentUptakeModel.augment_columns(
             IncidentUptakeData(scaffold, group_cols), group_cols
         )
 
