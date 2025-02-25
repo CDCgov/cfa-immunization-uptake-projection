@@ -332,6 +332,45 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         return date_col.diff().dt.total_days().cast(pl.Float64)
 
+    @staticmethod
+    def augment_scaffold(
+        scaffold: pl.DataFrame,
+        groups: List[str] | None,
+        start: pl.DataFrame,
+    ) -> pl.DataFrame:
+        """
+        To tailor a forecasting scaffold for the linear incident uptake model,
+        columns must be added for the time elapsed since rollout at each date,
+        and the intervals between each date and the previous. Some of the
+        necessary information is stored in the LinearIncidentUptakeModel's
+        start attribute, which describes the conditions on the forecast date.
+        """
+        scaffold = LinearIncidentUptakeModel.augment_columns(
+            IncidentUptakeData(scaffold), groups
+        ).drop("estimate")
+
+        if groups is not None:
+            scaffold = scaffold.join(
+                start.select(list(groups) + ["last_elapsed", "last_interval"]),
+                on=groups,
+            )
+        else:
+            scaffold = scaffold.with_columns(
+                last_elapsed=start["last_elapsed"][0],
+                last_interval=start["last_interval"][0],
+            )
+
+        scaffold = scaffold.with_columns(
+            elapsed=pl.col("elapsed")
+            + pl.col("last_elapsed")
+            + pl.col("last_interval"),
+            interval=pl.when(pl.col("interval").is_null())
+            .then(pl.col("last_interval"))
+            .otherwise(pl.col("interval")),
+        ).drop(["last_elapsed", "last_interval"])
+
+        return scaffold
+
     @classmethod
     def project_sequentially(
         cls, elapsed: tuple, start: float, standards: dict, model, mcmc, rng_key
@@ -458,42 +497,25 @@ class LinearIncidentUptakeModel(UptakeModel):
         After projections are completed, they are converted from daily-average
         to total incident uptake, as well as cumulative uptake, on each date.
         """
-        # If there are test data, the actual start date for projections should
-        # be the first date in the test data
-        if test_data is not None:
-            start_date = min(test_data["time_end"])
+        scaffold = build_scaffold(
+            start_date,
+            end_date,
+            interval,
+            test_data,
+            self.group_combos,
+            season_start_month,
+            season_start_day,
+        )
 
         self.start = self.start.with_columns(
-            last_interval=(start_date - pl.col("last_date")).dt.total_days()
+            last_interval=(
+                scaffold["time_end"].min() - pl.col("last_date")
+            ).dt.total_days()
         )
 
-        scaffold = build_scaffold(
-            start_date, end_date, interval, test_data, self.group_combos
+        scaffold = LinearIncidentUptakeModel.augment_scaffold(
+            scaffold, groups, self.start
         )
-
-        scaffold = LinearIncidentUptakeModel.augment_columns(
-            IncidentUptakeData(scaffold), groups
-        ).drop("estimate")
-
-        if groups is not None:
-            scaffold = scaffold.join(
-                self.start.select(list(groups) + ["last_elapsed", "last_interval"]),
-                on=groups,
-            )
-        else:
-            scaffold = scaffold.with_columns(
-                last_elapsed=self.start["last_elapsed"][0],
-                last_interval=self.start["last_interval"][0],
-            )
-
-        scaffold = scaffold.with_columns(
-            elapsed=pl.col("elapsed")
-            + pl.col("last_elapsed")
-            + pl.col("last_interval"),
-            interval=pl.when(pl.col("interval").is_null())
-            .then(pl.col("last_interval"))
-            .otherwise(pl.col("interval")),
-        ).drop(["last_elapsed", "last_interval"])
 
         if groups is not None:
             combos = scaffold.partition_by(groups)
@@ -741,6 +763,23 @@ class HillModel(UptakeModel):
         # return the number of days from season start to each date
         return (date_col - season_start).dt.total_days().cast(pl.Float64)
 
+    @staticmethod
+    def augment_scaffold(
+        scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
+    ) -> pl.DataFrame:
+        """
+        To tailor a forecasting scaffold for the Hill model, columns
+        must be added for the time elapsed since the season start,
+        while the column for estimate must be dropped.
+        """
+        scaffold = scaffold.with_columns(
+            elapsed=HillModel.date_to_elapsed(
+                pl.col("time_end"), season_start_month, season_start_day
+            )
+        ).drop("estimate")
+
+        return scaffold
+
     def predict(
         self,
         start_date: dt.date,
@@ -779,22 +818,18 @@ class HillModel(UptakeModel):
         A data frame is set up to house the projections over the
         desired time window with the desired intervals.
         """
-        # If there are test data, the actual start date for projections should
-        # be the first date in the test data
-        if test_data is not None:
-            start_date = min(test_data["time_end"])
-
         scaffold = build_scaffold(
-            start_date, end_date, interval, test_data, self.group_combos
-        ).drop("estimate")
+            start_date,
+            end_date,
+            interval,
+            test_data,
+            self.group_combos,
+            season_start_month,
+            season_start_day,
+        )
 
-        scaffold = scaffold.with_columns(
-            elapsed=HillModel.date_to_elapsed(
-                pl.col("time_end"), season_start_month, season_start_day
-            ),
-            season=UptakeData.date_to_season(
-                pl.col("time_end"), season_start_month, season_start_day
-            ),
+        scaffold = HillModel.augment_scaffold(
+            scaffold, season_start_month, season_start_day
         )
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
@@ -866,6 +901,8 @@ def build_scaffold(
     interval: str,
     test_data: pl.DataFrame | None,
     group_combos: pl.DataFrame | None,
+    season_start_month: int,
+    season_start_day: int,
 ) -> pl.DataFrame:
     """
     Build a scaffold data frame to hold projections of a linear incident uptake model.
@@ -882,6 +919,10 @@ def build_scaffold(
         test data, if evaluation is being done, to provide exact dates
     group_combos: pl.DataFrame | None
         all unique combinations of grouping factors in the data
+    season_start_month: int
+        first month of the overwinter disease season
+    season_start_day: int
+        first day of the first month of the overwinter disease season
 
     Returns
     pl.DataFrame
@@ -910,7 +951,12 @@ def build_scaffold(
             )
             .alias("time_end")
             .to_frame()
-            .with_columns(estimate=pl.lit(0.0))
+            .with_columns(
+                estimate=pl.lit(0.0),
+                season=UptakeData.date_to_season(
+                    pl.col("time_end"), season_start_month, season_start_day
+                ),
+            )
         )
 
     if group_combos is not None:
