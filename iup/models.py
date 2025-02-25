@@ -6,11 +6,11 @@ import numpy as np
 import numpyro
 import numpyro.distributions as dist
 import polars as pl
-import utils
 from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
+import iup.utils
 from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast, UptakeData
 
 
@@ -251,15 +251,17 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         self.group_combos = extract_group_combos(data, groups)
 
-        self.standards = utils.extract_standards(data, ("previous", "elapsed", "daily"))
+        self.standards = iup.utils.extract_standards(
+            data, ("previous", "elapsed", "daily")
+        )
 
         self.start = self.extract_starting_conditions(data, groups)
 
         data = IncidentUptakeData(
             data.with_columns(
-                previous_std=pl.col("previous").pipe(utils.standardize),
-                elapsed_std=pl.col("elapsed").pipe(utils.standardize),
-                daily_std=pl.col("daily").pipe(utils.standardize),
+                previous_std=pl.col("previous").pipe(iup.utils.standardize),
+                elapsed_std=pl.col("elapsed").pipe(iup.utils.standardize),
+                daily_std=pl.col("daily").pipe(iup.utils.standardize),
             )
         )
 
@@ -377,14 +379,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             # Predictors are standardized uptake on the previous projection date,
             # standardized days-elapsed on the current projection date, & interaction.
             prev = np.array(
-                utils.standardize(
+                iup.utils.standardize(
                     proj[:, i],
                     standards["previous"]["mean"],
                     standards["previous"]["std"],
                 )
             )
             elap = np.repeat(
-                utils.standardize(
+                iup.utils.standardize(
                     elapsed[i],
                     standards["elapsed"]["mean"],
                     standards["elapsed"]["std"],
@@ -399,7 +401,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             y = (predictive(rng_key, previous=prev, elapsed=elap)["obs"]).diagonal()
 
             # Unstandardize the projection onto its natural scale
-            proj[:, i + 1] = utils.unstandardize(
+            proj[:, i + 1] = iup.utils.unstandardize(
                 y,
                 standards["daily"]["mean"],
                 standards["daily"]["std"],

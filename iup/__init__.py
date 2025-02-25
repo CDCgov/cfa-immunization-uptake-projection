@@ -2,8 +2,9 @@ import datetime as dt
 from typing import List
 
 import polars as pl
-import utils
 from polars.datatypes.classes import DataTypeClass
+
+import iup.utils
 
 
 class Data(pl.DataFrame):
@@ -197,12 +198,12 @@ class IncidentUptakeData(UptakeData):
         if groups is not None:
             rank = pl.col("time_end").rank().over(groups)
             shifted_standard_interval = (
-                pl.col("interval").pipe(utils.standardize).shift(1).over(groups)
+                pl.col("interval").pipe(iup.utils.standardize).shift(1).over(groups)
             )
         else:
             rank = pl.col("time_end").rank()
             shifted_standard_interval = (
-                pl.col("interval").pipe(utils.standardize).shift(1)
+                pl.col("interval").pipe(iup.utils.standardize).shift(1)
             )
 
         return IncidentUptakeData(
