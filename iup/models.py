@@ -171,6 +171,26 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         return standards
 
+    @staticmethod
+    def augment_data(
+        data: CumulativeUptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> IncidentUptakeData:
+        assert rollouts is not None, (
+            "LinearIncidentUptakeModel requires rollout dates, but none provided"
+        )
+
+        data = data.insert_rollouts(
+            rollouts, groups, season_start_month, season_start_day
+        )
+
+        incident_data = data.to_incident(groups)
+
+        return incident_data
+
     def fit(
         self,
         data: IncidentUptakeData,
@@ -744,6 +764,26 @@ class HillModel(UptakeModel):
             mu = A * (elapsed**n) / (H**n + elapsed**n)
         sig = numpyro.sample("sig", dist.Exponential(sig_mn))
         numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+
+    @staticmethod
+    def augment_data(
+        data: CumulativeUptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> CumulativeUptakeData:
+        data = CumulativeUptakeData(
+            data.with_columns(
+                elapsed=HillModel.date_to_elapsed(
+                    pl.col("time_end"),
+                    season_start_month,
+                    season_start_day,
+                )
+            )
+        )
+
+        return data
 
     def fit(
         self,

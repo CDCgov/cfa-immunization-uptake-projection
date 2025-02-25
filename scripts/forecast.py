@@ -27,10 +27,22 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
     all_forecast = pl.DataFrame()
 
     for model in config["models"]:
+        assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
+            f"{model['name']} is not a valid model type!"
+        )
+
+        augmented_data = getattr(iup.models, model["name"]).augment_data(
+            data,
+            config["data"]["season_start_month"],
+            config["data"]["season_start_day"],
+            config["data"]["groups"],
+            config["data"]["rollouts"],
+        )
+
         for forecast_date in forecast_dates:
             forecast = run_forecast(
                 model,
-                data,
+                augmented_data,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
@@ -55,25 +67,7 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
-        f"{model['name']} is not a valid model type!"
-    )
-
-    # Format training data according to the type of model desired
-    if model["name"] == "LinearIncidentUptakeModel":
-        data = data.to_incident(grouping_factors)
-        train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
-    elif model["name"] == "HillModel":
-        data = iup.CumulativeUptakeData(
-            data.with_columns(
-                elapsed=iup.models.HillModel.date_to_elapsed(
-                    pl.col("time_end"),
-                    config["data"]["season_start_month"],
-                    config["data"]["season_start_day"],
-                )
-            )
-        )
-        train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
+    train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
 
     # Make an instance of the model, fit it using training data, and make projections
     fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
