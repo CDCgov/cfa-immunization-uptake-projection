@@ -100,7 +100,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def extract_starting_conditions(
-        data: IncidentUptakeData, group_cols: List[str,] | None
+        data: IncidentUptakeData, groups: List[str,] | None
     ) -> pl.DataFrame:
         """
         Extract from incident uptake data the last observed values of several variables, by group.
@@ -108,7 +108,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             incident uptake data containing final observations of interest
-        group_cols: (str,) | None
+        groups: (str,) | None
             name(s) of the columns for the grouping factors
 
         Returns
@@ -122,9 +122,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         - Days elapsed since rollout on this date
         - Cumulative uptake since rollout on this date
         """
-        if group_cols is not None:
+        if groups is not None:
             start = (
-                data.group_by(group_cols)
+                data.group_by(groups)
                 .agg(
                     [
                         pl.col("time_end").last().alias("last_date"),
@@ -416,7 +416,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         test_data: pl.DataFrame | None,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
     ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
@@ -464,13 +464,13 @@ class LinearIncidentUptakeModel(UptakeModel):
         ).drop("estimate")
 
         scaffold = LinearIncidentUptakeModel.augment_columns(
-            IncidentUptakeData(scaffold, group_cols), group_cols
+            IncidentUptakeData(scaffold, groups), groups
         )
 
-        if group_cols is not None:
+        if groups is not None:
             scaffold = scaffold.join(
-                self.start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
-                on=group_cols,
+                self.start.select(list(groups) + ["last_elapsed", "last_interval"]),
+                on=groups,
             )
         else:
             scaffold = scaffold.with_columns(
@@ -487,21 +487,21 @@ class LinearIncidentUptakeModel(UptakeModel):
             .otherwise(pl.col("interval")),
         ).drop(["last_elapsed", "last_interval"])
 
-        if group_cols is not None:
-            groups = scaffold.partition_by(group_cols)
+        if groups is not None:
+            combos = scaffold.partition_by(groups)
         else:
-            groups = [scaffold]
+            combos = [scaffold]
 
-        for g in range(len(groups)):
-            if group_cols is not None:
-                start = self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_daily"
-                ][0]
+        for g in range(len(combos)):
+            if groups is not None:
+                start = self.start.join(combos[g], on=groups, how="semi")["last_daily"][
+                    0
+                ]
             else:
                 start = self.start["last_daily"][0]
 
             proj = self.project_sequentially(
-                tuple(groups[g]["elapsed"]),
+                tuple(combos[g]["elapsed"]),
                 start,
                 self.standards,
                 self.model,
@@ -509,28 +509,28 @@ class LinearIncidentUptakeModel(UptakeModel):
                 self.rng_key,
             )
 
-            proj = proj * groups[g]["interval"].to_numpy().reshape(-1, 1)
+            proj = proj * combos[g]["interval"].to_numpy().reshape(-1, 1)
 
             proj = (
                 np.cumsum(proj, 0)
-                + self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_cumulative"
-                ][0]
+                + self.start.join(combos[g], on=groups, how="semi")["last_cumulative"][
+                    0
+                ]
             )
 
             proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
 
-            groups[g] = (
-                pl.concat([groups[g], proj], how="horizontal")
+            combos[g] = (
+                pl.concat([combos[g], proj], how="horizontal")
                 .unpivot(
-                    index=groups[g].columns,
+                    index=combos[g].columns,
                     variable_name="sample_id",
                     value_name="estimate",
                 )
                 .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
             )
 
-        cumulative_projection = pl.concat(groups)
+        cumulative_projection = pl.concat(combos)
 
         return SampleForecast(cumulative_projection)
 
@@ -621,7 +621,7 @@ class HillModel(UptakeModel):
     def fit(
         self,
         data: CumulativeUptakeData,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
@@ -658,12 +658,12 @@ class HillModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
-        self.group_combos = extract_group_combos(data, group_cols)
+        self.group_combos = extract_group_combos(data, groups)
 
-        if group_cols is None:
-            group_cols = []
+        if groups is None:
+            groups = []
 
-        if "season" in group_cols:
+        if "season" in groups:
             season = data["season"].to_numpy()
         else:
             season = None
@@ -740,7 +740,7 @@ class HillModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         test_data: pl.DataFrame | None,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
     ) -> pl.DataFrame:
@@ -757,7 +757,7 @@ class HillModel(UptakeModel):
             following timedelta convention (e.g. '7d' = seven days)
         test_data: pl.DataFrame | None
             test data, if evaluation is being done, to provide exact dates
-        group_cols: (str,) | None
+        groups: (str,) | None
             name(s) of the columns for the grouping factors
         season_start_month: int
             first month of the overwinter disease season
@@ -804,7 +804,7 @@ class HillModel(UptakeModel):
 
 
 def extract_group_combos(
-    data: pl.DataFrame, group_cols: List[str,] | None
+    data: pl.DataFrame, groups: List[str,] | None
 ) -> pl.DataFrame | None:
     """
     Extract from cumulative uptake data all combinations of grouping factors.
@@ -819,8 +819,8 @@ def extract_group_combos(
     pl.DataFrame
         all combinations of grouping factors
     """
-    if group_cols is not None:
-        return data.select(group_cols).unique()
+    if groups is not None:
+        return data.select(groups).unique()
     else:
         return None
 
