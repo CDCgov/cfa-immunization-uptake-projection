@@ -171,7 +171,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         incident_data = LinearIncidentUptakeModel.augment_columns(incident_data, groups)
 
-        incident_data = incident_data.trim_outlier_intervals(groups)
+        # incident_data = incident_data.trim_outlier_intervals(groups)
 
         return incident_data
 
@@ -258,7 +258,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         self.start = self.extract_starting_conditions(data, groups)
 
         data = IncidentUptakeData(
-            data.with_columns(
+            data.trim_outlier_intervals(groups).with_columns(
                 previous_std=pl.col("previous").pipe(iup.utils.standardize),
                 elapsed_std=pl.col("elapsed").pipe(iup.utils.standardize),
                 daily_std=pl.col("daily").pipe(iup.utils.standardize),
@@ -463,11 +463,11 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         scaffold = build_scaffold(
             start_date, end_date, interval, test_data, self.group_combos
-        ).drop("estimate")
+        )
 
         scaffold = LinearIncidentUptakeModel.augment_columns(
-            IncidentUptakeData(scaffold, groups), groups
-        )
+            IncidentUptakeData(scaffold), groups
+        ).drop("estimate")
 
         if groups is not None:
             scaffold = scaffold.join(
