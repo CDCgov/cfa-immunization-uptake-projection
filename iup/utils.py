@@ -53,3 +53,28 @@ def unstandardize(x, mn, sd):
         the unstandardized numbers
     """
     return x * sd + mn
+
+
+def extract_standards(data: pl.DataFrame, var_cols: tuple) -> dict:
+    """
+    Extract means and standard deviations from data frame columns.
+
+    Parameters
+    data: pl.DataFrame
+        data frame with some columns to be standardized
+    var_cols: (str,)
+        column names of variables to be standardized
+
+    Returns
+    dict
+        means and standard deviations for each variable column
+
+    Details
+    Keys are the variable names, and values are themselves
+    dictionaries of mean and standard deviation.
+    """
+    standards = {
+        var: {"mean": data[var].mean(), "std": data[var].std()} for var in var_cols
+    }
+
+    return standards

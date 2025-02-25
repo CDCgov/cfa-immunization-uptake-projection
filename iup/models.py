@@ -6,6 +6,7 @@ import numpy as np
 import numpyro
 import numpyro.distributions as dist
 import polars as pl
+import utils
 from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
@@ -147,31 +148,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         return start
 
     @staticmethod
-    def extract_standards(data: IncidentUptakeData, var_cols: tuple) -> dict:
-        """
-        Extract means and standard deviations from columns of incident uptake data.
-
-        Parameters
-        data: IncidentUptakeData
-            incident uptake data with some columns to be standardized
-        var_cols: (str,)
-            column names of variables to be standardized
-
-        Returns
-        dict
-            means and standard deviations for each variable column
-
-        Details
-        Keys are the variable names, and values are themselves
-        dictionaries of mean and standard deviation.
-        """
-        standards = {
-            var: {"mean": data[var].mean(), "std": data[var].std()} for var in var_cols
-        }
-
-        return standards
-
-    @staticmethod
     def augment_data(
         data: CumulativeUptakeData,
         season_start_month: int,
@@ -227,7 +203,7 @@ class LinearIncidentUptakeModel(UptakeModel):
     def fit(
         self,
         data: IncidentUptakeData,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
@@ -237,7 +213,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
-        group_cols: (str,) | None
+        groups: (str,) | None
             name(s) of the columns for the grouping factors
         params: dict
             parameter names and values to specify prior distributions
@@ -264,21 +240,19 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
-        self.group_combos = extract_group_combos(data, group_cols)
+        self.group_combos = extract_group_combos(data, groups)
 
-        data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
+        self.standards = utils.extract_standards(data, ("previous", "elapsed", "daily"))
 
-        self.start = self.extract_starting_conditions(data, group_cols)
+        self.start = self.extract_starting_conditions(data, groups)
 
         data = IncidentUptakeData(
-            self.trim_outlier_intervals(data, group_cols).with_columns(
-                previous_std=pl.col("previous").pipe(self.standardize),
-                elapsed_std=pl.col("elapsed").pipe(self.standardize),
-                daily_std=pl.col("daily").pipe(self.standardize),
+            data.with_columns(
+                previous_std=pl.col("previous").pipe(utils.standardize),
+                elapsed_std=pl.col("elapsed").pipe(utils.standardize),
+                daily_std=pl.col("daily").pipe(utils.standardize),
             )
         )
-
-        self.standards = self.extract_standards(data, ("previous", "elapsed", "daily"))
 
         self.kernel = NUTS(self.model)
         self.mcmc = MCMC(
