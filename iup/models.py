@@ -567,8 +567,10 @@ class HillModel(UptakeModel):
         n_high=5.0,
         A_low=0.0,
         A_high=1.0,
+        A_sig=1.0,
         H_low=10.0,
         H_high=180.0,
+        H_sig=1.0,
         sig_mn=1.0,
     ):
         """
@@ -592,9 +594,21 @@ class HillModel(UptakeModel):
         """
         n = numpyro.sample("n", dist.Uniform(n_low, n_high))
         A = numpyro.sample("A", dist.Uniform(A_low, A_high))
+        sig_A = numpyro.sample("sig_A", dist.Exponential(A_sig))
         H = numpyro.sample("H", dist.Uniform(H_low, H_high))
+        sig_H = numpyro.sample("sig_H", dist.Exponential(H_sig))
         if season is not None:
-            mu = A[season] * (elapsed**n) / (H[season] ** n + elapsed**n)
+            A_s = numpyro.sample(
+                "A_s",
+                dist.TruncatedNormal(A, sig_A, low=A_low, high=A_high),
+                sample_shape=(len(np.unique(season)),),
+            )
+            H_s = numpyro.sample(
+                "H_s",
+                dist.TruncatedNormal(H, sig_H, low=H_low, high=H_high),
+                sample_shape=(len(np.unique(season)),),
+            )
+            mu = A_s[season] * (elapsed**n) / (H_s[season] ** n + elapsed**n)
         else:
             mu = A * (elapsed**n) / (H**n + elapsed**n)
         sig = numpyro.sample("sig", dist.Exponential(sig_mn))
@@ -667,9 +681,10 @@ class HillModel(UptakeModel):
 
         if "season" in groups:
             season = data["season"].to_numpy()
-            # unique_seasons, indices = np.unique(season, return_inverse=True)
-            # season_to_index = {s: i for i, s in enumerate(unique_seasons)}
-            # season = np.array([season_to_index[s] for s in season])
+            unique_seasons, indices = np.unique(season, return_inverse=True)
+            season_to_index = {s: i for i, s in enumerate(unique_seasons)}
+            season = np.array([season_to_index[s] for s in season])
+            self.season = season
         else:
             season = None
 
@@ -810,7 +825,7 @@ class HillModel(UptakeModel):
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
-                    season=scaffold["season"].to_numpy(),
+                    season=np.repeat(self.season.max(), scaffold.shape[0]),
                 )["obs"]
             ).transpose()
         else:
