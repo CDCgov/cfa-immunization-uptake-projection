@@ -23,12 +23,12 @@ def frame():
                 "2020-01-21",
                 "2020-01-21",
             ],
-            "estimate": [0.0, 0.0, 1.0, 0.1, 3.0, 0.3, 4.0, 0.4],
+            "estimate": [0.0, 0.0, 0.1, 0.01, 0.3, 0.03, 0.4, 0.04],
             "season": "2019/2020",
         }
     ).with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
 
-    frame = iup.IncidentUptakeData(frame)
+    frame = iup.CumulativeUptakeData(frame)
 
     return frame
 
@@ -68,43 +68,44 @@ def test_augment_data(frame):  # LEFT OFF HERE
     """
     Add a column for time elapsed since season start
     """
-    frame = iup.IncidentUptakeData(
-        frame.filter(pl.col("geography") == "USA").drop("geography")
-    )
+    output = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
 
-    output = iup.IncidentUptakeData(
-        frame.drop(["elapsed", "interval", "previous", "daily"])
-    )
-
-    output = iup.models.LinearIncidentUptakeModel.augment_columns(output, None)
-
-    assert frame.equals(output)
-
-
-def test_augment_columns_handles_groups(frame):
-    """
-    Add columns for elapsed, interval, previous, and daily
-    """
-    output = iup.IncidentUptakeData(
-        frame.drop(["elapsed", "interval", "previous", "daily"])
-    )
-
-    output = iup.models.LinearIncidentUptakeModel.augment_columns(
-        output, ["geography", "season"]
-    )
-
-    assert frame.equals(output)
+    assert output["elapsed"].to_list() == [
+        121.0,
+        121.0,
+        128.0,
+        128.0,
+        135.0,
+        135.0,
+        142.0,
+        142.0,
+    ]
 
 
-def test_fit(frame, params, mcmc_params):
+def test_fit_handles_no_groups(frame, params, mcmc_params):
     """
     Model should produce posterior samples for each parameter.
     """
-
-    data = iup.IncidentUptakeData(frame)
-    model = iup.models.LinearIncidentUptakeModel(0).fit(
-        data, ["geography", "season"], params, mcmc_params
+    frame = iup.CumulativeUptakeData(
+        frame.filter(pl.col("geography") == "USA").drop("geography")
     )
+    data = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
+    model = iup.models.HillModel(0).fit(data, None, params, mcmc_params)
+
+    dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
+
+    assert all(d == 10 for d in dimensions)
+
+
+def test_fit_handles_groups(frame, params, mcmc_params):
+    """
+    Model should produce posterior samples for each parameter.
+    """
+    frame = iup.CumulativeUptakeData(
+        frame.filter(pl.col("geography") == "USA").drop("geography")
+    )
+    data = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
+    model = iup.models.HillModel(0).fit(data, ["season"], params, mcmc_params)
 
     dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
 
@@ -116,90 +117,41 @@ def test_date_to_elapsed(frame):
     Return the time elapsed since the first date by grouping factor.
     """
     output = frame.sort(["time_end", "geography"]).with_columns(
-        elapsed=iup.models.LinearIncidentUptakeModel.date_to_elapsed(
-            pl.col("time_end")
-        ).over("geography")
+        elapsed=iup.models.HillModel.date_to_elapsed(pl.col("time_end"), 9, 1).over(
+            "geography"
+        )
     )
 
-    expected = pl.Series([0.0, 0.0, 7.0, 7.0, 14.0, 14.0, 21.0, 21.0])
+    expected = pl.Series(
+        [
+            121.0,
+            121.0,
+            128.0,
+            128.0,
+            135.0,
+            135.0,
+            142.0,
+            142.0,
+        ]
+    )
 
     assert (output["elapsed"] == expected).all()
 
 
-def test_date_to_interval(frame):
-    """
-    Return the interval between dates by grouping factor
-    """
-    output = frame.sort(["geography", "time_end"]).with_columns(
-        interval=iup.models.LinearIncidentUptakeModel.date_to_interval(
-            pl.col("time_end")
-        ).over("geography")
-    )
-
-    expected = pl.Series("interval", ([None] + [7.0] * 3) * 2)
-
-    assert (output["interval"] == expected).all()
-
-
-def test_augment_scaffold_handles_no_groups(frame):
+def test_augment_scaffold(frame):
     """
     Add elapsed and interval columns to a scaffold
     """
-    frame = (
-        frame.filter(pl.col("geography") == "USA")
-        .drop(["geography", "elapsed", "interval", "daily", "previous"])
-        .with_columns(estimate=0.0)
-    )
+    output = iup.models.HillModel.augment_scaffold(frame, 9, 1)
 
-    start = pl.DataFrame({"last_elapsed": 100.0, "last_interval": 7.0})
-
-    scaffold = iup.models.LinearIncidentUptakeModel.augment_scaffold(frame, None, start)
-
-    output = pl.concat(
-        [
-            frame.drop("estimate"),
-            pl.DataFrame(
-                {"elapsed": [107.0, 114.0, 121.0, 128.0], "interval": [7.0] * 4}
-            ),
-        ],
-        how="horizontal",
-    )
-
-    assert output.equals(scaffold)
-
-
-def test_augment_scaffold_handles_groups(frame):
-    """
-    Add elapsed and interval columns to a scaffold
-    """
-    frame = frame.drop(["elapsed", "interval", "daily", "previous"]).with_columns(
-        estimate=0.0
-    )
-
-    start = pl.DataFrame(
-        {
-            "last_elapsed": [100.0, 100.0],
-            "last_interval": [7.0, 7.0],
-            "geography": ["USA", "PA"],
-            "season": ["2019/2020", "2019/2020"],
-        }
-    )
-
-    scaffold = iup.models.LinearIncidentUptakeModel.augment_scaffold(
-        frame, ["geography", "season"], start
-    )
-
-    output = pl.concat(
-        [
-            frame.drop("estimate"),
-            pl.DataFrame(
-                {
-                    "elapsed": [107.0, 107.0, 114.0, 114.0, 121.0, 121.0, 128.0, 128.0],
-                    "interval": [7.0] * 8,
-                }
-            ),
-        ],
-        how="horizontal",
-    )
-
-    assert output.equals(scaffold)
+    assert output.shape[1] == frame.shape[1]
+    assert output["elapsed"].to_list() == [
+        121.0,
+        121.0,
+        128.0,
+        128.0,
+        135.0,
+        135.0,
+        142.0,
+        142.0,
+    ]
