@@ -316,7 +316,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         """
         scaffold = LinearIncidentUptakeModel.augment_columns(
             IncidentUptakeData(scaffold), groups
-        ).drop("estimate")
+        ).drop(["estimate", "daily", "previous"])
 
         if groups is not None:
             scaffold = scaffold.join(
