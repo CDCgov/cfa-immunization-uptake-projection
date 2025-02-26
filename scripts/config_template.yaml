@@ -15,8 +15,7 @@ data:
   # keep only these data columns
   keep: [estimate, time_end]
   # use these columns as grouping factors. Almost always use at least "season", but use None if there are truly none.
-  # Right now, this can only be "season"
-  groups: [season]
+  groups:
 
 # Timeframe for the longest desired forecast
 forecast_timeframe:
@@ -30,22 +29,22 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  # - name: LinearIncidentUptakeModel
-  #   seed: 0
-  #   params:
-  #     a_mn: 0.0
-  #     a_sd: 0.1
-  #     bP_mn: 0.0
-  #     bP_sd: 0.1
-  #     bE_mn: 0.0
-  #     bE_sd: 0.1
-  #     bPE_mn: 0.0
-  #     bPE_sd: 0.1
-  #     sig_mn: 0.1
-  #   mcmc:
-  #     num_warmup: 1000
-  #     num_samples: 100
-  #     num_chains: 4
+  - name: LinearIncidentUptakeModel
+    seed: 0
+    params:
+      a_mn: 0.0
+      a_sd: 0.1
+      bP_mn: 0.0
+      bP_sd: 0.1
+      bE_mn: 0.0
+      bE_sd: 0.1
+      bPE_mn: 0.0
+      bPE_sd: 0.1
+      sig_mn: 0.1
+    mcmc:
+      num_warmup: 1000
+      num_samples: 100
+      num_chains: 4
   - name: HillModel
     seed: 0
     params:
