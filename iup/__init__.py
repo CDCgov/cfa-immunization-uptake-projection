@@ -20,10 +20,12 @@ class Data(pl.DataFrame):
         raise NotImplementedError("Subclasses must implement this method.")
 
     def assert_in_schema(self, names_types: dict[str, DataTypeClass]):
-        """Verify that column of the expected types are present in the data frame
+        """
+        Verify that column of the expected types are present in the data frame.
 
-        Args:
-            names_types (dict[str, pl.DataType]): Column names and types
+        Parameters
+        names_types (dict[str, pl.DataType]):
+            Column names and types
         """
         for name, type_ in names_types.items():
             if name not in self.schema.names():
@@ -51,19 +53,19 @@ class UptakeData(Data):
         cls, uptake_data: "UptakeData", start_date: dt.date, side: str
     ) -> "UptakeData":
         """
-        Concatenate Uptake data objects and split into training and test data.
+        Subset a training or test set from data.
 
         Parameters
         uptake_data: UptakeData
-            cumulative or incident uptake data across all seasons
+            cumulative or incident uptake data
         start_date: dt.date
-            the first date for which projections should be made
+            first date for which forecasts should be made
         side: str
             whether the "train" or "test" portion of the data is desired
 
         Returns
         pl.DataFrame
-            cumulative or uptake data object of the training or test portion
+            training or test portion of the cumulative or uptake data
 
         Details
         Training data are before the start date; test data are on or after.
@@ -83,23 +85,24 @@ class UptakeData(Data):
         date: pl.Expr, season_start_month: int = 9, season_start_day: int = 1
     ) -> pl.Expr:
         """
-        Extract winter season from a date
-
-        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
-        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
-        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/24"
+        Extract the overwinter disease season from a date
 
         Parameters
         date: pl.Expr
-            dates
+            dates in an uptake data frame
         season_start_month: int
-            month of the year the season starts
+            first month of the overwinter disease season
         season_start_day: int
-            day of season_start_month that the season starts
+            first day of the first month of the overwinter disease season
 
         Returns
         pl.Expr
             seasons for each date
+
+        Details
+        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
+        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
+        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024"
         """
 
         # for every date, figure out the season breakpoint in that year
@@ -115,13 +118,13 @@ class UptakeData(Data):
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
-        self, group_cols: List[str,] | None, last_cumulative=None
+        self, groups: List[str,] | None, last_cumulative=None
     ) -> "CumulativeUptakeData":
         """
         Convert incident to cumulative uptake data.
 
         Parameters
-        group_cols: (str,) | None
+        groups: List[str,] | None
             name(s) of the columns of grouping factors
         last_cumulative: pl.DataFrame
             additional cumulative uptake absent from the incident data, for each group
@@ -131,17 +134,18 @@ class IncidentUptakeData(UptakeData):
             cumulative uptake on each date in the input incident uptake data
 
         Details
-        When building models, the first 2-3 rows of incident uptake may be removed,
-        such that the sum of incident does not reflect the entire cumulative uptake.
-        To fix this, cumulative uptake from the removed rows may be supplied separately.
+        Cumulative sum of incident uptake gives the cumulative uptake.
+        Optionally, additional cumulative uptake not accounte for in
+        the incident data may be provided.
+        Even if no groups are specified, the data must at least be grouped by season.
         """
-        if group_cols is None:
-            group_cols = ["season"]
+        if groups is None:
+            groups = ["season"]
 
-        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(group_cols))
+        out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(groups))
 
         if last_cumulative is not None:
-            out = out.join(last_cumulative, on=group_cols)
+            out = out.join(last_cumulative, on=groups)
 
             out = out.with_columns(
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
@@ -158,15 +162,17 @@ class IncidentUptakeData(UptakeData):
         Remove rows from incident uptake data with intervals that are too large.
 
         Parameters
-          groups (tuple) | None: names of grouping factor columns
-          threshold (float): maximum standardized interval between first two dates
+        groups (tuple) | None
+            names of grouping factor columns
+        threshold (float):
+            maximum standardized interval between first two dates
 
         Returns
         pl.DataFrame:
             incident uptake data with the outlier rows removed
 
         Details
-        The first row (index 0) is always rollout, so the second row (index 1)
+        The first row (index 0) may be rollout, so the second row (index 1)
         is the first actual report. Between these is often a long interval,
         compared to the fairly regular intervals among subsequent rows.
 
@@ -183,6 +189,8 @@ class IncidentUptakeData(UptakeData):
         Otherwise, only the first two rows of the incident uptake data are dropped:
         - The first because it is rollout, where uptake is 0 (also an outlier)
         - The second because it's previous value is 0, an outlier
+
+        Even if no groups are specified, the data must at least be grouped by season.
         """
         assert self["time_end"].is_sorted(), (
             "Chronological sorting got broken during data augmentation!"
@@ -212,12 +220,12 @@ class CumulativeUptakeData(UptakeData):
             "cumulative uptake `estimate` must be a proportion"
         )
 
-    def to_incident(self, group_cols: List[str,] | None) -> IncidentUptakeData:
+    def to_incident(self, groups: List[str,] | None) -> IncidentUptakeData:
         """
         Convert cumulative to incident uptake data.
 
         Parameters
-        group_cols: (str,) | None
+        groups: (str,) | None
             name(s) of the columns of grouping factors
 
         Returns
@@ -225,13 +233,15 @@ class CumulativeUptakeData(UptakeData):
             incident uptake on each date in the input cumulative uptake data
 
         Details
-        Because the first date for each group is rollout, incident uptake is 0.
+        Because the first report date for each group is often rollout,
+        incident uptake on the first report date is 0.
+        Even if no groups are specified, the data must at least be grouped by season.
         """
-        if group_cols is None:
-            group_cols = ["season"]
+        if groups is None:
+            groups = ["season"]
 
         out = self.with_columns(
-            estimate=pl.col("estimate").diff().over(group_cols).fill_null(0)
+            estimate=pl.col("estimate").diff().over(groups).fill_null(0)
         )
 
         return IncidentUptakeData(out)
@@ -239,7 +249,7 @@ class CumulativeUptakeData(UptakeData):
     def insert_rollouts(
         self,
         rollouts: List[dt.date],
-        group_cols: List[str] | None,
+        groups: List[str] | None,
         season_start_month: int,
         season_start_day: int,
     ) -> "CumulativeUptakeData":
@@ -249,7 +259,7 @@ class CumulativeUptakeData(UptakeData):
         Parameters
         rollout: List[dt.date]
             list of rollout dates
-        group_cols: tuple[str] | None
+        groups: tuple[str] | None
             names of grouping factor columns
 
         Returns
@@ -257,15 +267,16 @@ class CumulativeUptakeData(UptakeData):
 
         Details
         A separate rollout row is added for every grouping factor combination.
+        Even if groups are specified, the data should not be grouped by season.
         """
-        if group_cols is None:
-            group_cols = []
+        if groups is None:
+            groups = []
 
         frame = self
 
         # do not use season as a grouping column to insert rollouts
-        if len([g for g in group_cols if g != "season"]) > 0:
-            rollout_rows = frame.select(group_cols)
+        if len([g for g in groups if g != "season"]) > 0:
+            rollout_rows = frame.select(groups)
             if "season" in rollout_rows.columns:
                 rollout_rows = rollout_rows.drop("season")
             rollout_rows = rollout_rows.unique().join(

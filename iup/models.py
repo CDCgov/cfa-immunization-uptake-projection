@@ -103,12 +103,26 @@ class LinearIncidentUptakeModel(UptakeModel):
         data: IncidentUptakeData, groups: List[str,] | None
     ) -> pl.DataFrame:
         """
-        From incident uptake training data, extract the last observed:
-        - date on which uptake was reported
+        From incident uptake training data, extract information from
+        the last report date.
+
+        Parameters:
+        data: IncidentUptakeData
+            training data for fitting a linear incident uptake model
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+
+        Returns:
+            Data frame of information about last observed date.
+
+        Details
+        Information on the last report date is:
+        - date
         - daily average incident uptake
         - days elapsed since rollout
         - cumulative uptake since rollout
-        Even if no grouping variables are specified, this must group on season at least.
+
+        Even if no groups are specified, the data must at least be grouped by season.
         """
         if groups is None:
             groups = ["season"]
@@ -136,6 +150,35 @@ class LinearIncidentUptakeModel(UptakeModel):
         groups: List[str] | None,
         rollouts: List[dt.date] | None,
     ) -> IncidentUptakeData:
+        """
+        Format preprocessed data for fitting a linear incident uptake model.
+
+        Parameters:
+        data: CumulativeUptakeData
+            training data for fitting a linear incident uptake model
+         season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+        rollouts: List[dt.date] | None
+            rollout dates for each season in the training data
+
+        Returns:
+            Incident uptake data ready for fitting a linear incident uptake model.
+
+        Details
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident uptake model:
+        - insert rollout dates
+        - convert to incident uptake
+        - add extra columns for
+            - time elapsed since rollout
+            - time interval between report dates
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
+        """
         assert rollouts is not None, (
             "LinearIncidentUptakeModel requires rollout dates, but none provided"
         )
@@ -159,6 +202,25 @@ class LinearIncidentUptakeModel(UptakeModel):
         data: IncidentUptakeData,
         groups: List[str] | None,
     ) -> IncidentUptakeData:
+        """
+        Add columns to data for fitting a linear incident uptake model.
+
+        Parameters:
+        data: IncidentUptakeData
+            training data for fitting a linear incident uptake model
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+
+        Returns:
+            Incident uptake data with extra columns required by the linear incident uptake model.
+
+        Details
+        Extra columns are added for
+            - time elapsed since rollout
+            - time interval between report dates
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
+        """
         if groups is None:
             groups = ["season"]
 
@@ -263,8 +325,6 @@ class LinearIncidentUptakeModel(UptakeModel):
     def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
         """
         Extract a time elapsed column from a date column, as polars expressions.
-        Time elapsed is calculated since the first report date in a season.
-        This ought to be called .over(season)
 
         Parameters
         date_col: pl.Expr
@@ -277,6 +337,8 @@ class LinearIncidentUptakeModel(UptakeModel):
         Details
         Date column should be chronologically sorted in advance.
         Time difference is always in days.
+        Time elapsed is calculated since the first report date in a season.
+        This ought to be called .over(season)
         """
 
         return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
@@ -285,7 +347,6 @@ class LinearIncidentUptakeModel(UptakeModel):
     def date_to_interval(date_col: pl.Expr) -> pl.Expr:
         """
         Extract a time interval column from a date column, as polars expressions.
-        Should be called .over(season)
 
         Parameters
         date_col: pl.Expr
@@ -298,6 +359,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Details
         Date column should be chronologically sorted in advance.
         Time difference is always in days.
+        This should be called .over(season)
         """
         return date_col.diff().dt.total_days().cast(pl.Float64)
 
@@ -308,11 +370,28 @@ class LinearIncidentUptakeModel(UptakeModel):
         start: pl.DataFrame,
     ) -> pl.DataFrame:
         """
-        To tailor a forecasting scaffold for the linear incident uptake model,
-        columns must be added for the time elapsed since rollout at each date,
-        and the intervals between each date and the previous. Some of the
-        necessary information is stored in the LinearIncidentUptakeModel's
-        start attribute, which describes the conditions on the forecast date.
+        Add columns to a scaffold of dates for forecasting from a linear incident uptake model.
+
+        Parameters:
+        scaffold: pl.DataFrame
+            scaffold of dates for forecasting
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+        start: pl.DataFrame
+            information about the last observed report date,
+            which guides the first forecast
+
+        Returns:
+            Scaffold with extra columns required by the linear incident uptake model.
+
+        Details
+        Extra columns are added for
+            - time elapsed since rollout
+            - time interval between report dates
+        Columns are removed for
+            - estimated incident uptake
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
         """
         scaffold = LinearIncidentUptakeModel.augment_columns(
             IncidentUptakeData(scaffold), groups
@@ -356,10 +435,13 @@ class LinearIncidentUptakeModel(UptakeModel):
             means and standard deviations for the predictor and outcome variables
         model: Predictive
             fit model that predicts next daily-avg uptake from the current
+        mcmc:
+            MCMC samples from a fit linear incident uptake models
+        rng_key:
+            random seed
 
         Returns
-        IncidentUptakeProjection
-            Projections over the desired time frame from a linear incident uptake model
+        Projections over the desired time frame from a linear incident uptake model
 
         Details
         Because daily-average uptake (outcome) and previous daily-average
@@ -455,16 +537,16 @@ class LinearIncidentUptakeModel(UptakeModel):
             the model with incident and cumulative projections as attributes
 
         Details
-        A data frame is set up to house the incident projections over the
+        A scaffold is set up to house theprojections over the
         desired time window with the desired intervals.
 
-        The starting conditions derived from the last training data date
+        Starting conditions derived from the last observed date in the training data
         are used to project for the first date. From there, projections
         are generated sequentially, because the projection for each date
         depends on the previous date, thanks to the model structure.
 
         After projections are completed, they are converted from daily-average
-        to total incident uptake, as well as cumulative uptake, on each date.
+        to total cumulative uptake, on each date.
         """
         scaffold = build_scaffold(
             start_date,
@@ -574,15 +656,15 @@ class HillModel(UptakeModel):
         sig_mn=1.0,
     ):
         """
-        Declare the Hill model structure.
+        Fit a Hill model on training data.
 
         Parameters
-        cum_uptake: numpy array
-            cumulative uptake, between 0 and 1
-        elapsed: numpy array
-            number of days since the start of season
-        season: numpy array
-            season that each data point belongs to
+        elapsed: np.array
+            days elapsed since the season start for each data point
+        season: np.array | None
+            numeric code for the season each data point belongs to
+        cum_uptake: np.array | None
+            cumulative uptake measured at each data point
         other parameters: float
             means and standard deviations to specify the prior distributions
 
@@ -655,22 +737,23 @@ class HillModel(UptakeModel):
             control parameters for mcmc fitting
 
         Returns
-        LinearIncidentUptakeModel
-            model object with projection starting conditions, standardization
-            constants, and the model fit all stored as attributes
+        HillModel
+            model object with grouping factor combinaions
+            and the model fit all stored as attributes
 
         Details
-        Extra columns for fitting this model are added to the incident data,
-        including daily-average uptake. This is modeled rather than total uptake
-        to account for slight variations in interval lengths (e.g. 6 vs. 7 days).
+        If season is provided as a grouping factor for the training data,
+        a hierarchical model will be built with season-specific parameters
+        for maximum uptake and half-maximal time, drawn from a hyperdistribution.
+        Season is recoded numerically in this case, and the code for the last
+        season (in which training data leaves off and forecasts begin)
+        is recorded as a model attribute.
 
-        To enable projections later on, some starting conditions as well as
-        standardization constants for the model's outcome and first-order predictors
-        are recorded and stored as model attributes.
+        If season is omitted as a grouping factor for the training data,
+        all data are pooled to fit single parameters for maximum uptake
+        and half-maximal time.
 
-        If the training data spans multiple (combinations of) groups,
-        complete pooling will be used to recognize the groups as distinct but
-        to assume they behave identically except for initial conditions.
+        The Hill exponent is always a single non-hierarchical parameter.
 
         Finally, the model is fit using numpyro.
         """
@@ -718,7 +801,6 @@ class HillModel(UptakeModel):
     ) -> pl.Expr:
         """
         Extract a time elapsed column from a date column, as polars expressions.
-        Time elapsed is calculated since the season start, regardless of the first report date.
 
         Parameters
         date_col: pl.Expr
@@ -734,6 +816,8 @@ class HillModel(UptakeModel):
 
         Details
         Time difference is always in days.
+        Time elapsed is calculated since the season start,
+        regardless of the first report date.
         """
         # for every date, figure out the season breakpoint in that year
         season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
@@ -755,9 +839,22 @@ class HillModel(UptakeModel):
         scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
     ) -> pl.DataFrame:
         """
-        To tailor a forecasting scaffold for the Hill model, columns
-        must be added for the time elapsed since the season start,
-        while the column for estimate must be dropped.
+        Add columns to a scaffold of dates for forecasting from a Hill model.
+
+        Parameters:
+        scaffold: pl.DataFrame
+            scaffold of dates for forecasting
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+
+        Returns:
+            Scaffold with extra columns required by the Hill model.
+
+        Details
+        An extra column is added for the time elapsed since the season start.
+        That is all that's required to prepare the data for a Hill model.
         """
         scaffold = scaffold.with_columns(
             elapsed=HillModel.date_to_elapsed(
@@ -804,6 +901,8 @@ class HillModel(UptakeModel):
         Details
         A data frame is set up to house the projections over the
         desired time window with the desired intervals.
+
+        Forecasts are the made for each date in this scaffold.
         """
         scaffold = build_scaffold(
             start_date,
@@ -864,17 +963,20 @@ def extract_group_combos(
     data: pl.DataFrame, groups: List[str,] | None
 ) -> pl.DataFrame | None:
     """
-    Extract from cumulative uptake data all combinations of grouping factors.
+    Extract from uptake data all combinations of grouping factors.
 
     Parameters
-    data: CumulativeUptakeData
-        cumulative uptake data containing final observations of interest
+    data: pl.DataFrame
+        uptake data possibly containing grouping factors
     group_cols: (str,) | None
         name(s) of the columns for the grouping factors
 
     Returns
     pl.DataFrame
         all combinations of grouping factors
+
+    Details
+    This is required by multiple models.
     """
     if groups is not None:
         return data.select(groups).unique()
@@ -892,7 +994,7 @@ def build_scaffold(
     season_start_day: int,
 ) -> pl.DataFrame:
     """
-    Build a scaffold data frame to hold projections of a linear incident uptake model.
+    Build a scaffold data frame to hold forecasts.
 
     Parameters
     start_date: dt.date
@@ -913,11 +1015,11 @@ def build_scaffold(
 
     Returns
     pl.DataFrame
-        scaffold to hold model projections
+        scaffold to hold model forecasts.
 
     Details
     The desired time frame for projections is repeated over grouping factors,
-    if any grouping factors exist.
+    if any grouping factors exist. This is required by multiple models.
     """
     # If there is test data such that evaluation will be performed,
     # use exactly the dates that are in the test data
