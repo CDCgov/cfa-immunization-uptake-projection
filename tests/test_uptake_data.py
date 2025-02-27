@@ -79,7 +79,7 @@ def test_to_cumulative_handles_no_last(frame):
     """
     frame = iup.IncidentUptakeData(frame)
 
-    output = frame.to_cumulative(group_cols=["geography", "season"])
+    output = frame.to_cumulative(groups=["geography", "season"])
 
     assert all(
         output["estimate"]
@@ -113,7 +113,7 @@ def test_to_cumulative_handles_last(frame):
     )
 
     output = frame.to_cumulative(
-        group_cols=["geography", "season"],
+        groups=["geography", "season"],
         last_cumulative=last_cumulative,
     )
 
@@ -143,7 +143,7 @@ def test_to_cumulative_handles_no_groups(frame):
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
 
-    output = frame.to_cumulative(group_cols=None)
+    output = frame.to_cumulative(groups=None)
 
     assert all(output["estimate"] == pl.Series([0.0, 0.01, 0.04, 0.08]))
 
@@ -245,7 +245,7 @@ def test_to_incident_handles_groups(frame):
     """
     frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 0.01))
 
-    output = frame.to_incident(group_cols=["geography", "season"])
+    output = frame.to_incident(groups=["geography", "season"])
 
     assert all(
         output["estimate"].round(10) == pl.Series([0.0, 0.0, 0.01, 0.001, 0.002, 0.001])
@@ -262,7 +262,7 @@ def test_to_incident_handles_no_groups(frame):
         )
     )
 
-    output = frame.to_incident(group_cols=None)
+    output = frame.to_incident(groups=None)
 
     assert all(output["estimate"].round(10) == pl.Series([0.0, 0.01]))
 

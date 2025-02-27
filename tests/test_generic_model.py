@@ -36,7 +36,7 @@ def frame() -> iup.UptakeData:
 
 def test_extract_group_combos_handles_groups(frame):
     """
-    Find all unique geography-season combos
+    Find all unique grouping factor combos.
     """
     frame = iup.models.extract_group_combos(frame, ["geography", "season"])
 
@@ -55,7 +55,7 @@ def test_extract_group_combos_handles_no_groups(frame):
 
 def test_build_scaffold_handles_no_test_data():
     """
-    Returns none since no groups are declared.
+    Returns a scaffold using the exact start date.
     """
     start_date = dt.datetime(2020, 1, 3)
     end_date = dt.datetime(2020, 1, 20)
@@ -71,7 +71,7 @@ def test_build_scaffold_handles_no_test_data():
 
 def test_build_scaffold_handles_test_data(frame):
     """
-    Returns none since no groups are declared.
+    Returns a scaffold using the closest start date in the test data.
     """
     start_date = dt.datetime(2020, 1, 3)
     end_date = dt.datetime(2020, 1, 20)
@@ -89,7 +89,7 @@ def test_build_scaffold_handles_test_data(frame):
 
 def test_build_scaffold_handles_groups():
     """
-    Returns none since no groups are declared.
+    Returns a scaffold with dates repeated for different grouping factor combos.
     """
     start_date = dt.datetime(2020, 1, 3)
     end_date = dt.datetime(2020, 1, 20)

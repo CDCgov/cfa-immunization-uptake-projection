@@ -76,7 +76,7 @@ def mcmc_params():
 
 def test_extract_starting_conditions(frame):
     """
-    Use the last date for each grouping factor
+    Extract information from the last date for each grouping factor
     """
     output = iup.models.LinearIncidentUptakeModel.extract_starting_conditions(
         iup.IncidentUptakeData(frame),
@@ -102,7 +102,7 @@ def test_extract_starting_conditions(frame):
 
 def test_augment_columns_handles_no_groups(frame):
     """
-    Add columns for elapsed, interval, previous, and daily
+    Add columns for elapsed, interval, previous, and daily.
     """
     frame = iup.IncidentUptakeData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
@@ -119,7 +119,7 @@ def test_augment_columns_handles_no_groups(frame):
 
 def test_augment_columns_handles_groups(frame):
     """
-    Add columns for elapsed, interval, previous, and daily
+    Add columns for elapsed, interval, previous, and daily, repeated for each group combo.
     """
     output = iup.IncidentUptakeData(
         frame.drop(["elapsed", "interval", "previous", "daily"])
@@ -164,7 +164,7 @@ def test_date_to_elapsed(frame):
 
 def test_date_to_interval(frame):
     """
-    Return the interval between dates by grouping factor
+    Return the interval between dates by grouping factor.
     """
     output = frame.sort(["geography", "time_end"]).with_columns(
         interval=iup.models.LinearIncidentUptakeModel.date_to_interval(
@@ -179,7 +179,7 @@ def test_date_to_interval(frame):
 
 def test_augment_scaffold_handles_no_groups(frame):
     """
-    Add elapsed and interval columns to a scaffold
+    Add elapsed and interval columns to a scaffold.
     """
     frame = (
         frame.filter(pl.col("geography") == "USA")
@@ -206,7 +206,7 @@ def test_augment_scaffold_handles_no_groups(frame):
 
 def test_augment_scaffold_handles_groups(frame):
     """
-    Add elapsed and interval columns to a scaffold
+    Add elapsed and interval columns to a scaffold, repeated for each grouping factor combo.
     """
     frame = frame.drop(["elapsed", "interval", "daily", "previous"]).with_columns(
         estimate=0.0

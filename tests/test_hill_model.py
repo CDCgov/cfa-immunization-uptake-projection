@@ -140,7 +140,7 @@ def test_date_to_elapsed(frame):
 
 def test_augment_scaffold(frame):
     """
-    Add elapsed and interval columns to a scaffold
+    Add elapsed an elapsed column to a scaffold.
     """
     output = iup.models.HillModel.augment_scaffold(frame, 9, 1)
 
