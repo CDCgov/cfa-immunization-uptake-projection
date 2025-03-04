@@ -118,7 +118,7 @@ class UptakeData(Data):
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
-        self, groups: List[str,] | None, last_cumulative=None
+        self, groups: List[str,] | None, prev_cumulative=None
     ) -> "CumulativeUptakeData":
         """
         Convert incident to cumulative uptake data.
@@ -127,7 +127,7 @@ class IncidentUptakeData(UptakeData):
         groups: List[str,] | None
             name(s) of the columns of grouping factors
         last_cumulative: pl.DataFrame
-            additional cumulative uptake absent from the incident data, for each group
+            cumulative from before the start of the incident data, for each group
 
         Returns
         CumulativeUptakeData
@@ -135,7 +135,7 @@ class IncidentUptakeData(UptakeData):
 
         Details
         Cumulative sum of incident uptake gives the cumulative uptake.
-        Optionally, additional cumulative uptake not accounte for in
+        Optionally, additional cumulative uptake from before the start of
         the incident data may be provided.
         Even if no groups are specified, the data must at least be grouped by season.
         """
@@ -144,8 +144,8 @@ class IncidentUptakeData(UptakeData):
 
         out = self.with_columns(estimate=pl.col("estimate").cum_sum().over(groups))
 
-        if last_cumulative is not None:
-            out = out.join(last_cumulative, on=groups)
+        if prev_cumulative is not None:
+            out = out.join(prev_cumulative, on=groups)
 
             out = out.with_columns(
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
