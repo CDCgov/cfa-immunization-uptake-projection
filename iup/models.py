@@ -276,11 +276,9 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         data = IncidentUptakeData(
             data.with_columns(
-                elapsed=pl.col("time_end")
-                .pipe(LinearIncidentUptakeModel.date_to_elapsed)
-                .over(groups),
+                elapsed=pl.col("time_end").pipe(iup.utils.date_to_elapsed).over(groups),
                 interval=pl.col("time_end")
-                .pipe(LinearIncidentUptakeModel.date_to_interval)
+                .pipe(iup.utils.date_to_interval)
                 .over(groups),
             )
             .with_columns(daily=pl.col("estimate") / pl.col("interval"))
@@ -370,48 +368,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         )
 
         return self
-
-    @staticmethod
-    def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time elapsed column from a date column, as polars expressions.
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days elapsed since the first date
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        Time elapsed is calculated since the first report date in a season.
-        This ought to be called .over(season)
-        """
-
-        return (date_col - date_col.first()).dt.total_days()
-
-    @staticmethod
-    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time interval column from a date column, as polars expressions.
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days between each date and the previous
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        This should be called .over(season)
-        """
-        return date_col.diff().dt.total_days()
 
     @staticmethod
     def augment_scaffold(
@@ -756,7 +712,7 @@ class HillModel(UptakeModel):
     ) -> CumulativeUptakeData:
         data = CumulativeUptakeData(
             data.with_columns(
-                elapsed=HillModel.date_to_elapsed(
+                elapsed=iup.utils.date_to_elapsed(
                     pl.col("time_end"),
                     season_start_month,
                     season_start_day,
@@ -846,45 +802,6 @@ class HillModel(UptakeModel):
         return self
 
     @staticmethod
-    def date_to_elapsed(
-        date_col: pl.Expr, season_start_month: int, season_start_day: int
-    ) -> pl.Expr:
-        """
-        Extract a time elapsed column from a date column, as polars expressions.
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-        season_start_month: int
-            first month of the overwinter disease season
-        season_start_day: int
-            first day of the first month of the overwinter disease season
-
-        Returns
-        pl.Expr
-            column of the number of days elapsed since the first date
-
-        Details
-        Time difference is always in days.
-        Time elapsed is calculated since the season start,
-        regardless of the first report date.
-        """
-        # for every date, figure out the season breakpoint in that year
-        season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
-
-        # for dates before the season breakpoint in year, subtract a year
-        year = date_col.dt.year()
-        season_start_year = (
-            pl.when(date_col < season_start).then(year - 1).otherwise(year)
-        )
-
-        # rewrite the season breakpoints to that immediately before each date
-        season_start = pl.date(season_start_year, season_start_month, season_start_day)
-
-        # return the number of days from season start to each date
-        return (date_col - season_start).dt.total_days().cast(pl.Float64)
-
-    @staticmethod
     def augment_scaffold(
         scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
     ) -> pl.DataFrame:
@@ -907,7 +824,7 @@ class HillModel(UptakeModel):
         That is all that's required to prepare the data for a Hill model.
         """
         scaffold = scaffold.with_columns(
-            elapsed=HillModel.date_to_elapsed(
+            elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
         ).drop("estimate")
@@ -1092,7 +1009,7 @@ def build_scaffold(
             .to_frame()
             .with_columns(
                 estimate=pl.lit(0.0),
-                season=UptakeData.date_to_season(
+                season=iup.utils.date_to_season(
                     pl.col("time_end"), season_start_month, season_start_day
                 ),
             )

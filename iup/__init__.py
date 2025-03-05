@@ -80,41 +80,6 @@ class UptakeData(Data):
 
         return type(uptake_data)(out)
 
-    @staticmethod
-    def date_to_season(
-        date: pl.Expr, season_start_month: int = 9, season_start_day: int = 1
-    ) -> pl.Expr:
-        """
-        Extract the overwinter disease season from a date
-
-        Parameters
-        date: pl.Expr
-            dates in an uptake data frame
-        season_start_month: int
-            first month of the overwinter disease season
-        season_start_day: int
-            first day of the first month of the overwinter disease season
-
-        Returns
-        pl.Expr
-            seasons for each date
-
-        Details
-        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
-        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
-        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024"
-        """
-
-        # for every date, figure out the season breakpoint in that year
-        season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
-
-        # what is the first year in the two-year season indicator?
-        date_year = date.dt.year()
-        year1 = pl.when(date < season_start).then(date_year - 1).otherwise(date_year)
-
-        year2 = year1 + 1
-        return pl.format("{}/{}", year1, year2)
-
 
 class IncidentUptakeData(UptakeData):
     def to_cumulative(
@@ -289,7 +254,7 @@ class CumulativeUptakeData(UptakeData):
         rollout_rows = rollout_rows.with_columns(
             estimate=0.0,
             season=pl.col("time_end").pipe(
-                UptakeData.date_to_season,
+                iup.utils.date_to_season,
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),

@@ -62,17 +62,6 @@ def test_split_train_test_handles_test(frame):
     assert output.equals(frame2)
 
 
-def test_date_to_season(frame):
-    """
-    Season is extracted from a column of dates
-    """
-    frame = frame.with_columns(
-        season2=pl.col("time_end").pipe(iup.UptakeData.date_to_season)
-    )
-
-    assert all(frame["season"] == frame["season2"])
-
-
 def test_to_cumulative_handles_no_last(frame):
     """
     If last_cumulative is not given, then simple cumulative sums are performed

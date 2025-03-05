@@ -147,36 +147,6 @@ def test_fit(frame, params, mcmc_params):
     assert all(d == 10 for d in dimensions)
 
 
-def test_date_to_elapsed(frame):
-    """
-    Return the time elapsed since the first date by grouping factor.
-    """
-    output = frame.sort(["time_end", "geography"]).with_columns(
-        elapsed=iup.models.LinearIncidentUptakeModel.date_to_elapsed(
-            pl.col("time_end")
-        ).over("geography")
-    )
-
-    expected = pl.Series([0.0, 0.0, 7.0, 7.0, 14.0, 14.0, 21.0, 21.0])
-
-    assert (output["elapsed"] == expected).all()
-
-
-def test_date_to_interval(frame):
-    """
-    Return the interval between dates by grouping factor.
-    """
-    output = frame.sort(["geography", "time_end"]).with_columns(
-        interval=iup.models.LinearIncidentUptakeModel.date_to_interval(
-            pl.col("time_end")
-        ).over("geography")
-    )
-
-    expected = pl.Series("interval", ([None] + [7.0] * 3) * 2)
-
-    assert (output["interval"] == expected).all()
-
-
 def test_augment_scaffold_handles_no_groups(frame):
     """
     Add elapsed and interval columns to a scaffold.

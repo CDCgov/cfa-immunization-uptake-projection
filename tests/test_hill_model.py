@@ -112,32 +112,6 @@ def test_fit_handles_groups(frame, params, mcmc_params):
     assert all(d == 10 for d in dimensions)
 
 
-def test_date_to_elapsed(frame):
-    """
-    Return the time elapsed since the first date by grouping factor.
-    """
-    output = frame.sort(["time_end", "geography"]).with_columns(
-        elapsed=iup.models.HillModel.date_to_elapsed(pl.col("time_end"), 9, 1).over(
-            "geography"
-        )
-    )
-
-    expected = pl.Series(
-        [
-            121.0,
-            121.0,
-            128.0,
-            128.0,
-            135.0,
-            135.0,
-            142.0,
-            142.0,
-        ]
-    )
-
-    assert (output["elapsed"] == expected).all()
-
-
 def test_augment_scaffold(frame):
     """
     Add elapsed an elapsed column to a scaffold.

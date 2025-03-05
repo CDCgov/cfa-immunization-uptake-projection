@@ -6,6 +6,7 @@ import polars as pl
 import yaml
 
 import iup
+import iup.utils
 
 
 def preprocess(
@@ -23,7 +24,7 @@ def preprocess(
         .collect()
         .with_columns(
             season=pl.col("time_end").pipe(
-                iup.UptakeData.date_to_season,
+                iup.utils.date_to_season,
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             )
