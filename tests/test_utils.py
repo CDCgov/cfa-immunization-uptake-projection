@@ -30,6 +30,8 @@ def frame():
         }
     )
 
+    frame = frame.with_columns(time_end=pl.col("time_end").str.to_date("%Y-%m-%d"))
+
     return frame
 
 
