@@ -794,7 +794,7 @@ class HillModel(UptakeModel):
         Details
         If season is provided as a grouping factor for the training data,
         a hierarchical model will be built with season-specific parameters
-        for maximum uptake and half-maximal time, drawn from a hyperdistribution.
+        for maximum uptake and half-maximal time, drawn from a shared distribution.
         Season is recoded numerically in this case, and the code for the last
         season (in which training data leaves off and forecasts begin)
         is recorded as a model attribute.
