@@ -814,7 +814,7 @@ class HillModel(UptakeModel):
 
         if "season" in groups:
             season = data["season"].to_numpy()
-            unique_seasons, indices = np.unique(season, return_inverse=True)
+            unique_seasons = np.unique(season)
             season_to_index = {s: i for i, s in enumerate(unique_seasons)}
             season = np.array([season_to_index[s] for s in season])
             self.season = season
