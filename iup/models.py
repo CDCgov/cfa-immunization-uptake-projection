@@ -391,7 +391,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         This ought to be called .over(season)
         """
 
-        return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
+        return (date_col - date_col.first()).dt.total_days()
 
     @staticmethod
     def date_to_interval(date_col: pl.Expr) -> pl.Expr:
@@ -411,7 +411,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Time difference is always in days.
         This should be called .over(season)
         """
-        return date_col.diff().dt.total_days().cast(pl.Float64)
+        return date_col.diff().dt.total_days()
 
     @staticmethod
     def augment_scaffold(
