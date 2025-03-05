@@ -114,7 +114,7 @@ def test_to_cumulative_handles_last(frame):
 
     output = frame.to_cumulative(
         groups=["geography", "season"],
-        last_cumulative=last_cumulative,
+        prev_cumulative=last_cumulative,
     )
 
     assert all(
