@@ -17,14 +17,64 @@ from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast, Uptake
 class UptakeModel(abc.ABC):
     """
     Abstract class for different types of models.
+    Every subclass of model will have some core methods of the same name.
     """
 
     @abc.abstractmethod
-    def fit(self, data: IncidentUptakeData) -> Self:
+    @staticmethod
+    def augment_data(
+        data: UptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> UptakeData:
+        """
+        Add columns to preprocessed uptake data to provide all
+        input information that a specific model requires.
+        """
         pass
 
     @abc.abstractmethod
-    def predict(self, data: IncidentUptakeData, *args, **kwargs) -> IncidentUptakeData:
+    def fit(
+        self,
+        data: UptakeData,
+        groups: List[str,] | None,
+        params: dict,
+        mcmc: dict,
+    ) -> Self:
+        """
+        Fit a model on its properly augmented data.
+        """
+        pass
+
+    @abc.abstractmethod
+    @staticmethod
+    def augment_scaffold(
+        scaffold: pl.DataFrame,
+        groups: List[str] | None,
+        start: pl.DataFrame,
+    ) -> pl.DataFrame:
+        """
+        Add columns to a scaffold of dates for forecasting to provide all
+        input information that a specific model requires.
+        """
+        pass
+
+    @abc.abstractmethod
+    def predict(
+        self,
+        start_date: dt.date,
+        end_date: dt.date,
+        interval: str,
+        test_data: pl.DataFrame | None,
+        groups: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
+    ) -> pl.DataFrame:
+        """
+        Use a fit model to fill in forecasts in a scaffold of dates.
+        """
         pass
 
 
