@@ -20,8 +20,8 @@ class UptakeModel(abc.ABC):
     Every subclass of model will have some core methods of the same name.
     """
 
-    @abc.abstractmethod
     @staticmethod
+    @abc.abstractmethod
     def augment_data(
         data: UptakeData,
         season_start_month: int,
@@ -48,8 +48,8 @@ class UptakeModel(abc.ABC):
         """
         pass
 
-    @abc.abstractmethod
     @staticmethod
+    @abc.abstractmethod
     def augment_scaffold(
         scaffold: pl.DataFrame,
         groups: List[str] | None,
