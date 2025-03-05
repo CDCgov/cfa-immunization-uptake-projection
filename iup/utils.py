@@ -6,11 +6,11 @@ def standardize(x, mn=None, sd=None):
     Standardize: subtract mean and divide by standard deviation.
 
     Parameters
-    x: pl.Expr | float64
+    x: pl.Expr | np.ndarray
         the numbers to standardize
-    mn: float64
+    mn: float
         the term to subtract, if not the mean of x
-    sd: float64
+    sd: float
         the term to divide by, if not the standard deviation of x
 
     Returns
