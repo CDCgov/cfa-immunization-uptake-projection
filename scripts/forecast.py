@@ -27,11 +27,13 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
     all_forecast = pl.DataFrame()
 
     for model in config["models"]:
-        assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
+        model_name = getattr(iup.models, model["name"])
+
+        assert issubclass(model_name, iup.models.UptakeModel), (
             f"{model['name']} is not a valid model type!"
         )
 
-        augmented_data = getattr(iup.models, model["name"]).augment_data(
+        augmented_data = model_name.augment_data(
             data,
             config["data"]["season_start_month"],
             config["data"]["season_start_day"],
@@ -67,10 +69,12 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
+    model_name = getattr(iup.models, model["name"])
+
     train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
 
     # Make an instance of the model, fit it using training data, and make projections
-    fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
+    fit_model = model_name(model["seed"]).fit(
         train_data,
         grouping_factors,
         model["params"],
