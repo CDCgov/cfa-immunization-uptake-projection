@@ -64,7 +64,7 @@ def mcmc_params():
     return mcmc
 
 
-def test_augment_data(frame):  # LEFT OFF HERE
+def test_augment_data(frame):
     """
     Add a column for time elapsed since season start
     """
