@@ -617,7 +617,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                     variable_name="sample_id",
                     value_name="estimate",
                 )
-                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int8))
+                .with_columns(sample_id=pl.col("sample_id"))
             )
 
         cumulative_projection = pl.concat(combos)
@@ -917,7 +917,7 @@ class HillModel(UptakeModel):
                 value_name="estimate",
             )
             .with_columns(
-                sample_id=pl.col("sample_id").cast(pl.Int64),
+                sample_id=pl.col("sample_id"),
                 estimate=pl.col("estimate").cast(pl.Float64),
             )
             .drop("elapsed")
