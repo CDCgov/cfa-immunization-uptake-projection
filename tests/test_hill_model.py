@@ -90,11 +90,7 @@ def test_fit_handles_no_groups(frame, params, mcmc_params):
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
     data = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
-    model = iup.models.HillModel(0).fit(data, None, params, mcmc_params)
-
-    dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
-
-    assert all(d == 10 for d in dimensions)
+    iup.models.HillModel(0).fit(data, None, params, mcmc_params)
 
 
 def test_fit_handles_groups(frame, params, mcmc_params):

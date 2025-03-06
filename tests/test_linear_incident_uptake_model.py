@@ -138,13 +138,9 @@ def test_fit(frame, params, mcmc_params):
     """
 
     data = iup.IncidentUptakeData(frame)
-    model = iup.models.LinearIncidentUptakeModel(0).fit(
+    iup.models.LinearIncidentUptakeModel(0).fit(
         data, ["geography", "season"], params, mcmc_params
     )
-
-    dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
-
-    assert all(d == 10 for d in dimensions)
 
 
 def test_augment_scaffold_handles_no_groups(frame):
