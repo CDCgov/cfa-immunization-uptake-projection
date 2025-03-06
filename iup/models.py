@@ -10,20 +10,71 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive
 from typing_extensions import Self
 
-from iup import IncidentUptakeData, SampleForecast
+import iup.utils
+from iup import CumulativeUptakeData, IncidentUptakeData, SampleForecast, UptakeData
 
 
 class UptakeModel(abc.ABC):
     """
     Abstract class for different types of models.
+    Every subclass of model will have some core methods of the same name.
     """
 
+    @staticmethod
     @abc.abstractmethod
-    def fit(self, data: IncidentUptakeData) -> Self:
+    def augment_data(
+        data: UptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> UptakeData:
+        """
+        Add columns to preprocessed uptake data to provide all
+        input information that a specific model requires.
+        """
         pass
 
     @abc.abstractmethod
-    def predict(self, data: IncidentUptakeData, *args, **kwargs) -> IncidentUptakeData:
+    def fit(
+        self,
+        data: UptakeData,
+        groups: List[str,] | None,
+        params: dict,
+        mcmc: dict,
+    ) -> Self:
+        """
+        Fit a model on its properly augmented data.
+        """
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
+    def augment_scaffold(
+        scaffold: pl.DataFrame,
+        groups: List[str] | None,
+        start: pl.DataFrame,
+    ) -> pl.DataFrame:
+        """
+        Add columns to a scaffold of dates for forecasting to provide all
+        input information that a specific model requires.
+        """
+        pass
+
+    @abc.abstractmethod
+    def predict(
+        self,
+        start_date: dt.date,
+        end_date: dt.date,
+        interval: str,
+        test_data: pl.DataFrame | None,
+        groups: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
+    ) -> pl.DataFrame:
+        """
+        Use a fit model to fill in forecasts in a scaffold of dates.
+        """
         pass
 
 
@@ -99,82 +150,147 @@ class LinearIncidentUptakeModel(UptakeModel):
 
     @staticmethod
     def extract_starting_conditions(
-        data: IncidentUptakeData, group_cols: List[str,] | None
+        data: IncidentUptakeData, groups: List[str,] | None
     ) -> pl.DataFrame:
         """
-        Extract from incident uptake data the last observed values of several variables, by group.
+        From incident uptake training data, extract information from
+        the last report date.
 
-        Parameters
+        Parameters:
         data: IncidentUptakeData
-            incident uptake data containing final observations of interest
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
+            training data for fitting a linear incident uptake model
+        groups: List[str, ] | None
+            column name(s) for grouping factors
 
-        Returns
-        pl.DataFrame
-            the last observed values of several IncidentUptakeData variables
+        Returns:
+            Data frame of information about last observed date.
 
         Details
-        Starting conditions include:
-        - Last date on which uptake was observed
-        - Daily average incident uptake on this date
-        - Days elapsed since rollout on this date
-        - Cumulative uptake since rollout on this date
+        Information on the last report date is:
+        - date
+        - daily average incident uptake
+        - days elapsed since rollout
+        - cumulative uptake since rollout
+
+        Even if no groups are specified, the data must at least be grouped by season.
         """
-        if group_cols is not None:
-            start = (
-                data.group_by(group_cols)
-                .agg(
-                    [
-                        pl.col("time_end").last().alias("last_date"),
-                        pl.col("daily").last().alias("last_daily"),
-                        pl.col("elapsed").last().alias("last_elapsed"),
-                        pl.col("estimate").sum().alias("last_cumulative"),
-                    ]
-                )
-                .filter(pl.col("season") == pl.col("season").max())
-            )
-        else:
-            start = data.select(
+        if groups is None:
+            groups = ["season"]
+
+        start = (
+            data.group_by(groups)
+            .agg(
                 [
                     pl.col("time_end").last().alias("last_date"),
                     pl.col("daily").last().alias("last_daily"),
                     pl.col("elapsed").last().alias("last_elapsed"),
                     pl.col("estimate").sum().alias("last_cumulative"),
                 ]
-            ).filter(pl.col("season") == pl.col("season").max())
+            )
+            .filter(pl.col("season") == pl.col("season").max())
+        )
 
         return start
 
     @staticmethod
-    def extract_standards(data: IncidentUptakeData, var_cols: tuple) -> dict:
+    def augment_data(
+        data: CumulativeUptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> IncidentUptakeData:
         """
-        Extract means and standard deviations from columns of incident uptake data.
+        Format preprocessed data for fitting a linear incident uptake model.
 
-        Parameters
-        data: IncidentUptakeData
-            incident uptake data with some columns to be standardized
-        var_cols: (str,)
-            column names of variables to be standardized
+        Parameters:
+        data: CumulativeUptakeData
+            training data for fitting a linear incident uptake model
+         season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+        rollouts: List[dt.date] | None
+            rollout dates for each season in the training data
 
-        Returns
-        dict
-            means and standard deviations for each variable column
+        Returns:
+            Incident uptake data ready for fitting a linear incident uptake model.
 
         Details
-        Keys are the variable names, and values are themselves
-        dictionaries of mean and standard deviation.
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident uptake model:
+        - insert rollout dates
+        - convert to incident uptake
+        - add extra columns for
+            - time elapsed since rollout
+            - time interval between report dates
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
         """
-        standards = {
-            var: {"mean": data[var].mean(), "std": data[var].std()} for var in var_cols
-        }
+        assert rollouts is not None, (
+            "LinearIncidentUptakeModel requires rollout dates, but none provided"
+        )
 
-        return standards
+        data = data.insert_rollouts(
+            rollouts, groups, season_start_month, season_start_day
+        )
+
+        incident_data = data.to_incident(groups)
+
+        assert incident_data["time_end"].is_sorted(), (
+            "Chronological sorting got broken during data augmentation!"
+        )
+
+        incident_data = LinearIncidentUptakeModel.augment_columns(incident_data, groups)
+
+        return incident_data
+
+    @staticmethod
+    def augment_columns(
+        data: IncidentUptakeData,
+        groups: List[str] | None,
+    ) -> IncidentUptakeData:
+        """
+        Add columns to data for fitting a linear incident uptake model.
+
+        Parameters:
+        data: IncidentUptakeData
+            training data for fitting a linear incident uptake model
+        groups: List[str, ] | None
+            column name(s) for grouping factors
+
+        Returns:
+            Incident uptake data with extra columns required by the linear incident uptake model.
+
+        Details
+        Extra columns are added for
+            - time elapsed since rollout
+            - time interval between report dates
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
+        """
+        if groups is None:
+            groups = ["season"]
+
+        data = IncidentUptakeData(
+            data.with_columns(
+                elapsed=pl.col("time_end").pipe(iup.utils.date_to_elapsed).over(groups),
+                interval=pl.col("time_end")
+                .pipe(iup.utils.date_to_interval)
+                .over(groups),
+            )
+            .with_columns(daily=pl.col("estimate") / pl.col("interval"))
+            .with_columns(previous=pl.col("daily").shift(1).over(groups))
+        )
+
+        return data
 
     def fit(
         self,
         data: IncidentUptakeData,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
@@ -184,7 +300,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         Parameters
         data: IncidentUptakeData
             training data on which to fit the model
-        group_cols: (str,) | None
+        groups: (str,) | None
             name(s) of the columns for the grouping factors
         params: dict
             parameter names and values to specify prior distributions
@@ -211,21 +327,21 @@ class LinearIncidentUptakeModel(UptakeModel):
 
         Finally, the model is fit using numpyro.
         """
-        data = IncidentUptakeData(data)
+        self.group_combos = extract_group_combos(data, groups)
 
-        data = IncidentUptakeData(self.augment_implicit_columns(data, group_cols))
-
-        self.start = self.extract_starting_conditions(data, group_cols)
-
-        data = IncidentUptakeData(
-            self.trim_outlier_intervals(data, group_cols).with_columns(
-                previous_std=pl.col("previous").pipe(self.standardize),
-                elapsed_std=pl.col("elapsed").pipe(self.standardize),
-                daily_std=pl.col("daily").pipe(self.standardize),
-            )
+        self.standards = iup.utils.extract_standards(
+            data, ("previous", "elapsed", "daily")
         )
 
-        self.standards = self.extract_standards(data, ("previous", "elapsed", "daily"))
+        self.start = self.extract_starting_conditions(data, groups)
+
+        data = IncidentUptakeData(
+            data.trim_outlier_intervals(groups).with_columns(
+                previous_std=pl.col("previous").pipe(iup.utils.standardize),
+                elapsed_std=pl.col("elapsed").pipe(iup.utils.standardize),
+                daily_std=pl.col("daily").pipe(iup.utils.standardize),
+            )
+        )
 
         self.kernel = NUTS(self.model)
         self.mcmc = MCMC(
@@ -234,6 +350,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             num_samples=mcmc["num_samples"],
             num_chains=mcmc["num_chains"],
         )
+
         self.mcmc.run(
             self.rng_key,
             previous=data["previous_std"].to_numpy(),
@@ -253,128 +370,43 @@ class LinearIncidentUptakeModel(UptakeModel):
         return self
 
     @staticmethod
-    def standardize(x, mn=None, sd=None):
-        """
-        Standardize: subtract mean and divide by standard deviation.
-
-        Parameters
-        x: pl.Expr | float64
-            the numbers to standardize
-        mn: float64
-            the term to subtract, if not the mean of x
-        sd: float64
-            the term to divide by, if not the standard deviation of x
-
-        Returns
-        pl.Expr | float
-            the standardized numbers
-
-        Details
-        If the standard deviation is 0, all standardized values are 0.0.
-        """
-        if type(x) is pl.Expr:
-            if mn is not None:
-                return (x - mn) / sd
-            else:
-                return (
-                    pl.when(x.drop_nulls().n_unique() == 1)
-                    .then(0.0)
-                    .otherwise((x - x.mean()) / x.std())
-                )
-        else:
-            if mn is not None:
-                return (x - mn) / sd
-            else:
-                return (x - x.mean()) / x.std()
-
-    @staticmethod
-    def unstandardize(x, mn, sd):
-        """
-        Unstandardize: add standard deviation and multiply by mean.
-
-        Parameters
-        x: pl.Expr
-            the numbers to unstandardize
-        mn: float64
-            the term to add
-        sd: float64
-            the term to multiply by
-
-        Returns
-        pl.Expr
-            the unstandardized numbers
-        """
-        return x * sd + mn
-
-    @classmethod
-    def build_scaffold(
-        cls,
+    def augment_scaffold(
+        scaffold: pl.DataFrame,
+        groups: List[str] | None,
         start: pl.DataFrame,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_data: pl.DataFrame | None,
-        group_cols: List[str,] | None,
     ) -> pl.DataFrame:
         """
-        Build a scaffold data frame to hold projections of a linear incident uptake model.
+        Add columns to a scaffold of dates for forecasting from a linear incident uptake model.
 
-        Parameters
+        Parameters:
+        scaffold: pl.DataFrame
+            scaffold of dates for forecasting
+        groups: List[str, ] | None
+            column name(s) for grouping factors
         start: pl.DataFrame
-            starting conditions for making projections
-        start_date: dt.date
-            the date on which projections should begin
-        end_date: dt.date
-            the date on which projections should end
-        interval: str
-            the time interval between projection dates,
-            following timedelta convention (e.g. '7d' = seven days)
-        test_data: pl.DataFrame | None
-            test data, if evaluation is being done, to provide exact dates
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
+            information about the last observed report date,
+            which guides the first forecast
 
-        Returns
-        pl.DataFrame
-            scaffold to hold model projections
+        Returns:
+            Scaffold with extra columns required by the linear incident uptake model.
 
         Details
-        The desired time frame for projections is repeated over grouping factors,
-        if any grouping factors exist.
+        Extra columns are added for
+            - time elapsed since rollout
+            - time interval between report dates
+        Columns are removed for
+            - estimated incident uptake
+            - daily average incident uptake between report dates
+            - daily average incident uptake between the two previous report dates
         """
-        # If there is test data such that evaluation will be performed,
-        # use exactly the dates that are in the test data
-        if test_data is not None:
-            scaffold = (
-                test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
-                .select("time_end")
-                .with_columns(estimate=pl.lit(0.0))
-            )
-        # If there are no test data, use exactly the dates that were provided
-        else:
-            scaffold = (
-                pl.date_range(
-                    start=start_date,
-                    end=end_date,
-                    interval=interval,
-                    eager=True,
-                )
-                .alias("time_end")
-                .to_frame()
-                .with_columns(estimate=pl.lit(0.0))
-            )
+        scaffold = LinearIncidentUptakeModel.augment_columns(
+            IncidentUptakeData(scaffold), groups
+        ).drop(["estimate", "daily", "previous"])
 
-        if group_cols is not None:
-            scaffold = scaffold.join(start.select(group_cols), how="cross")
-
-        scaffold = cls.augment_implicit_columns(
-            IncidentUptakeData(scaffold), group_cols
-        )
-
-        if group_cols is not None:
+        if groups is not None:
             scaffold = scaffold.join(
-                start.select(list(group_cols) + ["last_elapsed", "last_interval"]),
-                on=group_cols,
+                start.select(list(groups) + ["last_elapsed", "last_interval"]),
+                on=groups,
             )
         else:
             scaffold = scaffold.with_columns(
@@ -394,103 +426,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         return scaffold
 
     @classmethod
-    def augment_implicit_columns(
-        cls, df: IncidentUptakeData, group_cols: List[str,] | None
-    ) -> pl.DataFrame:
-        """
-        Add explicit columns for information that is implicitly contained.
-
-        Parameters
-        data: IncidentUptakeData
-            data containing dates and incident uptake estimates
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
-
-        Returns
-        IncidentUptakeData
-            data provided augmented with extra explicit columns.
-
-        Details
-        Extra columns are added to the incident uptake data:
-        - disease season that each date belongs to
-        - interval of time in days between each successive date
-        - number of days elapsed between rollout and each date
-        - daily-average uptake in the interval preceding each date
-        - daily-average uptake in the interval preceding the previous date
-        """
-        assert df["time_end"].is_sorted(), (
-            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
-        )
-
-        if group_cols is not None:
-            data = (
-                IncidentUptakeData(df)
-                .with_columns(
-                    elapsed=pl.col("time_end")
-                    .pipe(cls.date_to_elapsed)
-                    .over(group_cols),
-                    interval=pl.col("time_end")
-                    .pipe(cls.date_to_interval)
-                    .over(group_cols),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1).over(group_cols))
-            )
-        else:
-            data = (
-                IncidentUptakeData(df)
-                .with_columns(
-                    elapsed=pl.col("time_end").pipe(cls.date_to_elapsed),
-                    interval=pl.col("time_end").pipe(cls.date_to_interval),
-                )
-                .with_columns(daily=pl.col("estimate") / pl.col("interval"))
-                .with_columns(previous=pl.col("daily").shift(1))
-            )
-
-        return data
-
-    @staticmethod
-    def date_to_elapsed(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time elapsed column from a date column, as polars expressions.
-        This ought to be called .over(season)
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days elapsed since the first date
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        """
-
-        return (date_col - date_col.first()).dt.total_days().cast(pl.Float64)
-
-    @staticmethod
-    def date_to_interval(date_col: pl.Expr) -> pl.Expr:
-        """
-        Extract a time interval column from a date column, as polars expressions.
-        Should be called .over(season)
-
-        Parameters
-        date_col: pl.Expr
-            column of dates
-
-        Returns
-        pl.Expr
-            column of the number of days between each date and the previous
-
-        Details
-        Date column should be chronologically sorted in advance.
-        Time difference is always in days.
-        """
-        return date_col.diff().dt.total_days().cast(pl.Float64)
-
-    @classmethod
     def project_sequentially(
         cls, elapsed: tuple, start: float, standards: dict, model, mcmc, rng_key
     ) -> np.ndarray:
@@ -506,10 +441,13 @@ class LinearIncidentUptakeModel(UptakeModel):
             means and standard deviations for the predictor and outcome variables
         model: Predictive
             fit model that predicts next daily-avg uptake from the current
+        mcmc:
+            MCMC samples from a fit linear incident uptake models
+        rng_key:
+            random seed
 
         Returns
-        IncidentUptakeProjection
-            Projections over the desired time frame from a linear incident uptake model
+        Projections over the desired time frame from a linear incident uptake model
 
         Details
         Because daily-average uptake (outcome) and previous daily-average
@@ -537,14 +475,14 @@ class LinearIncidentUptakeModel(UptakeModel):
             # Predictors are standardized uptake on the previous projection date,
             # standardized days-elapsed on the current projection date, & interaction.
             prev = np.array(
-                cls.standardize(
+                iup.utils.standardize(
                     proj[:, i],
                     standards["previous"]["mean"],
                     standards["previous"]["std"],
                 )
             )
             elap = np.repeat(
-                cls.standardize(
+                iup.utils.standardize(
                     elapsed[i],
                     standards["elapsed"]["mean"],
                     standards["elapsed"]["std"],
@@ -559,7 +497,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             y = (predictive(rng_key, previous=prev, elapsed=elap)["obs"]).diagonal()
 
             # Unstandardize the projection onto its natural scale
-            proj[:, i + 1] = cls.unstandardize(
+            proj[:, i + 1] = iup.utils.unstandardize(
                 y,
                 standards["daily"]["mean"],
                 standards["daily"]["std"],
@@ -576,7 +514,9 @@ class LinearIncidentUptakeModel(UptakeModel):
         end_date: dt.date,
         interval: str,
         test_data: pl.DataFrame | None,
-        group_cols: List[str,] | None,
+        groups: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
     ) -> pl.DataFrame:
         """
         Make projections from a fit linear incident uptake model.
@@ -593,51 +533,62 @@ class LinearIncidentUptakeModel(UptakeModel):
             test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
 
         Returns
         LinearIncidentUptakeModel
             the model with incident and cumulative projections as attributes
 
         Details
-        A data frame is set up to house the incident projections over the
+        A scaffold is set up to house theprojections over the
         desired time window with the desired intervals.
 
-        The starting conditions derived from the last training data date
+        Starting conditions derived from the last observed date in the training data
         are used to project for the first date. From there, projections
         are generated sequentially, because the projection for each date
         depends on the previous date, thanks to the model structure.
 
         After projections are completed, they are converted from daily-average
-        to total incident uptake, as well as cumulative uptake, on each date.
+        to total cumulative uptake, on each date.
         """
-        # If there are test data, the actual start date for projections should
-        # be the first date in the test data
-        if test_data is not None:
-            start_date = min(test_data["time_end"])
-
-        self.start = self.start.with_columns(
-            last_interval=(start_date - pl.col("last_date")).dt.total_days()
+        scaffold = build_scaffold(
+            start_date,
+            end_date,
+            interval,
+            test_data,
+            self.group_combos,
+            season_start_month,
+            season_start_day,
         )
 
-        cumulative_projection = self.build_scaffold(
-            self.start, start_date, end_date, interval, test_data, group_cols
-        ).drop("estimate")
+        self.start = self.start.with_columns(
+            last_interval=(
+                scaffold["time_end"].min() - pl.col("last_date")
+            ).dt.total_days()
+        )
 
-        if group_cols is not None:
-            groups = cumulative_projection.partition_by(group_cols)
+        scaffold = LinearIncidentUptakeModel.augment_scaffold(
+            scaffold, groups, self.start
+        )
+
+        if groups is not None:
+            combos = scaffold.partition_by(groups)
         else:
-            groups = [cumulative_projection]
+            combos = [scaffold]
 
-        for g in range(len(groups)):
-            if group_cols is not None:
-                start = self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_daily"
-                ][0]
+        for g in range(len(combos)):
+            if groups is not None:
+                start = self.start.join(combos[g], on=groups, how="semi")["last_daily"][
+                    0
+                ]
             else:
                 start = self.start["last_daily"][0]
 
             proj = self.project_sequentially(
-                tuple(groups[g]["elapsed"]),
+                tuple(combos[g]["elapsed"]),
                 start,
                 self.standards,
                 self.model,
@@ -645,97 +596,426 @@ class LinearIncidentUptakeModel(UptakeModel):
                 self.rng_key,
             )
 
-            proj = proj * groups[g]["interval"].to_numpy().reshape(-1, 1)
+            proj = proj * combos[g]["interval"].to_numpy().reshape(-1, 1)
 
-            proj = (
-                np.cumsum(proj, 0)
-                + self.start.join(groups[g], on=group_cols, how="semi")[
-                    "last_cumulative"
-                ][0]
-            )
+            if groups is not None:
+                proj = (
+                    np.cumsum(proj, 0)
+                    + self.start.join(combos[g], on=groups, how="semi")[
+                        "last_cumulative"
+                    ][0]
+                )
+            else:
+                proj = np.cumsum(proj, 0) + self.start["last_cumulative"][0]
 
             proj = pl.DataFrame(proj, schema=[f"{i + 1}" for i in range(proj.shape[1])])
 
-            groups[g] = (
-                pl.concat([groups[g], proj], how="horizontal")
+            combos[g] = (
+                pl.concat([combos[g], proj], how="horizontal")
                 .unpivot(
-                    index=groups[g].columns,
+                    index=combos[g].columns,
                     variable_name="sample_id",
                     value_name="estimate",
                 )
-                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
+                .with_columns(sample_id=pl.col("sample_id"))
             )
 
-        cumulative_projection = pl.concat(groups)
+        cumulative_projection = pl.concat(combos)
 
         return SampleForecast(cumulative_projection)
 
-    @classmethod
-    def trim_outlier_intervals(
-        cls,
-        df: IncidentUptakeData,
-        group_cols: List[str,] | None,
-        threshold: float = 1.0,
-    ) -> pl.DataFrame:
+
+class HillModel(UptakeModel):
+    """
+    Subclass of UptakeModel for a Hill function model constructed as follows:
+    Outcome: cumulative uptake as of a report date
+    Predictors:
+    - number of days "elapsed" between the start of the season and the report date
+    Possible Random Effects:
+    - season
+    """
+
+    def __init__(self, seed: int):
         """
-        Remove rows from incident uptake data with intervals that are too large.
+        Initialize with a seed and the model structure.
 
         Parameters
-          group_cols (tuple) | None: names of grouping factor columns
-          threshold (float): maximum standardized interval between first two dates
+        seed: int
+            The random seed for stochastic elements of the model.
+        """
+        self.rng_key = random.PRNGKey(seed)
+        self.model = HillModel.hill
+
+    @staticmethod
+    def hill(
+        elapsed,
+        season=None,
+        cum_uptake=None,
+        n_low=1.0,
+        n_high=5.0,
+        A_low=0.0,
+        A_high=1.0,
+        A_sig=1.0,
+        H_low=10.0,
+        H_high=180.0,
+        H_sig=1.0,
+        sig_mn=1.0,
+    ):
+        """
+        Fit a Hill model on training data.
+
+        Parameters
+        elapsed: np.array
+            days elapsed since the season start for each data point
+        season: np.array | None
+            numeric code for the season each data point belongs to
+        cum_uptake: np.array | None
+            cumulative uptake measured at each data point
+        other parameters: float
+            means and standard deviations to specify the prior distributions
 
         Returns
-        pl.DataFrame:
-            incident uptake data with the outlier rows removed
+        Nothing
 
         Details
-        The first row (index 0) is always rollout, so the second row (index 1)
-        is the first actual report. Between these is often a long interval,
-        compared to the fairly regular intervals among subsequent rows.
-
-        If this interval is 1+ std dev bigger than the average interval, then
-        the first report's incident uptake is likely an inflated outlier and
-        should be excluded from the statistical model fitting.
-
-        In this case, to fit a linear incident uptake model,
-        the first three rows of the incident uptake data are dropped:
-        - The first because it is rollout, where uptake is 0 (also an outlier)
-        - The second because it is likely an outlier, as described above
-        - The third because it's previous value is the second, an outlier
-
-        Otherwise, only the first two rows of the incident uptake data are dropped:
-        - The first because it is rollout, where uptake is 0 (also an outlier)
-        - The second because it's previous value is 0, an outlier
+        Provides the model structure and priors for a Hill model.
         """
-        assert df["time_end"].is_sorted(), (
-            "Cannot perform 'date_to' operations if time_end is not chronologically sorted"
-        )
-
-        if group_cols is not None:
-            rank = pl.col("time_end").rank().over(group_cols)
-            shifted_standard_interval = (
-                pl.col("time_end")
-                .pipe(cls.date_to_interval)
-                .pipe(cls.standardize)
-                .shift(1)
-                .over(group_cols)
+        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
+        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
+        sig_A = numpyro.sample("sig_A", dist.Exponential(A_sig))
+        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
+        sig_H = numpyro.sample("sig_H", dist.Exponential(H_sig))
+        if season is not None:
+            A_s = numpyro.sample(
+                "A_s",
+                dist.TruncatedNormal(A, sig_A, low=A_low, high=A_high),
+                sample_shape=(len(np.unique(season)),),
             )
+            H_s = numpyro.sample(
+                "H_s",
+                dist.TruncatedNormal(H, sig_H, low=H_low, high=H_high),
+                sample_shape=(len(np.unique(season)),),
+            )
+            mu = A_s[season] * (elapsed**n) / (H_s[season] ** n + elapsed**n)
         else:
-            rank = pl.col("time_end").rank()
-            shifted_standard_interval = (
-                pl.col("time_end")
-                .pipe(cls.date_to_interval)
-                .pipe(cls.standardize)
-                .shift(1)
-            )
+            mu = A * (elapsed**n) / (H**n + elapsed**n)
+        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
+        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
 
-        return (
-            # validate input
-            IncidentUptakeData(df)
-            # sort by date
-            .sort("time_end")
-            # keep only the correct rows
-            .filter(
-                (rank >= 4) | ((rank == 3) & (shifted_standard_interval <= threshold))
+    @staticmethod
+    def augment_data(
+        data: CumulativeUptakeData,
+        season_start_month: int,
+        season_start_day: int,
+        groups: List[str] | None,
+        rollouts: List[dt.date] | None,
+    ) -> CumulativeUptakeData:
+        data = CumulativeUptakeData(
+            data.with_columns(
+                elapsed=iup.utils.date_to_elapsed(
+                    pl.col("time_end"),
+                    season_start_month,
+                    season_start_day,
+                )
             )
         )
+
+        return data
+
+    def fit(
+        self,
+        data: CumulativeUptakeData,
+        groups: List[str,] | None,
+        params: dict,
+        mcmc: dict,
+    ) -> Self:
+        """
+        Fit a hill model on training data.
+
+        Parameters
+        data: CumulativeUptakeData
+            training data on which to fit the model
+        group_cols: (str,) | None
+            name(s) of the columns for the grouping factors
+        params: dict
+            parameter names and values to specify prior distributions
+        mcmc: dict
+            control parameters for mcmc fitting
+
+        Returns
+        HillModel
+            model object with grouping factor combinaions
+            and the model fit all stored as attributes
+
+        Details
+        If season is provided as a grouping factor for the training data,
+        a hierarchical model will be built with season-specific parameters
+        for maximum uptake and half-maximal time, drawn from a shared distribution.
+        Season is recoded numerically in this case, and the code for the last
+        season (in which training data leaves off and forecasts begin)
+        is recorded as a model attribute.
+
+        If season is omitted as a grouping factor for the training data,
+        all data are pooled to fit single parameters for maximum uptake
+        and half-maximal time.
+
+        The Hill exponent is always a single non-hierarchical parameter.
+
+        Finally, the model is fit using numpyro.
+        """
+        self.group_combos = extract_group_combos(data, groups)
+
+        if groups is None:
+            groups = []
+
+        if "season" in groups:
+            season = data["season"].to_numpy()
+            unique_seasons = np.unique(season)
+            season_to_index = {s: i for i, s in enumerate(unique_seasons)}
+            season = np.array([season_to_index[s] for s in season])
+            self.season = season
+        else:
+            season = None
+
+        self.kernel = NUTS(self.model)
+        self.mcmc = MCMC(
+            self.kernel,
+            num_warmup=mcmc["num_warmup"],
+            num_samples=mcmc["num_samples"],
+            num_chains=mcmc["num_chains"],
+        )
+
+        self.mcmc.run(
+            self.rng_key,
+            cum_uptake=data["estimate"].to_numpy(),
+            elapsed=data["elapsed"].to_numpy(),
+            season=season,
+            n_low=params["n_low"],
+            n_high=params["n_high"],
+            A_low=params["A_low"],
+            A_high=params["A_high"],
+            H_low=params["H_low"],
+            H_high=params["H_high"],
+            sig_mn=params["sig_mn"],
+        )
+
+        return self
+
+    @staticmethod
+    def augment_scaffold(
+        scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
+    ) -> pl.DataFrame:
+        """
+        Add columns to a scaffold of dates for forecasting from a Hill model.
+
+        Parameters:
+        scaffold: pl.DataFrame
+            scaffold of dates for forecasting
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+
+        Returns:
+            Scaffold with extra columns required by the Hill model.
+
+        Details
+        An extra column is added for the time elapsed since the season start.
+        That is all that's required to prepare the data for a Hill model.
+        """
+        scaffold = scaffold.with_columns(
+            elapsed=iup.utils.date_to_elapsed(
+                pl.col("time_end"), season_start_month, season_start_day
+            )
+        ).drop("estimate")
+
+        return scaffold
+
+    def predict(
+        self,
+        start_date: dt.date,
+        end_date: dt.date,
+        interval: str,
+        test_data: pl.DataFrame | None,
+        groups: List[str,] | None,
+        season_start_month: int,
+        season_start_day: int,
+    ) -> pl.DataFrame:
+        """
+        Make projections from a fit hill model.
+
+        Parameters
+        start_date: dt.date
+            the date on which projections should begin
+        end_date: dt.date
+            the date on which projections should end
+        interval: str
+            the time interval between projection dates,
+            following timedelta convention (e.g. '7d' = seven days)
+        test_data: pl.DataFrame | None
+            test data, if evaluation is being done, to provide exact dates
+        groups: (str,) | None
+            name(s) of the columns for the grouping factors
+        season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+
+        Returns
+        HillModel
+            the model with incident and cumulative projections as attributes
+
+        Details
+        A data frame is set up to house the projections over the
+        desired time window with the desired intervals.
+
+        Forecasts are the made for each date in this scaffold.
+        """
+        scaffold = build_scaffold(
+            start_date,
+            end_date,
+            interval,
+            test_data,
+            self.group_combos,
+            season_start_month,
+            season_start_day,
+        )
+
+        scaffold = HillModel.augment_scaffold(
+            scaffold, season_start_month, season_start_day
+        )
+
+        predictive = Predictive(self.model, self.mcmc.get_samples())
+        if groups is not None:
+            predictions = np.array(
+                predictive(
+                    self.rng_key,
+                    elapsed=scaffold["elapsed"].to_numpy(),
+                    season=np.repeat(self.season.max(), scaffold.shape[0]),
+                )["obs"]
+            ).transpose()
+        else:
+            predictions = np.array(
+                predictive(self.rng_key, elapsed=scaffold["elapsed"].to_numpy())["obs"]
+            ).transpose()
+
+        pred = pl.concat(
+            [
+                scaffold,
+                pl.DataFrame(
+                    predictions,
+                    schema=[f"{i + 1}" for i in range(predictions.shape[1])],
+                ),
+            ],
+            how="horizontal",
+        )
+
+        pred = (
+            pred.unpivot(
+                index=scaffold.columns,
+                variable_name="sample_id",
+                value_name="estimate",
+            )
+            .with_columns(
+                sample_id=pl.col("sample_id"),
+                estimate=pl.col("estimate").cast(pl.Float64),
+            )
+            .drop("elapsed")
+        )
+
+        return SampleForecast(pred)
+
+
+def extract_group_combos(
+    data: pl.DataFrame, groups: List[str,] | None
+) -> pl.DataFrame | None:
+    """
+    Extract from uptake data all combinations of grouping factors.
+
+    Parameters
+    data: pl.DataFrame
+        uptake data possibly containing grouping factors
+    group_cols: (str,) | None
+        name(s) of the columns for the grouping factors
+
+    Returns
+    pl.DataFrame
+        all combinations of grouping factors
+
+    Details
+    This is required by multiple models.
+    """
+    if groups is not None:
+        return data.select(groups).unique()
+    else:
+        return None
+
+
+def build_scaffold(
+    start_date: dt.date,
+    end_date: dt.date,
+    interval: str,
+    test_data: pl.DataFrame | None,
+    group_combos: pl.DataFrame | None,
+    season_start_month: int,
+    season_start_day: int,
+) -> pl.DataFrame:
+    """
+    Build a scaffold data frame to hold forecasts.
+
+    Parameters
+    start_date: dt.date
+        the date on which projections should begin
+    end_date: dt.date
+        the date on which projections should end
+    interval: str
+        the time interval between projection dates,
+        following timedelta convention (e.g. '7d' = seven days)
+    test_data: pl.DataFrame | None
+        test data, if evaluation is being done, to provide exact dates
+    group_combos: pl.DataFrame | None
+        all unique combinations of grouping factors in the data
+    season_start_month: int
+        first month of the overwinter disease season
+    season_start_day: int
+        first day of the first month of the overwinter disease season
+
+    Returns
+    pl.DataFrame
+        scaffold to hold model forecasts.
+
+    Details
+    The desired time frame for projections is repeated over grouping factors,
+    if any grouping factors exist. This is required by multiple models.
+    """
+    # If there is test data such that evaluation will be performed,
+    # use exactly the dates that are in the test data
+    if test_data is not None:
+        scaffold = (
+            test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
+            .select(["time_end", "season"])
+            .with_columns(estimate=pl.lit(0.0))
+        )
+    # If there are no test data, use exactly the dates that were provided
+    else:
+        scaffold = (
+            pl.date_range(
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                eager=True,
+            )
+            .alias("time_end")
+            .to_frame()
+            .with_columns(
+                estimate=pl.lit(0.0),
+                season=iup.utils.date_to_season(
+                    pl.col("time_end"), season_start_month, season_start_day
+                ),
+            )
+        )
+
+    if group_combos is not None:
+        scaffold = scaffold.join(group_combos, how="cross")
+
+    return scaffold

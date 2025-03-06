@@ -1,5 +1,4 @@
 import argparse
-import datetime
 from typing import List
 
 import nisapi
@@ -7,6 +6,7 @@ import polars as pl
 import yaml
 
 import iup
+import iup.utils
 
 
 def preprocess(
@@ -14,11 +14,9 @@ def preprocess(
     filters: dict,
     keep: List[str],
     groups: List[str] | None,
-    rollouts: List[datetime.date],
     season_start_month: int,
     season_start_day: int,
 ) -> iup.CumulativeUptakeData:
-    # Filter to correct rows and columns
     data = iup.CumulativeUptakeData(
         raw_data.filter([pl.col(k).is_in(v) for k, v in filters.items()])
         .select(keep)
@@ -26,19 +24,13 @@ def preprocess(
         .collect()
         .with_columns(
             season=pl.col("time_end").pipe(
-                iup.UptakeData.date_to_season,
+                iup.utils.date_to_season,
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             )
         )
     )
 
-    # Insert rollout dates into the data
-    data = iup.CumulativeUptakeData(
-        data.insert_rollouts(rollouts, groups, season_start_month, season_start_day)
-    )
-
-    # Ensure that the desired grouping factors are found in all data sets
     if groups is not None:
         assert set(data.columns).issuperset(groups)
 
@@ -64,7 +56,6 @@ if __name__ == "__main__":
         filters=config["data"]["filters"],
         keep=config["data"]["keep"],
         groups=config["data"]["groups"],
-        rollouts=config["data"]["rollouts"],
         season_start_month=config["data"]["season_start_month"],
         season_start_day=config["data"]["season_start_day"],
     )

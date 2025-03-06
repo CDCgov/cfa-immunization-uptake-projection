@@ -27,10 +27,24 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
     all_forecast = pl.DataFrame()
 
     for model in config["models"]:
+        model_name = getattr(iup.models, model["name"])
+
+        assert issubclass(model_name, iup.models.UptakeModel), (
+            f"{model['name']} is not a valid model type!"
+        )
+
+        augmented_data = model_name.augment_data(
+            data,
+            config["data"]["season_start_month"],
+            config["data"]["season_start_day"],
+            config["data"]["groups"],
+            config["data"]["rollouts"],
+        )
+
         for forecast_date in forecast_dates:
             forecast = run_forecast(
                 model,
-                data,
+                augmented_data,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
@@ -55,50 +69,35 @@ def run_forecast(
     forecast_end,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    # preprocess.py returns cumulative data, so convert to incident for LinearIncidentUptakeModel
-    cumulative_data = data.with_columns(
-        season=pl.col("time_end").pipe(
-            iup.UptakeData.date_to_season,
-            season_start_month=config["data"]["season_start_month"],
-            season_start_day=config["data"]["season_start_day"],
-        )
-    )
+    model_name = getattr(iup.models, model["name"])
 
-    incident_data = iup.CumulativeUptakeData(cumulative_data).to_incident(
-        grouping_factors
-    )
-
-    # Prune to only the training portion
-    incident_train_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, forecast_start, "train"
-    )
+    train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
 
     # Make an instance of the model, fit it using training data, and make projections
-    assert issubclass(getattr(iup.models, model["name"]), iup.models.UptakeModel), (
-        f"{model['name']} is not a valid model type!"
-    )
-
-    fit_model = getattr(iup.models, model["name"])(model["seed"]).fit(
-        incident_train_data,
+    fit_model = model_name(model["seed"]).fit(
+        train_data,
         grouping_factors,
         model["params"],
         model["mcmc"],
     )
 
     # Get test data, if there is any, to know exact dates for projection
-    incident_test_data = iup.IncidentUptakeData.split_train_test(
-        incident_data, forecast_start, "test"
-    )
-    if incident_test_data.height == 0:
-        incident_test_data = None
+    test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
+    if test_data.height == 0:
+        test_data = None
 
     cumulative_projections = fit_model.predict(
         forecast_start,
         forecast_end,
         config["forecast_timeframe"]["interval"],
-        incident_test_data,
+        test_data,
         grouping_factors,
+        config["data"]["season_start_month"],
+        config["data"]["season_start_day"],
     )
+
+    if grouping_factors is None:
+        grouping_factors = ["season"]
 
     cumulative_projections = (
         cumulative_projections.group_by(grouping_factors + ["time_end"])
