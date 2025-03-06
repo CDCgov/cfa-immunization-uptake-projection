@@ -306,5 +306,5 @@ def test_sample_forecast_validation():
     iup.SampleForecast(
         pl.DataFrame(
             {"time_end": [dt.date(2020, 1, 1)], "estimate": [0.0], "sample_id": 0}
-        ).with_columns(pl.col("sample_id").cast(pl.Int64))
+        ).with_columns(pl.col("sample_id").cast(pl.Int8))
     )

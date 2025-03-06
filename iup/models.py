@@ -617,7 +617,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                     variable_name="sample_id",
                     value_name="estimate",
                 )
-                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int64))
+                .with_columns(sample_id=pl.col("sample_id").cast(pl.Int8))
             )
 
         cumulative_projection = pl.concat(combos)
