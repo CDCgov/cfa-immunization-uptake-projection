@@ -1,5 +1,6 @@
 import argparse
-from typing import Any, Type
+import datetime as dt
+from typing import Any, List, Type
 
 import polars as pl
 import yaml
@@ -53,6 +54,9 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
+                forecast_interval=config["forecast_timeframe"]["interval"],
+                season_start_month=config["data"]["season_start_month"],
+                season_start_day=config["data"]["season_start_day"],
             )
 
             forecast = forecast.with_columns(
@@ -72,9 +76,12 @@ def run_forecast(
     seed: int,
     params: dict[str, Any],
     mcmc: dict[str, Any],
-    grouping_factors,
-    forecast_start,
-    forecast_end,
+    grouping_factors: List[str] | None,
+    forecast_start: dt.date,
+    forecast_end: dt.date,
+    forecast_interval: str,
+    season_start_month: int,
+    season_start_day: int,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
     train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
@@ -93,13 +100,13 @@ def run_forecast(
         test_data = None
 
     cumulative_projections = fit_model.predict(
-        forecast_start,
-        forecast_end,
-        config["forecast_timeframe"]["interval"],
-        test_data,
-        grouping_factors,
-        config["data"]["season_start_month"],
-        config["data"]["season_start_day"],
+        start_date=forecast_start,
+        end_date=forecast_end,
+        interval=forecast_interval,
+        test_data=test_data,
+        groups=grouping_factors,
+        season_start_month=season_start_month,
+        season_start_day=season_start_day,
     )
 
     if grouping_factors is None:
