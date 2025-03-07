@@ -1,6 +1,6 @@
 # Overview
 
-This is a summary of the model structures used to capture and forecast vaccine uptake. There are currently three model structures: autoregressive, Hill, and hypertabastic. Each model proposes a latent true uptake curve, which is subject to observation error. Each model also uses a hierarchical structure, in which parameters governing the latent true uptake curve for each group (defined by geography, age, and/or race) are drawn from a shared distribution representing a single season. The parameters governing that shared distribution are themselves drawn from a parent shared distribution across seasons.
+This is a summary of the model structures used to capture and forecast vaccine uptake. There are currently two model structures: an autoregressive and a Hill function. Each model proposes a latent true uptake curve, which is subject to observation error. Each model also uses a hierarchical structure, in which parameters governing the latent true uptake curve for each group (defined by geography, age, and/or race) are drawn from a shared distribution representing a single season. The parameters governing that shared distribution are themselves drawn from a parent shared distribution across seasons.
 
 # Notation
 
@@ -35,7 +35,31 @@ The autoregressive (AR) model is structured as follows:
 & \\
 &\text{Priors} \\
 &\alpha,~\beta,~\gamma,~\theta \sim N(0, 0.1) \\
-&\sigma_{\alpha},~\sigma_{\beta},~\sigma_{\gamma},~\sigma_{\theta} \sim Exp(0,0.1) \\
+&\sigma_{\alpha},~\sigma_{\beta},~\sigma_{\gamma},~\sigma_{\theta} \sim Exp(0.1) \\
 &t_0 \sim DiscreteUnif(\text{Earliest Day}, \text{ Latest Day})
+\end{align*}
+```
+
+# Hill Model
+
+The Hill model is structured as follows:
+
+```math
+\begin{align*}
+&\text{Observation Layer} \\
+&\hat{c}_{t,s,g} \sim TruncNorm(c_{t,s,g}, \hat{\sigma}_{t,s,g}, 0, 1) \\
+& \\
+&\text{Functional Structure} \\
+&c_{t,s,g} = \frac{A_{s,g} \cdot t^{n}}{H_{s,g}^{n} + t^{n}} \\
+& \\
+&\text{Hierarchical Structure} \\
+&A_{s,g} \sim N(A_s, \sigma_{A, s}), ~ H_{s,g} \sim N(H_s, \sigma_{H, s}) \\
+&A_s \sim N(A, \sigma_{A}), ~ H_s \sim N(H, \sigma_{H}) \\
+&\sigma_{A, s} \sim Exp(\sigma_{A}), ~ \sigma_{H, s} \sim Exp(\sigma_{H}) \\
+& \\
+&\text{Priors} \\
+&A \sim TruncNorm(0.4, 0.1, 0, 1), ~ H \sim TruncNorm(100,20, 0) \\
+&\sigma_{A} \sim Exp(0.1), ~ \sigma_{H} \sim Exp(10)  \\
+&n \sim Uniform(0.5, 4.5)
 \end{align*}
 ```
