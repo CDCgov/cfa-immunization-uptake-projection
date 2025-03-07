@@ -1,4 +1,6 @@
 import argparse
+import datetime as dt
+from typing import Any, List, Type
 
 import polars as pl
 import yaml
@@ -26,14 +28,15 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
 
     all_forecast = pl.DataFrame()
 
-    for model in config["models"]:
-        model_name = getattr(iup.models, model["name"])
+    for config_model in config["models"]:
+        model_name = config_model["name"]
+        model_class = getattr(iup.models, model_name)
 
-        assert issubclass(model_name, iup.models.UptakeModel), (
-            f"{model['name']} is not a valid model type!"
+        assert issubclass(model_class, iup.models.UptakeModel), (
+            f"{model_name} is not a valid model type!"
         )
 
-        augmented_data = model_name.augment_data(
+        augmented_data = model_class.augment_data(
             data,
             config["data"]["season_start_month"],
             config["data"]["season_start_day"],
@@ -43,17 +46,23 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
 
         for forecast_date in forecast_dates:
             forecast = run_forecast(
-                model,
-                augmented_data,
+                data=augmented_data,
+                model_class=model_class,
+                seed=config_model["seed"],
+                params=config_model["params"],
+                mcmc=config_model["mcmc"],
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
+                forecast_interval=config["forecast_timeframe"]["interval"],
+                season_start_month=config["data"]["season_start_month"],
+                season_start_day=config["data"]["season_start_day"],
             )
 
             forecast = forecast.with_columns(
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
-                model=pl.lit(model["name"]),
+                model=pl.lit(model_name),
             )
 
             all_forecast = pl.concat([all_forecast, forecast])
@@ -62,23 +71,27 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
 
 
 def run_forecast(
-    model,
-    data,
-    grouping_factors,
-    forecast_start,
-    forecast_end,
+    data: iup.UptakeData,
+    model_class: Type[iup.models.UptakeModel],
+    seed: int,
+    params: dict[str, Any],
+    mcmc: dict[str, Any],
+    grouping_factors: List[str] | None,
+    forecast_start: dt.date,
+    forecast_end: dt.date,
+    forecast_interval: str,
+    season_start_month: int,
+    season_start_day: int,
 ) -> pl.DataFrame:
     """Run a single model for a single forecast date"""
-    model_name = getattr(iup.models, model["name"])
-
     train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
 
     # Make an instance of the model, fit it using training data, and make projections
-    fit_model = model_name(model["seed"]).fit(
+    fit_model = model_class(seed).fit(
         train_data,
         grouping_factors,
-        model["params"],
-        model["mcmc"],
+        params,
+        mcmc,
     )
 
     # Get test data, if there is any, to know exact dates for projection
@@ -87,13 +100,13 @@ def run_forecast(
         test_data = None
 
     cumulative_projections = fit_model.predict(
-        forecast_start,
-        forecast_end,
-        config["forecast_timeframe"]["interval"],
-        test_data,
-        grouping_factors,
-        config["data"]["season_start_month"],
-        config["data"]["season_start_day"],
+        start_date=forecast_start,
+        end_date=forecast_end,
+        interval=forecast_interval,
+        test_data=test_data,
+        groups=grouping_factors,
+        season_start_month=season_start_month,
+        season_start_day=season_start_day,
     )
 
     if grouping_factors is None:
