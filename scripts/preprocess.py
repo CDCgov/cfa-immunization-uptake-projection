@@ -3,6 +3,7 @@ from typing import List
 
 import nisapi
 import polars as pl
+import scipy.stats as st
 import yaml
 
 import iup
@@ -27,8 +28,10 @@ def preprocess(
                 iup.utils.date_to_season,
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
-            )
+            ),
+            sdev=(pl.col("uci") - pl.col("lci")) / (2 * st.norm.ppf(0.975, 0, 1)),
         )
+        .drop(["lci", "uci"])
     )
 
     if groups is not None:
