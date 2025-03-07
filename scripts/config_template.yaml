@@ -13,7 +13,7 @@ data:
     indicator: [received a vaccination, Received updated bivalent booster dose (among adults who completed primary series)]
     time_type: [week]
   # keep only these data columns
-  keep: [estimate, time_end]
+  keep: [estimate, time_end, lci, uci]
   # use these columns as grouping factors. Almost always use at least "season", but use None if there are truly none.
   groups:
 
@@ -43,7 +43,7 @@ models:
       sig_mn: 0.1
     mcmc:
       num_warmup: 1000
-      num_samples: 100
+      num_samples: 1000
       num_chains: 4
   - name: HillModel
     seed: 0
@@ -59,7 +59,7 @@ models:
       sig_mn: 0.1
     mcmc:
       num_warmup: 1000
-      num_samples: 100
+      num_samples: 1000
       num_chains: 4
 
 # score metrics
