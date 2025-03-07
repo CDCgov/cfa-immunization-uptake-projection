@@ -29,8 +29,10 @@ def preprocess(
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
-            sdev=(pl.col("uci") - pl.col("lci")) / (2 * st.norm.ppf(0.975, 0, 1)),
+            uci=pl.col("uci") - pl.col("estimate"),
+            lci=pl.col("estimate") - pl.col("lci"),
         )
+        .with_columns(sdev=pl.max_horizontal("uci", "lci") / st.norm.ppf(0.975, 0, 1))
         .drop(["lci", "uci"])
     )
 
