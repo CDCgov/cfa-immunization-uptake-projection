@@ -46,18 +46,45 @@ The Hill model is structured as follows:
 
 ```math
 \begin{align*}
-&\text{Observation Layer} \\
+\boldsymbol{\xi} &\sim \text{Pr}(\boldsymbol{\xi}) \\
+\boldsymbol{\theta}_s &\sim \text{Pr}(\boldsymbol{\theta}_s \mid \boldsymbol{\xi}) \\
+\boldsymbol{\theta}_{s, g} &\sim \text{Pr}(\boldsymbol{\theta}_{s,g} \mid \boldsymbol{\theta}_g) \\
+\mathbf{c}_{s,g} &:= f_{\text{Hill}}(\boldsymbol{\theta}_{s, g}) \\
+\hat{\mathbf{c}}_{s,g} &\sim \text{Pr}(\hat{\mathbf{c}}_{s,g} \mid \mathbf{c}_{s,g}, \hat{\boldsymbol{\sigma}}_{s,g})
+\end{align*}
+```
+
+Where $\boldsymbol{\theta}_{s, g}$ are the parameters of the Hill models for each season and within each season for each combination of grouping factors.
+More specicfically, we have the following model components.
+
+## Observation Layer
+```math
+\begin{align*}
 &\hat{c}_{t,s,g} \sim TruncNorm(c_{t,s,g}, \hat{\sigma}_{t,s,g}, 0, 1) \\
-& \\
-&\text{Functional Structure} \\
+\end{align*}
+```
+
+## Functional Structure
+The Hill function $f_{\text{Hill}}$ is,
+```math
+\begin{align*}
+&\text{} \\
 &c_{t,s,g} = \frac{A_{s,g} \cdot t^{n}}{H_{s,g}^{n} + t^{n}} \\
-& \\
-&\text{Hierarchical Structure} \\
+\end{align*}
+```
+
+## Hierarchical Structure
+```math
+\begin{align*}
 &A_{s,g} \sim N(A_s, \sigma_{A, s}), ~ H_{s,g} \sim N(H_s, \sigma_{H, s}) \\
 &A_s \sim N(A, \sigma_{A}), ~ H_s \sim N(H, \sigma_{H}) \\
 &\sigma_{A, s} \sim Exp(\sigma_{A}), ~ \sigma_{H, s} \sim Exp(\sigma_{H}) \\
-& \\
-&\text{Priors} \\
+\end{align*}
+```
+
+## Priors
+```math
+\begin{align*}
 &A \sim TruncNorm(0.4, 0.1, 0, 1), ~ H \sim TruncNorm(100,20, 0) \\
 &\sigma_{A} \sim Exp(0.1), ~ \sigma_{H} \sim Exp(10)  \\
 &n \sim Uniform(0.5, 4.5)
