@@ -1,18 +1,17 @@
 # Overview
 
-This is a summary of the model structures used to capture and forecast vaccine uptake. There are currently two model structures: an autoregressive and a Hill function. Each model proposes a latent true uptake curve, which is subject to observation error. Each model also uses a hierarchical structure, in which parameters governing the latent true uptake curve for each group (defined by geography, age, and/or race) are drawn from a shared distribution representing a single season. The parameters governing that shared distribution are themselves drawn from a parent shared distribution across seasons.
+This is a summary of the model structures used to capture and forecast vaccine uptake. There are currently two model structures: an autoregressive and a Hill function. Each model proposes a latent true uptake curve, which is subject to observation error. Each model also uses a hierarchical structure to account for multiple grouping factors (e.g. season, geography, age, and/or race). In particular, the parameters governing the latent true uptake curve for each group (a combination of one value of each grouping factor) are given by their baseline values plus deviations drawn from the distributions representing each grouping factor.
 
 # Notation
 
 The following notation will be used across all models
 - $t$ = number of days since rollout (i.e. $t_0$)
 - $t_0$ = rollout, i.e. the last day before the vaccine was available
-- $\hat{c}_t$ = observed cumulative uptake on day $t$
-- $\hat{\sigma}_t$ = empirical estimate of the standard deviation of the observed cumulative uptake on day $t$
+- $c_t^{obs}$ = observed cumulative uptake on day $t$
+- $\sigma_t^{obs}$ = empirical estimate of the standard deviation of the observed cumulative uptake on day $t$
 - $c_t$ = latent true cumulative uptake on day $t$
-- $u_t$ = latent true incident uptake on day $t$
-- $s$ = season (typically July 1 of a year until June 30 of the following year)
-- $g$ = a combination of other grouping factors (e.g. geographic area, age group, race/ethnicity)
+- $u_t$ = latent true incident uptake between days $t-1$ and $t$, i.e. $c_t - c_{t-1}$
+- $G_i$ = grouping factors (e.g. season, geographic area, age group, race/ethnicity), to be indexed by $i$ if there are more than one
 
 # Autoregressive Model
 
@@ -24,7 +23,7 @@ The autoregressive (AR) model is structured as follows:
 &\hat{c}_{t,s,g} \sim TruncNorm(c_{t,s,g}, \hat{\sigma}_{t,s,g}, 0, 1) \\
 & \\
 &\text{Functional Structure} \\
-&c_{t,s,g} = \sum_{i=t_0}^{t} u_{i,s,g} \\
+&c_{t,s,g} = \sum_{j=0}^{T} u_{t_j,s,g} \\
 &u_{t,s,g} = \alpha_{s,g} + \beta_{s,g} \cdot u_{t-1,s,g} + \gamma_{s,g} \cdot t + \theta_{s,g} \cdot u_{t-1,s,g} \cdot t ~~~ \text{ for t > 0} \\
 &u_{t_0,s,g} = 0 \\
 & \\
