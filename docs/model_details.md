@@ -11,7 +11,7 @@ The following notation will be used across all models
 - $\sigma_t^{obs}$ = empirical estimate of the standard deviation of the observed cumulative uptake on day $t$
 - $c_t$ = latent true cumulative uptake on day $t$
 - $u_t$ = latent true incident uptake between days $t-1$ and $t$, i.e. $c_t - c_{t-1}$
-- $G$ = a grouping factors (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
+- $G$ = a grouping factor (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
 
 # Autoregressive Model
 
@@ -52,7 +52,7 @@ More details on the AR model are given below.
 ```math
 \begin{align*}
 &\alpha_{G_1,...,G_I} = \alpha + \alpha_{G_1} + ... + \alpha_{G_I} \\
-&\alpha_{G_i} = \sigma_{\alpha_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) \\
+&\alpha_{G_i} \sim \sigma_{\alpha_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) \\
 \end{align*}
 ```
 
@@ -64,11 +64,16 @@ and similarly for $\beta$, $\gamma$, and $\theta$.
 \begin{align*}
 &\alpha \sim \text{Normal}(\text{location = }0, \text{ scale = }0.1) \\
 &\sigma_{\alpha_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
-&t_0 \sim \text{DiscreteUniform}(\text{lower = Early Date, upper = Late Date})
 \end{align*}
 ```
 
-and similarly for $\beta$, $\gamma$, and $\theta$.
+and similarly for $\beta$, $\gamma$, and $\theta$. Additionally:
+
+```math
+\begin{align*}
+&t_0 \sim \text{DiscreteUniform}(\text{lower = Early Date, upper = Late Date}) \\
+\end{align*}
+```
 
 # Hill Model
 
