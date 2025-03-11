@@ -1,10 +1,14 @@
 import argparse
 
 import altair as alt
+
+alt.data_transformers.disable_max_rows()
+
+from altair import datum
 import polars as pl
 
 
-def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
+def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     """
     Save a multiple-grid graph with the comparison between the observed uptake and the prediction,
     initiated over the season.
@@ -27,34 +31,159 @@ def plot_projections(obs: pl.DataFrame, pred: pl.DataFrame):
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
     # get every model/forecast date combo
-    models_forecasts = pred.select(["model", "forecast_start"]).unique()
+    models_forecasts = pred.select(["model", "forecast_start", "sample_id"]).unique()
 
     # for every model and forecast date, merge in the observed value
     # column "type" will be either "obs" or "pred"
     plot_obs = (
         obs.join(models_forecasts, how="cross")
         .with_columns(type=pl.lit("obs"))
-        .select(["type", "model", "forecast_start", "time_end", "estimate", "season"])
+        .select(
+            [
+                "type",
+                "model",
+                "forecast_start",
+                "time_end",
+                "estimate",
+                "season",
+                "sample_id",
+            ]
+        )
         .filter(pl.col("season").is_in(pred["season"].unique()))
     )
 
     plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(
-        ["type", "model", "forecast_start", "time_end", "estimate", "season"]
+        [
+            "type",
+            "model",
+            "forecast_start",
+            "time_end",
+            "estimate",
+            "season",
+            "sample_id",
+        ]
     )
 
     plot_data = pl.concat([plot_obs, plot_pred])
 
-    return (
-        alt.Chart(plot_data)
+    plot_new_data = plot_data.filter(
+        pl.col("time_end").is_between(
+            pl.col("forecast_start").min(),
+            pl.col("forecast_start").max(),
+            "both",
+        )
+    )
+
+    obs_chart = (
+        alt.Chart(plot_new_data)
+        .mark_point(filled=True, color="black")
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month", title="Date"),
+            ),
+            alt.Y("estimate:Q"),
+        )
+        .transform_filter(datum.type == "obs")
+    )
+
+    pred_chart = (
+        alt.Chart()
         .mark_line()
         .encode(
-            alt.X("time_end:T", axis=alt.Axis(format="%Y-%m", tickCount="month")),
-            alt.Y("estimate:Q"),
-            alt.Column("model"),
-            alt.Row("forecast_start:T"),
-            alt.Color("type"),
-            alt.Detail("season"),
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
+            ),
+            alt.Y("estimate:Q", axis=alt.Axis(title="Estimate")),
+            color="sample_id:N",
         )
+        .transform_filter(datum.type == "pred")
+    )
+
+    return alt.layer(pred_chart, obs_chart, data=plot_new_data).facet(
+        column="model", row="forecast_start"
+    )
+
+
+def plot_summary(obs, pred):
+    # input check
+    if "time_end" not in obs.columns or "estimate" not in obs.columns:
+        ValueError("'time_end' or 'estimate' is missing from obs.")
+
+    models_forecasts = pred.select(["model", "forecast_start", "sample_id"]).unique()
+
+    plot_obs = (
+        obs.join(models_forecasts, how="cross")
+        .with_columns(type=pl.lit("obs"))
+        .select(
+            [
+                "type",
+                "model",
+                "forecast_start",
+                "time_end",
+                "estimate",
+                "season",
+                "sample_id",
+            ]
+        )
+        .filter(pl.col("season").is_in(pred["season"].unique()))
+    )
+
+    plot_pred = (
+        pred.with_columns(pl.lit("pred").alias("type"))
+        .select(
+            [
+                "type",
+                "model",
+                "forecast_start",
+                "time_end",
+                "estimate",
+                "season",
+                "sample_id",
+            ]
+        )
+        .sort("time_end")
+    )
+
+    plot_data = pl.concat([plot_obs, plot_pred])
+
+    plot_new_data = plot_data.filter(
+        pl.col("time_end").is_between(
+            pl.col("forecast_start").min(),
+            pl.col("forecast_start").max(),
+            "both",
+        )
+    )
+
+    obs = (
+        alt.Chart(plot_new_data)
+        .mark_point(color="black", filled=True)
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
+            ),
+            alt.Y("estimate:Q"),
+        )
+        .transform_filter(datum.type == "obs")
+    )
+
+    interval = (
+        alt.Chart(plot_new_data)
+        .transform_filter(datum.type == "pred")
+        .transform_quantile(
+            "estimate",
+            probs=[0.0025, 0.5, 0.975],
+            as_=["quantile", "estimate"],
+            groupby=["time_end", "season", "forecast_start", "model"],
+        )
+        .mark_line()
+        .encode(x="time_end:T", y="estimate:Q", color="quantile:N")
+    )
+
+    return alt.layer(interval, obs, data=plot_new_data).facet(
+        column="model", row="forecast_start"
     )
 
 
@@ -103,11 +232,13 @@ if __name__ == "__main__":
     p.add_argument("--score", help="evaluation scores")
     p.add_argument("--proj_output", help="png file of projection plot")
     p.add_argument("--score_output", help="png file of score plot")
+    p.add_argument("--summary_output", help="png file of mean and 95% CI plot")
     args = p.parse_args()
 
     pred = pl.read_parquet(args.pred)
     data = pl.read_parquet(args.obs)
-    plot_projections(data, pred).save(args.proj_output)
+    plot_individual_projections(data, pred).save(args.proj_output)
+    plot_summary(data, pred).save(args.summary_output)
 
-    score = pl.read_parquet(args.score)
-    plot_score(score).save(args.score_output)
+    # score = pl.read_parquet(args.score)
+    # plot_score(score).save(args.score_output)
