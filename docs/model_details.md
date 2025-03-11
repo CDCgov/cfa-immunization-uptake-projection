@@ -1,6 +1,6 @@
 # Overview
 
-This is a summary of the model structures used to capture and forecast vaccine uptake. There are currently two model structures: an autoregressive and a Hill function. Each model proposes a latent true uptake curve, which is subject to observation error. Each model also uses a hierarchical structure to account for multiple grouping factors (e.g. season, geography, age, and/or race). In particular, the parameters governing the latent true uptake curve for each group (a combination of one value of each grouping factor) are given by their baseline values plus deviations drawn from the distributions representing each grouping factor.
+This is a summary of the models used to capture and forecast vaccine uptake. There are currently two models: an autoregressive and a Hill function. Each model proposes a latent true uptake curve, which is subject to observation error. Each model uses a hierarchy to account for grouping factors (e.g. season, geography, age, and/or race). In particular, the parameters governing the latent true uptake curve for each group (a combination of one value of each grouping factor) are given by baseline values plus deviations drawn from distributions representing each grouping factor.
 
 # Notation
 
@@ -11,54 +11,107 @@ The following notation will be used across all models
 - $\sigma_t^{obs}$ = empirical estimate of the standard deviation of the observed cumulative uptake on day $t$
 - $c_t$ = latent true cumulative uptake on day $t$
 - $u_t$ = latent true incident uptake between days $t-1$ and $t$, i.e. $c_t - c_{t-1}$
-- $G_i$ = grouping factors (e.g. season, geographic area, age group, race/ethnicity), to be indexed by $i$ if there are more than one
+- $G$ = a grouping factors (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
 
 # Autoregressive Model
 
-The autoregressive (AR) model is structured as follows:
+At a high level, the autoregressive (AR) model is structured as follows:
 
 ```math
 \begin{align*}
-&\text{Observation Layer} \\
-&\hat{c}_{t,s,g} \sim TruncNorm(c_{t,s,g}, \hat{\sigma}_{t,s,g}, 0, 1) \\
 & \\
-&\text{Functional Structure} \\
-&c_{t,s,g} = \sum_{j=0}^{T} u_{t_j,s,g} \\
-&u_{t,s,g} = \alpha_{s,g} + \beta_{s,g} \cdot u_{t-1,s,g} + \gamma_{s,g} \cdot t + \theta_{s,g} \cdot u_{t-1,s,g} \cdot t ~~~ \text{ for t > 0} \\
-&u_{t_0,s,g} = 0 \\
-& \\
-&\text{Hierarchical Structure} \\
-&\alpha_{s,g} \sim N(\alpha_s, \sigma_{\alpha, s}), ~ \beta_{s,g} \sim N(\beta_s, \sigma_{\beta, s}), ~ \gamma_{s,g} \sim N(\gamma_s, \sigma_{\gamma, s}), ~ \theta_{s,g} \sim N(\theta_s, \sigma_{\theta, s}) \\
-&\alpha_s \sim N(\alpha, \sigma_{\alpha}), ~ \beta_s \sim N(\beta, \sigma_{\beta}), ~ \gamma_s \sim N(\gamma, \sigma_{\gamma}), ~ \theta_s \sim N(\theta, \sigma_{\theta}) \\
-&\sigma_{\alpha, s} \sim Exp(\sigma_{\alpha}), ~ \sigma_{\beta, s} \sim Exp(\sigma_{\beta}), ~ \sigma_{\gamma, s} \sim Exp(\sigma_{\gamma}), ~ \sigma_{\theta,s} \sim Exp(\sigma_{\theta}) \\
-& \\
-&\text{Priors} \\
-&\alpha,~\beta,~\gamma,~\theta \sim N(0, 0.1) \\
-&\sigma_{\alpha},~\sigma_{\beta},~\sigma_{\gamma},~\sigma_{\theta} \sim Exp(0.1) \\
-&t_0 \sim DiscreteUnif(\text{Earliest Day}, \text{ Latest Day})
 \end{align*}
 ```
 
-# Hill Model
+More details on the AR model are given below.
 
-The Hill model is structured as follows:
+## Observation Layer
 
 ```math
 \begin{align*}
-&\text{Observation Layer} \\
-&\hat{c}_{t,s,g} \sim TruncNorm(c_{t,s,g}, \hat{\sigma}_{t,s,g}, 0, 1) \\
+&c_{t,G_1,...,G_I}^{obs} \sim \text{TruncNorm}(\text{location = }c_{t,G_1,...,G_I}, \text{ scale = }\sigma_{t,G_1,...,G_I}^{obs}, \text{ lower = }0, \text{ upper = }1) \\
+\end{align*}
+```
+
+## Functional Structure
+
+```math
+\begin{align*}
+&c_{t,G_1,...,G_I} = \sum_{\tau=t_0}^{t} u_{\tau,G_1,...,G_I} \\
+&u_{t,G_1,...,G_I} = \alpha_{G_1,...,G_I} + \beta_{G_1,...,G_I} \cdot u_{t-1,G_1,...,G_I} + \gamma_{G_1,...,G_I} \cdot t + \theta_{G_1,...,G_I} \cdot u_{t-1,G_1,...,G_I} \cdot t ~~~ \text{ for }t > t_0 \\
+&u_{t_0,G_1,...,G_I} = 0 \\
+\end{align*}
+```
+
+## Hierarchical Structure
+
+```math
+\begin{align*}
+&\alpha_{G_1,...,G_I} = \alpha + \alpha_{G_1} + ... + \alpha_{G_I} \\
+&\alpha_{G_i} = \sigma_{\alpha_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) \\
+\end{align*}
+```
+
+and similarly for $\beta$, $\gamma$, and $\theta$.
+
+## Priors
+
+```math
+\begin{align*}
+&\alpha \sim \text{Normal}(\text{location = }0, \text{ scale = }0.1) \\
+&\sigma_{\alpha_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
+&t_0 \sim \text{DiscreteUniform}(\text{lower = Early Date, upper = Late Date})
+\end{align*}
+```
+
+and similarly for $\beta$, $\gamma$, and $\theta$.
+
+# Hill Model
+
+At a high level, the Hill model is structured as follows:
+
+```math
+\begin{align*}
 & \\
-&\text{Functional Structure} \\
-&c_{t,s,g} = \frac{A_{s,g} \cdot t^{n}}{H_{s,g}^{n} + t^{n}} \\
-& \\
-&\text{Hierarchical Structure} \\
-&A_{s,g} \sim N(A_s, \sigma_{A, s}), ~ H_{s,g} \sim N(H_s, \sigma_{H, s}) \\
-&A_s \sim N(A, \sigma_{A}), ~ H_s \sim N(H, \sigma_{H}) \\
-&\sigma_{A, s} \sim Exp(\sigma_{A}), ~ \sigma_{H, s} \sim Exp(\sigma_{H}) \\
-& \\
-&\text{Priors} \\
-&A \sim TruncNorm(0.4, 0.1, 0, 1), ~ H \sim TruncNorm(100,20, 0) \\
-&\sigma_{A} \sim Exp(0.1), ~ \sigma_{H} \sim Exp(10)  \\
-&n \sim Uniform(0.5, 4.5)
+\end{align*}
+```
+
+More details on the Hill model are given below.
+
+## Observation Layer
+
+```math
+\begin{align*}
+&c_{t,G_1,...,G_I}^{obs} \sim \text{TruncNorm}(\text{location = }c_{t,G_1,...,G_I}, \text{ scale = }\sigma_{t,G_1,...,G_I}^{obs}, \text{ lower = }0, \text{ upper = }1) \\
+\end{align*}
+```
+
+## Functional Structure
+
+```math
+\begin{align*}
+&c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I} \cdot t^{n}}{H_{G_1,...,G_I}^{n} + t^{n}} \\
+\end{align*}
+```
+
+## Hierarchical Structure
+
+```math
+\begin{align*}
+&A_{G_1,...,G_I} = A + A_{G_1} + ... + A_{G_I} \\
+&A_{G_i} = \sigma_{A_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) \\
+\end{align*}
+```
+
+and similarly for $H$.
+
+## Priors
+
+```math
+\begin{align*}
+&A \sim \text{Beta}(\text{mean = }0.4, \text{ shape = }0.2) \\
+&H \sim \text{Gamma}(\text{shape = }100, \text{ scale = }1) \\
+&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
+&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
 \end{align*}
 ```
