@@ -19,7 +19,11 @@ At a high level, the autoregressive (AR) model is structured as follows:
 
 ```math
 \begin{align*}
-& \\
+&c_{t,G}^{obs} \sim \text{Pr}(c_{t,G}^{obs}~|~c_{t,G},~\sigma_G^{obs}) \\
+&c_{t,G} := f_{\text{AR}}(u_{t,G},~t,~\phi_G,~t_0) \\
+&\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
+&\xi \sim \text{Pr}(\xi) \\
+&t_0 \sim \text{Pr}(t_0) \\
 \end{align*}
 ```
 
@@ -72,7 +76,10 @@ At a high level, the Hill model is structured as follows:
 
 ```math
 \begin{align*}
-& \\
+&c_{t,G}^{obs} \sim \text{Pr}(c_{t,G}^{obs}~|~c_{t,G},~\sigma_G^{obs}) \\
+&c_{t,G} := f_{\text{Hill}}(t,~\phi_G) \\
+&\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
+&\xi \sim \text{Pr}(\xi) \\
 \end{align*}
 ```
 
