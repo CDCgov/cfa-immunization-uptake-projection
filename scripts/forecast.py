@@ -56,6 +56,19 @@ def run_all_forecasts(data, config) -> pl.DataFrame:
                 model=pl.lit(model["name"]),
             )
 
+            # only select columns relevant to evaluation #
+            forecast = forecast.select(
+                [
+                    "time_end",
+                    "season",
+                    "sample_id",
+                    "estimate",
+                    "forecast_start",
+                    "forecast_end",
+                    "model",
+                ]
+            )
+
             all_forecast = pl.concat([all_forecast, forecast])
 
     return all_forecast
@@ -99,11 +112,11 @@ def run_forecast(
     if grouping_factors is None:
         grouping_factors = ["season"]
 
-    cumulative_projections = (
-        cumulative_projections.group_by(grouping_factors + ["time_end"])
-        .agg(pl.col("estimate").mean().alias("estimate"))
-        .sort("time_end")
-    )
+    # cumulative_projections = (
+    #     cumulative_projections.group_by(grouping_factors + ["time_end"])
+    #     .agg(pl.col("estimate").mean().alias("estimate"))
+    #     .sort("time_end")
+    # )
 
     return cumulative_projections
 
