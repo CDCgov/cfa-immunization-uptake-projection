@@ -1,11 +1,10 @@
 import argparse
 
 import altair as alt
-
-alt.data_transformers.disable_max_rows()
-
 import polars as pl
 from altair import datum
+
+alt.data_transformers.disable_max_rows()
 
 
 def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
