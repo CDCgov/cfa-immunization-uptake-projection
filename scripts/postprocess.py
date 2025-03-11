@@ -4,8 +4,8 @@ import altair as alt
 
 alt.data_transformers.disable_max_rows()
 
-from altair import datum
 import polars as pl
+from altair import datum
 
 
 def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):

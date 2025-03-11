@@ -24,7 +24,7 @@ all: $(PROJ_PLOTS) $(SUMMARY_PLOTS)
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --proj_output=$(PROJ_PLOTS) \
-		--summary_output=$(SUMMARY_PLOTS)	
+		--summary_output=$(SUMMARY_PLOTS)
 
 # $(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
 # 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
