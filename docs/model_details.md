@@ -20,7 +20,8 @@ At a high level, the autoregressive (AR) model is structured as follows:
 ```math
 \begin{align*}
 &c_{t,G}^{obs} \sim \text{Pr}(c_{t,G}^{obs}~|~c_{t,G},~\sigma_G^{obs}) \\
-&c_{t,G} := f_{\text{AR}}(u_{t,G},~t,~\phi_G,~t_0) \\
+&c_{t,G} := \sum_{\tau=t_0}^{t} u_{\tau,G}
+&u_{t,G} := f_{\text{AR}}(u_{t,G},~t,~\phi_G,~t_0) \\
 &\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
 &\xi \sim \text{Pr}(\xi) \\
 &t_0 \sim \text{Pr}(t_0) \\
@@ -52,7 +53,7 @@ More details on the AR model are given below.
 ```math
 \begin{align*}
 &\alpha_{G_1,...,G_I} = \alpha + \alpha_{G_1} + ... + \alpha_{G_I} \\
-&\alpha_{G_i} \sim \sigma_{\alpha_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
+&\frac{\alpha_{G_i}}{\sigma_{\alpha_{G_i}}} \sim \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
 \end{align*}
 ```
 
@@ -111,7 +112,7 @@ More details on the Hill model are given below.
 ```math
 \begin{align*}
 &A_{G_1,...,G_I} = A + A_{G_1} + ... + A_{G_I} \\
-&A_{G_i} \sim \sigma_{A_{G_i}} \cdot \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
+&\frac{A_{G_i}}{\sigma_{A_{G_i}}} \sim \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
 \end{align*}
 ```
 
