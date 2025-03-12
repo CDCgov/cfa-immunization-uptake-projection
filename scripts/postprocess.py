@@ -4,7 +4,6 @@ import altair as alt
 import numpy as np
 import polars as pl
 import yaml
-from altair import datum
 
 alt.data_transformers.disable_max_rows()
 
@@ -42,22 +41,18 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
     pred = pred.filter(pl.col("sample_id").is_in(selected_ids))
 
     # get every model/forecast date combo
-    models_forecasts = pred.select(["model", "forecast_start", "sample_id"]).unique()
+    models_forecasts = pred.select(["model", "forecast_start"]).unique()
 
     # for every model and forecast date, merge in the observed value
     # column "type" will be either "obs" or "pred"
-    plot_obs = (
-        obs.join(models_forecasts, how="cross")
-        .with_columns(type=pl.lit("obs"))
-        .filter(pl.col("season").is_in(pred["season"].unique()))
+    plot_obs = obs.join(models_forecasts, how="cross").filter(
+        pl.col("season").is_in(pred["season"].unique())
     )
 
-    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(plot_obs.columns)
-
-    plot_data = pl.concat([plot_obs, plot_pred])
+    plot_pred = pred.select(plot_obs.columns)
 
     obs_chart = (
-        alt.Chart(plot_data)
+        alt.Chart(plot_obs)
         .mark_point(filled=True, color="black")
         .encode(
             alt.X(
@@ -66,7 +61,6 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
             ),
             alt.Y("estimate:Q"),
         )
-        .transform_filter(datum.type == "obs")
     )
 
     pred_chart = (
@@ -77,13 +71,14 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
                 "time_end:T",
                 axis=alt.Axis(format="%Y-%m", tickCount="month"),
             ),
-            alt.Y("estimate:Q", axis=alt.Axis(title="Estimate")),
+            alt.Y(
+                "mean(estimate):Q", axis=alt.Axis(title="Cumulative Uptake Estimate")
+            ),
             color="sample_id:N",
         )
-        .transform_filter(datum.type == "pred")
     )
 
-    return alt.layer(pred_chart, obs_chart, data=plot_data).facet(
+    return alt.layer(pred_chart, obs_chart, data=plot_pred).facet(
         column="model", row="forecast_start"
     )
 
@@ -114,18 +109,25 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
 
     models_forecasts = pred.select(["model", "forecast_start", "sample_id"]).unique()
 
-    plot_obs = (
-        obs.join(models_forecasts, how="cross")
-        .with_columns(type=pl.lit("obs"))
-        .filter(pl.col("season").is_in(pred["season"].unique()))
+    plot_obs = obs.join(models_forecasts, how="cross").filter(
+        pl.col("season").is_in(pred["season"].unique())
     )
 
-    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(plot_obs.columns)
-
-    plot_data = pl.concat([plot_obs, plot_pred])
+    plot_pred = (
+        pred.select(plot_obs.columns)
+        .with_columns(
+            lower=pl.col("estimate")
+            .quantile(config["prediction"]["interval"]["lower"])
+            .over(["model", "forecast_start", "time_end", "season"]),
+            upper=pl.col("estimate")
+            .quantile(config["prediction"]["interval"]["upper"])
+            .over(["model", "forecast_start", "time_end", "season"]),
+        )
+        .sort("time_end")
+    )
 
     obs_chart = (
-        alt.Chart(plot_data)
+        alt.Chart(plot_obs)
         .mark_point(color="black", filled=True)
         .encode(
             alt.X(
@@ -134,27 +136,34 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
             ),
             alt.Y("estimate:Q"),
         )
-        .transform_filter(datum.type == "obs")
+    )
+
+    pred_chart = (
+        alt.Chart()
+        .mark_line()
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
+            ),
+            alt.Y("mean(estimate):Q", title="Cumulative Uptake Estimate"),
+        )
     )
 
     interval_chart = (
-        alt.Chart(plot_data)
-        .transform_filter(datum.type == "pred")
-        .transform_quantile(
-            "estimate",
-            probs=[
-                config["prediction"]["interval"]["lower"],
-                0.5,
-                config["prediction"]["interval"]["upper"],
-            ],
-            as_=["quantile", "estimate"],
-            groupby=["time_end", "season", "forecast_start", "model"],
+        alt.Chart()
+        .mark_area(opacity=0.3)
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
+            ),
+            y="lower:Q",
+            y2="upper:Q",
         )
-        .mark_line()
-        .encode(x="time_end:T", y="estimate:Q", color="quantile:N")
     )
 
-    return alt.layer(interval_chart, obs_chart, data=plot_data).facet(
+    return alt.layer(interval_chart, pred_chart, obs_chart, data=plot_pred).facet(
         column="model", row="forecast_start"
     )
 
