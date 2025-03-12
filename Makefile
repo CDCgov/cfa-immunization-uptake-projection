@@ -18,13 +18,10 @@ all: $(PROJ_PLOTS) $(SUMMARY_PLOTS)
 # 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) \
 # 		--proj_output=$(PROJ_PLOTS) --score_output=$(SCORE_PLOTS)
 
-# $(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
-# 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
-
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
-		--pred=$(FORECASTS) --obs=$(RAW_DATA) --proj_output=$(PROJ_PLOTS) \
-		--summary_output=$(SUMMARY_PLOTS)
+		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
+		--proj_output=$(PROJ_PLOTS) --summary_output=$(SUMMARY_PLOTS)
 
 # $(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
 # 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
