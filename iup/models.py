@@ -618,6 +618,7 @@ class LinearIncidentUptakeModel(UptakeModel):
                     value_name="estimate",
                 )
                 .with_columns(sample_id=pl.col("sample_id"))
+                .drop(["elapsed", "interval"])
             )
 
         cumulative_projection = pl.concat(combos)
