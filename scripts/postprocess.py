@@ -46,16 +46,8 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
 
     plot_data = pl.concat([plot_obs, plot_pred])
 
-    plot_new_data = plot_data.filter(
-        pl.col("time_end").is_between(
-            pl.col("forecast_start").min(),
-            pl.col("forecast_start").max(),
-            "both",
-        )
-    )
-
     obs_chart = (
-        alt.Chart(plot_new_data)
+        alt.Chart(plot_data)
         .mark_point(filled=True, color="black")
         .encode(
             alt.X(
@@ -81,7 +73,7 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
         .transform_filter(datum.type == "pred")
     )
 
-    return alt.layer(pred_chart, obs_chart, data=plot_new_data).facet(
+    return alt.layer(pred_chart, obs_chart, data=plot_data).facet(
         column="model", row="forecast_start"
     )
 
@@ -103,16 +95,8 @@ def plot_summary(obs, pred):
 
     plot_data = pl.concat([plot_obs, plot_pred])
 
-    plot_new_data = plot_data.filter(
-        pl.col("time_end").is_between(
-            pl.col("forecast_start").min(),
-            pl.col("forecast_start").max(),
-            "both",
-        )
-    )
-
     obs = (
-        alt.Chart(plot_new_data)
+        alt.Chart(plot_data)
         .mark_point(color="black", filled=True)
         .encode(
             alt.X(
@@ -125,7 +109,7 @@ def plot_summary(obs, pred):
     )
 
     interval = (
-        alt.Chart(plot_new_data)
+        alt.Chart(plot_data)
         .transform_filter(datum.type == "pred")
         .transform_quantile(
             "estimate",
@@ -137,7 +121,7 @@ def plot_summary(obs, pred):
         .encode(x="time_end:T", y="estimate:Q", color="quantile:N")
     )
 
-    return alt.layer(interval, obs, data=plot_new_data).facet(
+    return alt.layer(interval, obs, data=plot_data).facet(
         column="model", row="forecast_start"
     )
 
