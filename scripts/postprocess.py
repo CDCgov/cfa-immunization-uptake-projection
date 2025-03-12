@@ -9,8 +9,8 @@ alt.data_transformers.disable_max_rows()
 
 def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     """
-    Save a multiple-grid graph with the comparison between the observed uptake and the prediction,
-    initiated over the season.
+    Save a multiple-grid graph with the comparison between the observed uptake and the individual prediction projections,
+    grouped by forecast start and model.
 
     Arguments:
     --------------
@@ -19,6 +19,8 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     pred: polars.Dataframe
         The predicted daily uptake, differed by forecast date, must include columns
         `forecast_start` and `estimate`.
+    config: yaml
+        config file to specify grouping factors.
 
     Return:
     -------------
@@ -37,31 +39,10 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame):
     plot_obs = (
         obs.join(models_forecasts, how="cross")
         .with_columns(type=pl.lit("obs"))
-        .select(
-            [
-                "type",
-                "model",
-                "forecast_start",
-                "time_end",
-                "estimate",
-                "season",
-                "sample_id",
-            ]
-        )
         .filter(pl.col("season").is_in(pred["season"].unique()))
     )
 
-    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(
-        [
-            "type",
-            "model",
-            "forecast_start",
-            "time_end",
-            "estimate",
-            "season",
-            "sample_id",
-        ]
-    )
+    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(plot_obs.columns)
 
     plot_data = pl.concat([plot_obs, plot_pred])
 
@@ -115,35 +96,10 @@ def plot_summary(obs, pred):
     plot_obs = (
         obs.join(models_forecasts, how="cross")
         .with_columns(type=pl.lit("obs"))
-        .select(
-            [
-                "type",
-                "model",
-                "forecast_start",
-                "time_end",
-                "estimate",
-                "season",
-                "sample_id",
-            ]
-        )
         .filter(pl.col("season").is_in(pred["season"].unique()))
     )
 
-    plot_pred = (
-        pred.with_columns(pl.lit("pred").alias("type"))
-        .select(
-            [
-                "type",
-                "model",
-                "forecast_start",
-                "time_end",
-                "estimate",
-                "season",
-                "sample_id",
-            ]
-        )
-        .sort("time_end")
-    )
+    plot_pred = pred.with_columns(pl.lit("pred").alias("type")).select(plot_obs.columns)
 
     plot_data = pl.concat([plot_obs, plot_pred])
 
