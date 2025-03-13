@@ -23,10 +23,6 @@ forecast_timeframe:
   end: 2024-04-30
   interval: 7d
 
-# Spacing between multiple forecasts, for evaluation
-evaluation_timeframe:
-  interval: 14d # Leave this blank if you don't want evaluation
-
 # Details of the models to fit
 models:
   - name: LinearIncidentUptakeModel
@@ -64,3 +60,14 @@ models:
 
 # score metrics
 score_funs: [mspe, mean_bias, eos_abe]
+
+# Spacing between multiple forecasts, for evaluation
+evaluation_timeframe:
+  interval: 14d # Leave this blank if you don't want evaluation
+
+# Prediction credible interval plot
+forecast_plots:
+  interval: # need to be a percentile #
+    lower: 2.5
+    upper: 97.5
+  n_trajectories: 20

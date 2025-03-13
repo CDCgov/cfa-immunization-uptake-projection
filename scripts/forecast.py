@@ -112,12 +112,6 @@ def run_forecast(
     if grouping_factors is None:
         grouping_factors = ["season"]
 
-    cumulative_projections = (
-        cumulative_projections.group_by(grouping_factors + ["time_end"])
-        .agg(pl.col("estimate").mean().alias("estimate"))
-        .sort("time_end")
-    )
-
     return cumulative_projections
 
 
