@@ -1,4 +1,5 @@
 import argparse
+from typing import List
 
 import altair as alt
 import numpy as np
@@ -8,7 +9,9 @@ import yaml
 alt.data_transformers.disable_max_rows()
 
 
-def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
+def plot_individual_projections(
+    obs: pl.DataFrame, pred: pl.DataFrame, n_trajectories: int
+):
     """
     Save a multiple-grid graph with the comparison between the observed uptake and the individual prediction projections,
     grouped by forecast start and model.
@@ -20,8 +23,8 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
     pred: polars.Dataframe
         The predicted daily uptake, differed by forecast date, must include columns
         `forecast_start` and `estimate`.
-    config: yaml
-        The config file specifying the number of prediction trajectories to plot.
+    n_trajectories: int
+        The number of prediction trajectories to plot.
 
     Return:
     -------------
@@ -34,9 +37,9 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
 
     sample_ids = pred["sample_id"].unique()
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(12345)
 
-    selected_ids = rng.choice(sample_ids, size=config["prediction"]["n_samples"])
+    selected_ids = rng.choice(sample_ids, size=n_trajectories)
 
     pred = pred.filter(pl.col("sample_id").is_in(selected_ids))
 
@@ -44,7 +47,6 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
 
     # for every model and forecast date, merge in the observed value
-    # column "type" will be either "obs" or "pred"
     plot_obs = obs.join(models_forecasts, how="cross").filter(
         pl.col("season").is_in(pred["season"].unique())
     )
@@ -83,7 +85,9 @@ def plot_individual_projections(obs: pl.DataFrame, pred: pl.DataFrame, config: d
     )
 
 
-def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
+def plot_summary(
+    obs: pl.DataFrame, pred: pl.DataFrame, groups: List[str,], lci: float, uci: float
+):
     """
     Save a multiple-grid graph of observed data and mean, interval estimate of prediction
     posterior distribution, grouped by model and forecast start.
@@ -107,7 +111,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
     if "time_end" not in obs.columns or "estimate" not in obs.columns:
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
-    models_forecasts = pred.select(["model", "forecast_start", "sample_id"]).unique()
+    models_forecasts = pred.select(["model", "forecast_start"]).unique()
 
     plot_obs = obs.join(models_forecasts, how="cross").filter(
         pl.col("season").is_in(pred["season"].unique())
@@ -117,11 +121,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: dict):
         pred.select(plot_obs.columns)
         .with_columns(
             lower=pl.col("estimate")
-            .quantile(config["prediction"]["interval"]["lower"])
-            .over(["model", "forecast_start", "time_end", "season"]),
+            .quantile(lci / 100)
+            .over(["model", "forecast_start", "time_end", "season", groups]),
             upper=pl.col("estimate")
-            .quantile(config["prediction"]["interval"]["upper"])
-            .over(["model", "forecast_start", "time_end", "season"]),
+            .quantile(uci / 100)
+            .over(["model", "forecast_start", "time_end", "season", groups]),
         )
         .sort("time_end")
     )
@@ -221,8 +225,16 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    plot_individual_projections(data, pred, config).save(args.proj_output)
-    plot_summary(data, pred, config).save(args.summary_output)
+    plot_individual_projections(
+        data, pred, config["forecast_plots"]["n_trajectories"]
+    ).save(args.proj_output)
+    plot_summary(
+        data,
+        pred,
+        config["data"]["groups"],
+        config["forecast_plots"]["interval"]["lower"],
+        config["forecast_plots"]["interval"]["upper"],
+    ).save(args.summary_output)
 
     # score = pl.read_parquet(args.score)
     # plot_score(score).save(args.score_output)

@@ -65,9 +65,9 @@ score_funs: [mspe, mean_bias, eos_abe]
 evaluation_timeframe:
   interval: 14d # Leave this blank if you don't want evaluation
 
-# Prediction credible interval
-prediction:
-  interval:
-    lower: 0.025
-    upper: 0.975
-  n_samples: 20
+# Prediction credible interval plot
+forecast_plots:
+  interval: # need to be a percentile #
+    lower: 2.5
+    upper: 97.5
+  n_trajectories: 20
