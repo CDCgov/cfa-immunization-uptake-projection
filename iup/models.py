@@ -2,6 +2,7 @@ import abc
 import datetime as dt
 from typing import List
 
+import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -711,16 +712,16 @@ class HillModel(UptakeModel):
             )
             # Prepare a running total of the final A and H values relevant to each
             # data point, given its combination of grouping factor levels
-            A_tot = np.tile(A, (num_data_points, 1))
-            H_tot = np.tile(H, (num_data_points, 1))
+            A_tot = jnp.tile(A, (num_data_points, 1))
+            H_tot = jnp.tile(H, (num_data_points, 1))
             # For each grouping factor, add the level-specific departures from the
             # overall average A and H, scaled by the factor-specific spread, to the
             # running totals.
             for i in range(num_group_factors):
-                A_tot = A_tot + A_sigs[i] * np.array(
+                A_tot = A_tot + A_sigs[i] * jnp.array(
                     [[A_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
                 ).reshape(-1, 1)
-                H_tot = H_tot + H_sigs[i] * np.array(
+                H_tot = H_tot + H_sigs[i] * jnp.array(
                     [[H_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
                 ).reshape(-1, 1)
             # Calculate the postulated latent true uptake given the time elapsed each data
