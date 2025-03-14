@@ -803,12 +803,16 @@ class HillModel(UptakeModel):
         self.group_combos = extract_group_combos(data, groups)
 
         # Tranform the levels of the grouping factors into numeric codes
+        # For each grouping factor, the dictionary mapping levels to
+        # numeric codes is saved as a model attribute, to use for prediction
         if groups is not None:
             group_codes = data.select(groups).to_numpy()
-            for i in range(group_codes.shape[1]):
+            num_group_factors = group_codes.shape[1]
+            self.value_to_index = [0] * num_group_factors
+            for i in range(num_group_factors):
                 unique_values = np.unique(group_codes[:, i])
-                value_to_index = {v: j for j, v in enumerate(unique_values)}
-                index = np.array([value_to_index[v] for v in group_codes[:, i]])
+                self.value_to_index[i] = {v: j for j, v in enumerate(unique_values)}
+                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
                 group_codes[:, i] = index
         else:
             group_codes = None
@@ -925,11 +929,19 @@ class HillModel(UptakeModel):
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
         if groups is not None:
+            # Make a numpy array of numeric codes for grouping factor levels
+            # that matches the same codes used when fitting the model
+            group_codes = scaffold.select(groups).to_numpy()
+            num_group_factors = group_codes.shape[1]
+            for i in range(num_group_factors):
+                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
+                group_codes[:, i] = index
+            # Make prediction-machine from the fit model
             predictions = np.array(
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
-                    season=np.repeat(self.season.max(), scaffold.shape[0]),
+                    groups=group_codes,
                 )["obs"]
             ).transpose()
         else:
