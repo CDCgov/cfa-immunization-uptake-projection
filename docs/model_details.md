@@ -122,9 +122,10 @@ and similarly for $H$.
 
 ```math
 \begin{align*}
-&A \sim \text{Beta}(\text{mean = }0.4, \text{ shape = }0.2) \\
-&H \sim \text{Gamma}(\text{shape = }100, \text{ scale = }1) \\
+&A \sim \text{Beta}(\text{shape1 = }2.4, \text{ shape2 = }3.6) \\
+&H \sim \text{Gamma}(\text{shape = }100.0, \text{ rate = }1.0) \\
 &\sigma_{A_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
-&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
+&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }5.0) ~\forall~i~\text{ in } 1, ..., I \\
+&n \sim \text{Gamma}(\text{shape = }2.0, \text{ rate = }1.0) \\
 \end{align*}
 ```

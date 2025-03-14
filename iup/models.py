@@ -650,17 +650,17 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        season=None,
+        groups=None,
         cum_uptake=None,
-        n_low=1.0,
-        n_high=5.0,
-        A_low=0.0,
-        A_high=1.0,
-        A_sig=1.0,
-        H_low=10.0,
-        H_high=180.0,
-        H_sig=1.0,
-        sig_mn=1.0,
+        std_dev=None,
+        A_shape1=2.4,
+        A_shape2=3.6,
+        A_sig=0.1,
+        H_shape=100.0,
+        H_rate=1.0,
+        H_sig=5.0,
+        n_shape=2.0,
+        n_rate=1.0,
     ):
         """
         Fit a Hill model on training data.
@@ -668,10 +668,12 @@ class HillModel(UptakeModel):
         Parameters
         elapsed: np.array
             days elapsed since the season start for each data point
-        season: np.array | None
-            numeric code for the season each data point belongs to
+        groups: np.array | None
+            numeric codes for groups: row = data point, col = grouping factor
         cum_uptake: np.array | None
             cumulative uptake measured at each data point
+        std_dev: np.array | None
+            standard deviation in cumulative uptake estimate
         other parameters: float
             means and standard deviations to specify the prior distributions
 
@@ -681,27 +683,46 @@ class HillModel(UptakeModel):
         Details
         Provides the model structure and priors for a Hill model.
         """
-        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
-        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
-        sig_A = numpyro.sample("sig_A", dist.Exponential(A_sig))
-        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
-        sig_H = numpyro.sample("sig_H", dist.Exponential(H_sig))
-        if season is not None:
-            A_s = numpyro.sample(
-                "A_s",
-                dist.TruncatedNormal(A, sig_A, low=A_low, high=A_high),
-                sample_shape=(len(np.unique(season)),),
+        A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+        H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
+        n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+        if groups is not None:
+            num_data_points = groups.shape[0]
+            num_group_factors = groups.shape[1]
+            A_sigs = numpyro.sample(
+                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
-            H_s = numpyro.sample(
-                "H_s",
-                dist.TruncatedNormal(H, sig_H, low=H_low, high=H_high),
-                sample_shape=(len(np.unique(season)),),
+            H_sigs = numpyro.sample(
+                "A_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
             )
-            mu = A_s[season] * (elapsed**n) / (H_s[season] ** n + elapsed**n)
+            A_tot = np.tile(A, (num_data_points, 1))
+            H_tot = np.tile(H, (num_data_points, 1))
+            for i in range(num_group_factors):
+                num_group_levels = len(np.unique(groups[:, i]))
+                A_devs = tuple(
+                    A_sigs[i] * x
+                    for x in numpyro.sample(
+                        "A_dev", dist.Normal(0, 1), num_group_levels
+                    )
+                )
+                H_devs = tuple(
+                    H_sigs[i] * x
+                    for x in numpyro.sample(
+                        "H_dev", dist.Normal(0, 1), num_group_levels
+                    )
+                )
+                A_tot = A_tot + np.array([[A_devs[j] for j in groups[:, i]]]).reshape(
+                    -1, 1
+                )
+                H_tot = H_tot + np.array([[H_devs[j] for j in groups[:, i]]]).reshape(
+                    -1, 1
+                )
+            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
         else:
             mu = A * (elapsed**n) / (H**n + elapsed**n)
-        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
-        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+        numpyro.sample(
+            "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
+        )
 
     @staticmethod
     def augment_data(
