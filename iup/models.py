@@ -2,6 +2,7 @@ import abc
 import datetime as dt
 from typing import List
 
+import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -650,30 +651,35 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        season=None,
         cum_uptake=None,
-        n_low=1.0,
-        n_high=5.0,
-        A_low=0.0,
-        A_high=1.0,
-        A_sig=1.0,
-        H_low=10.0,
-        H_high=180.0,
-        H_sig=1.0,
-        sig_mn=1.0,
+        std_dev=None,
+        groups=None,
+        group_levels=None,
+        A_shape1=2.4,
+        A_shape2=3.6,
+        A_sig=0.1,
+        H_shape=100.0,
+        H_rate=1.0,
+        H_sig=5.0,
+        n_shape=2.0,
+        n_rate=1.0,
     ):
         """
         Fit a Hill model on training data.
 
         Parameters
         elapsed: np.array
-            days elapsed since the season start for each data point
-        season: np.array | None
-            numeric code for the season each data point belongs to
+            column of days elapsed since the season start for each data point
         cum_uptake: np.array | None
-            cumulative uptake measured at each data point
+            column of cumulative uptake measured at each data point
+        std_dev: np.array | None
+            column of standard deviations in cumulative uptake estimate
+        groups: np.array | None
+            numeric codes for groups: row = data point, col = grouping factor
+        group_levels: List[int,] | None
+            number of unique levels for each grouping factor
         other parameters: float
-            means and standard deviations to specify the prior distributions
+            parameters to specify the prior distributions
 
         Returns
         Nothing
@@ -681,27 +687,57 @@ class HillModel(UptakeModel):
         Details
         Provides the model structure and priors for a Hill model.
         """
-        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
-        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
-        sig_A = numpyro.sample("sig_A", dist.Exponential(A_sig))
-        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
-        sig_H = numpyro.sample("sig_H", dist.Exponential(H_sig))
-        if season is not None:
-            A_s = numpyro.sample(
-                "A_s",
-                dist.TruncatedNormal(A, sig_A, low=A_low, high=A_high),
-                sample_shape=(len(np.unique(season)),),
+        # Sample the overall average value for each Hill function parameter
+        A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+        H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
+        n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+        if groups is not None and group_levels is not None:
+            num_data_points = groups.shape[0]
+            num_group_factors = groups.shape[1]
+            # Sample each grouping factor's spread of departures
+            # from the overall average A and H
+            A_sigs = numpyro.sample(
+                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
-            H_s = numpyro.sample(
-                "H_s",
-                dist.TruncatedNormal(H, sig_H, low=H_low, high=H_high),
-                sample_shape=(len(np.unique(season)),),
+            H_sigs = numpyro.sample(
+                "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
             )
-            mu = A_s[season] * (elapsed**n) / (H_s[season] ** n + elapsed**n)
+            # Sample a standardized departure from the overall average A and H
+            # for each level of each grouping factor
+            A_devs = numpyro.sample(
+                "A_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
+            )
+            H_devs = numpyro.sample(
+                "H_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
+            )
+            # Prepare a running total of the final A and H values relevant to each
+            # data point, given its combination of grouping factor levels
+            A_tot = jnp.tile(A, (num_data_points, 1))
+            H_tot = jnp.tile(H, (num_data_points, 1))
+            # For each grouping factor, add the level-specific departures from the
+            # overall average A and H, scaled by the factor-specific spread, to the
+            # running totals.
+            for i in range(num_group_factors):
+                A_tot = A_tot + A_sigs[i] * jnp.array(
+                    [[A_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
+                ).reshape(-1, 1)
+                H_tot = H_tot + H_sigs[i] * jnp.array(
+                    [[H_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
+                ).reshape(-1, 1)
+            # Calculate the postulated latent true uptake given the time elapsed each data
+            # point, accounting for the ultimate A and H values dictated by grouping factors
+            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
         else:
+            # Without grouping factors, use the same A and H for every data point
             mu = A * (elapsed**n) / (H**n + elapsed**n)
-        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
-        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+        # Consider the observations to be a sample with empirically known std dev,
+        # centered on the postulated latent true uptake. If no known std dev is given,
+        # use 0 so that the latent true uptake, bounded by 0 & 1, is returned.
+        if std_dev is None:
+            std_dev = 0
+        numpyro.sample(
+            "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
+        )
 
     @staticmethod
     def augment_data(
@@ -766,17 +802,22 @@ class HillModel(UptakeModel):
         """
         self.group_combos = extract_group_combos(data, groups)
 
-        if groups is None:
-            groups = []
-
-        if "season" in groups:
-            season = data["season"].to_numpy()
-            unique_seasons = np.unique(season)
-            season_to_index = {s: i for i, s in enumerate(unique_seasons)}
-            season = np.array([season_to_index[s] for s in season])
-            self.season = season
+        # Tranform the levels of the grouping factors into numeric codes
+        # For each grouping factor, the dictionary mapping levels to
+        # numeric codes is saved as a model attribute, to use for prediction
+        if groups is not None:
+            group_codes = data.select(groups).to_numpy()
+            num_group_factors = group_codes.shape[1]
+            num_group_levels = [0] * num_group_factors
+            self.value_to_index = [0] * num_group_factors
+            for i in range(num_group_factors):
+                unique_values = np.unique(group_codes[:, i])
+                self.value_to_index[i] = {v: j for j, v in enumerate(unique_values)}
+                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
+                group_codes[:, i] = index
+                num_group_levels[i] = len(unique_values)
         else:
-            season = None
+            group_codes = None
 
         self.kernel = NUTS(self.model)
         self.mcmc = MCMC(
@@ -788,16 +829,19 @@ class HillModel(UptakeModel):
 
         self.mcmc.run(
             self.rng_key,
-            cum_uptake=data["estimate"].to_numpy(),
             elapsed=data["elapsed"].to_numpy(),
-            season=season,
-            n_low=params["n_low"],
-            n_high=params["n_high"],
-            A_low=params["A_low"],
-            A_high=params["A_high"],
-            H_low=params["H_low"],
-            H_high=params["H_high"],
-            sig_mn=params["sig_mn"],
+            cum_uptake=data["estimate"].to_numpy(),
+            std_dev=data["sdev"].to_numpy(),
+            groups=group_codes,
+            group_levels=num_group_levels,
+            A_shape1=params["A_shape1"],
+            A_shape2=params["A_shape2"],
+            A_sig=params["A_sig"],
+            H_shape=params["H_shape"],
+            H_rate=params["H_rate"],
+            H_sig=params["H_sig"],
+            n_shape=params["n_shape"],
+            n_rate=params["n_rate"],
         )
 
         return self
@@ -888,11 +932,19 @@ class HillModel(UptakeModel):
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
         if groups is not None:
+            # Make a numpy array of numeric codes for grouping factor levels
+            # that matches the same codes used when fitting the model
+            group_codes = scaffold.select(groups).to_numpy()
+            num_group_factors = group_codes.shape[1]
+            for i in range(num_group_factors):
+                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
+                group_codes[:, i] = index
+            # Make a prediction-machine from the fit model
             predictions = np.array(
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
-                    season=np.repeat(self.season.max(), scaffold.shape[0]),
+                    groups=group_codes,
                 )["obs"]
             ).transpose()
         else:
