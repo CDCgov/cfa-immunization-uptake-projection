@@ -802,17 +802,16 @@ class HillModel(UptakeModel):
         """
         self.group_combos = extract_group_combos(data, groups)
 
-        if groups is None:
-            groups = []
-
-        if "season" in groups:
-            season = data["season"].to_numpy()
-            unique_seasons = np.unique(season)
-            season_to_index = {s: i for i, s in enumerate(unique_seasons)}
-            season = np.array([season_to_index[s] for s in season])
-            self.season = season
+        # Tranform the levels of the grouping factors into numeric codes
+        if groups is not None:
+            group_codes = data.select(groups).to_numpy()
+            for i in range(group_codes.shape[1]):
+                unique_values = np.unique(group_codes[:, i])
+                value_to_index = {v: j for j, v in enumerate(unique_values)}
+                index = np.array([value_to_index[v] for v in group_codes[:, i]])
+                group_codes[:, i] = index
         else:
-            season = None
+            group_codes = None
 
         self.kernel = NUTS(self.model)
         self.mcmc = MCMC(
@@ -824,16 +823,18 @@ class HillModel(UptakeModel):
 
         self.mcmc.run(
             self.rng_key,
-            cum_uptake=data["estimate"].to_numpy(),
             elapsed=data["elapsed"].to_numpy(),
-            season=season,
-            n_low=params["n_low"],
-            n_high=params["n_high"],
-            A_low=params["A_low"],
-            A_high=params["A_high"],
-            H_low=params["H_low"],
-            H_high=params["H_high"],
-            sig_mn=params["sig_mn"],
+            cum_uptake=data["estimate"].to_numpy(),
+            std_dev=data["sdev"].to_numpy(),
+            groups=group_codes,
+            A_shape1=params["A_shape1"],
+            A_shape2=params["A_shape2"],
+            A_sig=params["A_sig"],
+            H_shape=params["H_shape"],
+            H_rate=params["H_rate"],
+            H_sig=params["H_sig"],
+            n_shape=params["n_shape"],
+            n_rate=params["n_rate"],
         )
 
         return self
