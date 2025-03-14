@@ -650,9 +650,9 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        groups=None,
         cum_uptake=None,
         std_dev=None,
+        groups=None,
         A_shape1=2.4,
         A_shape2=3.6,
         A_sig=0.1,
@@ -667,15 +667,15 @@ class HillModel(UptakeModel):
 
         Parameters
         elapsed: np.array
-            days elapsed since the season start for each data point
+            column of days elapsed since the season start for each data point
+        cum_uptake: np.array | None
+            column of cumulative uptake measured at each data point
+        std_dev: np.array | None
+            column of standard deviations in cumulative uptake estimate
         groups: np.array | None
             numeric codes for groups: row = data point, col = grouping factor
-        cum_uptake: np.array | None
-            cumulative uptake measured at each data point
-        std_dev: np.array | None
-            standard deviation in cumulative uptake estimate
         other parameters: float
-            means and standard deviations to specify the prior distributions
+            parameters to specify the prior distributions
 
         Returns
         Nothing
@@ -683,22 +683,30 @@ class HillModel(UptakeModel):
         Details
         Provides the model structure and priors for a Hill model.
         """
+        # Sample the overall average value for each Hill function parameter
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
         H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
         if groups is not None:
             num_data_points = groups.shape[0]
             num_group_factors = groups.shape[1]
+            # Sample each grouping factor's unique spread of departures
+            # from the overall average A and H
             A_sigs = numpyro.sample(
                 "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
             H_sigs = numpyro.sample(
                 "A_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
             )
+            # Prepare running total A and H values, given the combination
+            # of grouping factor levels at each data point
             A_tot = np.tile(A, (num_data_points, 1))
             H_tot = np.tile(H, (num_data_points, 1))
+            # One grouping factor at a time...
             for i in range(num_group_factors):
                 num_group_levels = len(np.unique(groups[:, i]))
+                # Sample the departure from the overall average A and H
+                # for each level of the ith grouping factor
                 A_devs = tuple(
                     A_sigs[i] * x
                     for x in numpyro.sample(
@@ -711,15 +719,22 @@ class HillModel(UptakeModel):
                         "H_dev", dist.Normal(0, 1), num_group_levels
                     )
                 )
+                # Add the departure from the overall average A and H to the running total
+                # A and H, based on each data point's level of the ith grouping factor
                 A_tot = A_tot + np.array([[A_devs[j] for j in groups[:, i]]]).reshape(
                     -1, 1
                 )
                 H_tot = H_tot + np.array([[H_devs[j] for j in groups[:, i]]]).reshape(
                     -1, 1
                 )
+            # Calculate the postulated latent true uptake given the time elapsed each data
+            # point, accounting for the ultimate A and H values dictated by grouping factors
             mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
         else:
+            # Without grouping factors, use the same A and H for every data point
             mu = A * (elapsed**n) / (H**n + elapsed**n)
+        # Consider the observations to be a sample with empirically known std dev,
+        # centered on the postulated latent true uptake
         numpyro.sample(
             "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
         )
