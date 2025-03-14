@@ -734,7 +734,10 @@ class HillModel(UptakeModel):
             # Without grouping factors, use the same A and H for every data point
             mu = A * (elapsed**n) / (H**n + elapsed**n)
         # Consider the observations to be a sample with empirically known std dev,
-        # centered on the postulated latent true uptake
+        # centered on the postulated latent true uptake. If no known std dev is given,
+        # use 0 so that the latent true uptake, bounded by 0 & 1, is returned.
+        if std_dev is None:
+            std_dev = 0
         numpyro.sample(
             "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
         )
@@ -936,7 +939,7 @@ class HillModel(UptakeModel):
             for i in range(num_group_factors):
                 index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
                 group_codes[:, i] = index
-            # Make prediction-machine from the fit model
+            # Make a prediction-machine from the fit model
             predictions = np.array(
                 predictive(
                     self.rng_key,
