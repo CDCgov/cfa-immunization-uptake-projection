@@ -648,13 +648,103 @@ class HillModel(UptakeModel):
         self.rng_key = random.PRNGKey(seed)
         self.model = HillModel.hill
 
+    # @staticmethod
+    # def hill(
+    #     elapsed,
+    #     cum_uptake=None,
+    #     std_dev=None,
+    #     groups=None,
+    #     group_levels=None,
+    #     A_shape1=2.4,
+    #     A_shape2=3.6,
+    #     A_sig=0.1,
+    #     H_shape=100.0,
+    #     H_rate=1.0,
+    #     H_sig=5.0,
+    #     n_shape=2.0,
+    #     n_rate=1.0,
+    # ):
+    #     """
+    #     Fit a Hill model on training data.
+
+    #     Parameters
+    #     elapsed: np.array
+    #         column of days elapsed since the season start for each data point
+    #     cum_uptake: np.array | None
+    #         column of cumulative uptake measured at each data point
+    #     std_dev: np.array | None
+    #         column of standard deviations in cumulative uptake estimate
+    #     groups: np.array | None
+    #         numeric codes for groups: row = data point, col = grouping factor
+    #     group_levels: List[int,] | None
+    #         number of unique levels for each grouping factor
+    #     other parameters: float
+    #         parameters to specify the prior distributions
+
+    #     Returns
+    #     Nothing
+
+    #     Details
+    #     Provides the model structure and priors for a Hill model.
+    #     """
+    #     # Sample the overall average value for each Hill function parameter
+    #     A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+    #     H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
+    #     n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+    #     if groups is not None and group_levels is not None:
+    #         num_data_points = groups.shape[0]
+    #         num_group_factors = groups.shape[1]
+    #         # Sample each grouping factor's spread of departures
+    #         # from the overall average A and H
+    #         A_sigs = numpyro.sample(
+    #             "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         H_sigs = numpyro.sample(
+    #             "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         # Sample a standardized departure from the overall average A and H
+    #         # for each level of each grouping factor
+    #         A_devs = numpyro.sample(
+    #             "A_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
+    #         )
+    #         H_devs = numpyro.sample(
+    #             "H_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
+    #         )
+    #         # Prepare a running total of the final A and H values relevant to each
+    #         # data point, given its combination of grouping factor levels
+    #         A_tot = jnp.tile(A, (num_data_points, 1))
+    #         H_tot = jnp.tile(H, (num_data_points, 1))
+    #         # For each grouping factor, add the level-specific departures from the
+    #         # overall average A and H, scaled by the factor-specific spread, to the
+    #         # running totals.
+    #         for i in range(num_group_factors):
+    #             A_tot = A_tot + A_sigs[i] * jnp.array(
+    #                 [[A_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
+    #             ).reshape(-1, 1)
+    #             H_tot = H_tot + H_sigs[i] * jnp.array(
+    #                 [[H_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
+    #             ).reshape(-1, 1)
+    #         Calculate the postulated latent true uptake given the time elapsed each data
+    #         point, accounting for the ultimate A and H values dictated by grouping factors
+    #         mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+    #     else:
+    #         # Without grouping factors, use the same A and H for every data point
+    #         mu = A * (elapsed**n) / (H**n + elapsed**n)
+    #     # Consider the observations to be a sample with empirically known std dev,
+    #     # centered on the postulated latent true uptake. If no known std dev is given,
+    #     # use 0 so that the latent true uptake, bounded by 0 & 1, is returned.
+    #     if std_dev is None:
+    #         std_dev = 0
+    #     numpyro.sample(
+    #         "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
+    #     )
+
     @staticmethod
     def hill(
         elapsed,
         cum_uptake=None,
         std_dev=None,
         groups=None,
-        group_levels=None,
         A_shape1=2.4,
         A_shape2=3.6,
         A_sig=0.1,
@@ -674,10 +764,8 @@ class HillModel(UptakeModel):
             column of cumulative uptake measured at each data point
         std_dev: np.array | None
             column of standard deviations in cumulative uptake estimate
-        groups: np.array | None
+        groups: pl.DataFrame | None
             numeric codes for groups: row = data point, col = grouping factor
-        group_levels: List[int,] | None
-            number of unique levels for each grouping factor
         other parameters: float
             parameters to specify the prior distributions
 
@@ -691,46 +779,61 @@ class HillModel(UptakeModel):
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
         H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
-        if groups is not None and group_levels is not None:
+        # If grouping factors are given, they need not be known in advance
+        if groups is not None:
             num_data_points = groups.shape[0]
             num_group_factors = groups.shape[1]
-            # Sample each grouping factor's spread of departures
-            # from the overall average A and H
-            A_sigs = numpyro.sample(
-                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
-            )
-            H_sigs = numpyro.sample(
-                "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
-            )
-            # Sample a standardized departure from the overall average A and H
-            # for each level of each grouping factor
-            A_devs = numpyro.sample(
-                "A_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
-            )
-            H_devs = numpyro.sample(
-                "H_devs", dist.Normal(0, 1), sample_shape=(sum(group_levels),)
-            )
-            # Prepare a running total of the final A and H values relevant to each
-            # data point, given its combination of grouping factor levels
+            # Dictionary for the spread among levels for each grouping factor
+            A_sigs = {}
+            H_sigs = {}
+            # Dictionary for the specific deviation from the overall average
+            # A and H for each level of each grouping factor
+            A_devs = {}
+            H_devs = {}
+            # Running total deviation from the overall average A and H for
+            # each datum, based on its combination of grouping factor level
             A_tot = jnp.tile(A, (num_data_points, 1))
             H_tot = jnp.tile(H, (num_data_points, 1))
-            # For each grouping factor, add the level-specific departures from the
-            # overall average A and H, scaled by the factor-specific spread, to the
-            # running totals.
+            # Examine each grouping factor, one at a time
             for i in range(num_group_factors):
-                A_tot = A_tot + A_sigs[i] * jnp.array(
-                    [[A_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
-                ).reshape(-1, 1)
-                H_tot = H_tot + H_sigs[i] * jnp.array(
-                    [[H_devs[sum(group_levels[0:i]) + j] for j in groups[:, i]]]
-                ).reshape(-1, 1)
-            # Calculate the postulated latent true uptake given the time elapsed each data
-            # point, accounting for the ultimate A and H values dictated by grouping factors
-            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+                group_factor_name = groups.columns[i]
+                num_group_levels = groups.select(pl.nth(i)).n_unique()
+                # Sample a spread among levels for this grouping factor
+                A_sigs[group_factor_name] = numpyro.sample(
+                    f"A_sig_{group_factor_name}", dist.Exponential(A_sig)
+                )
+                H_sigs[group_factor_name] = numpyro.sample(
+                    f"H_sig_{group_factor_name}", dist.Exponential(H_sig)
+                )
+                # Sample a standardized deviation from the overall average
+                # A and H for each level of this grouping factor
+                with numpyro.plate(group_factor_name, num_group_levels):
+                    A_devs[group_factor_name] = numpyro.sample(
+                        f"A_dev_{group_factor_name}", dist.Normal(0, 1)
+                    )
+                    H_devs[group_factor_name] = numpyro.sample(
+                        f"H_dev_{group_factor_name}", dist.Normal(0, 1)
+                    )
+                # Add the deviation from the overall average A and H due
+                # to this grouping factor to the running total A and H
+                # for each datum
+                A_tot = (
+                    A_tot
+                    + A_devs[group_factor_name][groups[:, i]]
+                    * A_sigs[group_factor_name]
+                )
+                H_tot = (
+                    H_tot
+                    + H_devs[group_factor_name][groups[:, i]]
+                    * H_sigs[group_factor_name]
+                )
+            # Calculate the postulated latent true uptake given the time elapsed each
+            # datum, accounting for the final A and H values dictated by grouping factors
+            mu = (A_tot) * (elapsed**n) / (H_tot**n + elapsed**n)
         else:
-            # Without grouping factors, use the same A and H for every data point
+            # Without grouping factors, use the overall average A and H for every datum
             mu = A * (elapsed**n) / (H**n + elapsed**n)
-        # Consider the observations to be a sample with empirically known std dev,
+        # Consider the observations to be a draw with empirically known std dev,
         # centered on the postulated latent true uptake. If no known std dev is given,
         # use 0 so that the latent true uptake, bounded by 0 & 1, is returned.
         if std_dev is None:
@@ -803,19 +906,25 @@ class HillModel(UptakeModel):
         self.group_combos = extract_group_combos(data, groups)
 
         # Tranform the levels of the grouping factors into numeric codes
-        # For each grouping factor, the dictionary mapping levels to
-        # numeric codes is saved as a model attribute, to use for prediction
+        # A dictionary of dictionaries that map levels to numeric codes
+        # is saved as a model attribute, to use for prediction
         if groups is not None:
-            group_codes = data.select(groups).to_numpy()
+            group_codes = data.select(groups)
             num_group_factors = group_codes.shape[1]
-            num_group_levels = [0] * num_group_factors
-            self.value_to_index = [0] * num_group_factors
+            self.value_to_index = {}
             for i in range(num_group_factors):
-                unique_values = np.unique(group_codes[:, i])
-                self.value_to_index[i] = {v: j for j, v in enumerate(unique_values)}
-                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
-                group_codes[:, i] = index
-                num_group_levels[i] = len(unique_values)
+                col_name = group_codes.columns[i]
+                unique_values = (
+                    group_codes.select(col_name).unique().to_series().to_list()
+                )
+                self.value_to_index[col_name] = {
+                    v: j for j, v in enumerate(unique_values)
+                }
+                group_codes = group_codes.with_columns(
+                    pl.col(col_name)
+                    .replace(self.value_to_index[col_name])
+                    .alias(col_name)
+                )
         else:
             group_codes = None
 
@@ -833,7 +942,6 @@ class HillModel(UptakeModel):
             cum_uptake=data["estimate"].to_numpy(),
             std_dev=data["sdev"].to_numpy(),
             groups=group_codes,
-            group_levels=num_group_levels,
             A_shape1=params["A_shape1"],
             A_shape2=params["A_shape2"],
             A_sig=params["A_sig"],
