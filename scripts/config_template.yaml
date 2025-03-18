@@ -13,9 +13,9 @@ data:
     indicator: [received a vaccination, Received updated bivalent booster dose (among adults who completed primary series)]
     time_type: [week]
   # keep only these data columns
-  keep: [estimate, time_end, lci, uci, geography]
+  keep: [estimate, time_end, lci, uci]
   # use these columns as grouping factors. Almost always use at least "season", but use None if there are truly none.
-  groups: [season, geography]
+  groups: [season]
 
 # Timeframe for the longest desired forecast
 forecast_timeframe:
@@ -44,18 +44,18 @@ models:
   - name: HillModel
     seed: 0
     params:
-      A_shape1: 2.4
-      A_shape2: 3.6
-      A_sig: 0.1
-      H_shape: 100.0
-      H_rate: 1.0
-      H_sig: 5.0
-      n_shape: 2.0
-      n_rate: 1.0
+      A_shape1: 15.0
+      A_shape2: 20.0
+      A_sig: 40.0
+      H_shape1: 25.0
+      H_shape2: 50.0
+      H_sig: 40.0
+      n_shape: 20.0
+      n_rate: 5.0
     mcmc:
-      num_warmup: 1000
-      num_samples: 100
-      num_chains: 4
+      num_warmup: 500
+      num_samples: 500
+      num_chains: 1
 
 # score metrics
 score_funs: [mspe, mean_bias, eos_abe]
