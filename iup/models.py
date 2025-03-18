@@ -8,7 +8,7 @@ import numpyro
 import numpyro.distributions as dist
 import polars as pl
 from jax import random
-from numpyro.infer import MCMC, NUTS, Predictive
+from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup.utils
@@ -657,12 +657,12 @@ class HillModel(UptakeModel):
         group_names=None,
         A_shape1=15.0,
         A_shape2=20.0,
-        A_sig=5.0,
-        H_shape=100.0,
-        H_rate=1.0,
-        H_sig=0.5,
-        n_shape=2.0,
-        n_rate=1.0,
+        A_sig=20.0,
+        H_shape1=25.0,
+        H_shape2=50.0,
+        H_sig=20.0,
+        n_shape=20.0,
+        n_rate=0.2,
     ):
         """
         Fit a Hill model on training data.
@@ -689,7 +689,7 @@ class HillModel(UptakeModel):
         """
         # Sample the overall average value for each Hill function parameter
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
-        H = numpyro.sample("H", dist.Gamma(H_shape, H_rate))
+        H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
         if groups is not None and group_names is not None:
             num_data_points = groups.shape[0]
@@ -744,15 +744,6 @@ class HillModel(UptakeModel):
             # Calculate the postulated latent true uptake given the time elapsed each data
             # point, accounting for the ultimate A and H values dictated by grouping factors
             mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
-            print(A_sig)
-            print(A_sigs)
-            print(H_sig)
-            print(H_sigs)
-            print("BREAK")
-            # print(jnp.sum(jnp.isnan(mu))) # Both A and H can be less than 0, but only H < 0 causes NaN
-            # print(jnp.sum(A_tot < 0))     # Four replicates are printed because there are 4 chains!
-            # print(jnp.sum(H_tot < 0))
-            # print("BREAK")
         else:
             # Without grouping factors, use the same A and H for every data point
             mu = A * (elapsed**n) / (H**n + elapsed**n)
@@ -773,6 +764,30 @@ class HillModel(UptakeModel):
         groups: List[str] | None,
         rollouts: List[dt.date] | None,
     ) -> CumulativeUptakeData:
+        """
+        Format preprocessed data for fitting a Hill model.
+
+        Parameters:
+        data: CumulativeUptakeData
+            training data for fitting a Hill model
+         season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+        groups: List[str, ] | None - UNUSED HERE
+            column name(s) for grouping factors
+        rollouts: List[dt.date] | None - UNUSED HERE
+            rollout dates for each season in the training data
+
+        Returns:
+            Cumulative uptake data ready for fitting a Hill model.
+
+        Details
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident uptake model:
+        - Add an extra columns for time elapsed since rollout, in days
+        - Rescale this time elapsed to a proportion of the year
+        """
         data = CumulativeUptakeData(
             data.with_columns(
                 elapsed=iup.utils.date_to_elapsed(
@@ -780,6 +795,7 @@ class HillModel(UptakeModel):
                     season_start_month,
                     season_start_day,
                 )
+                / 365
             )
         )
 
@@ -854,7 +870,15 @@ class HillModel(UptakeModel):
         else:
             group_codes = None
 
-        self.kernel = NUTS(self.model)
+        # Prepare the data to be fed to the model. Must be numpy arrays.
+        # Cannot have zero as a standard deviation.
+        elapsed = data["elapsed"].to_numpy()
+        cum_uptake = data["estimate"].to_numpy()
+        std_dev = np.where(
+            data["sdev"].to_numpy() == 0, 0.0001, data["sdev"].to_numpy()
+        )
+
+        self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(
             self.kernel,
             num_warmup=mcmc["num_warmup"],
@@ -864,16 +888,16 @@ class HillModel(UptakeModel):
 
         self.mcmc.run(
             self.rng_key,
-            elapsed=data["elapsed"].to_numpy(),
-            cum_uptake=data["estimate"].to_numpy(),
-            std_dev=data["sdev"].to_numpy(),
+            elapsed=elapsed,
+            cum_uptake=cum_uptake,
+            std_dev=std_dev,
             groups=group_codes,
             group_names=group_names,
             A_shape1=params["A_shape1"],
             A_shape2=params["A_shape2"],
             A_sig=params["A_sig"],
-            H_shape=params["H_shape"],
-            H_rate=params["H_rate"],
+            H_shape1=params["H_shape1"],
+            H_shape2=params["H_shape2"],
             H_sig=params["H_sig"],
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
