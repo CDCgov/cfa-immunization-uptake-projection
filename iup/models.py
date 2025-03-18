@@ -654,6 +654,8 @@ class HillModel(UptakeModel):
         cum_uptake=None,
         std_dev=None,
         groups=None,
+        num_group_factors=0,
+        num_group_levels=[0],
         A_shape1=15.0,
         A_shape2=20.0,
         A_sig=40.0,
@@ -675,6 +677,10 @@ class HillModel(UptakeModel):
             column of standard deviations in cumulative uptake estimate
         groups: np.array | None
             numeric codes for groups: row = data point, col = grouping factor
+        num_group_factors: Int
+            number of grouping factors
+        num_group_levels: List[Int,]
+            number of unique levels of each grouping factor
         other parameters: float
             parameters to specify the prior distributions
 
@@ -690,11 +696,6 @@ class HillModel(UptakeModel):
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
         # If grouping factors are given, find the specific A and H for each datum
         if groups is not None:
-            # Get the number of grouping factors and the number of levels for each
-            num_group_factors = groups.shape[1]
-            num_group_levels = [
-                len(np.unique(groups[:, i])) for i in range(num_group_factors)
-            ]
             # Recode the integer array that assigns each datum (rows) to a level of
             # each grouping factor (cols), such that the integer codes are distinct
             # across grouping factors
@@ -739,6 +740,8 @@ class HillModel(UptakeModel):
             mu = A * (elapsed**n) / (H**n + elapsed**n)
         # Consider the observations to be a sample with empirically known std dev,
         # centered on the postulated latent true uptake.
+        if std_dev is None:
+            std_dev = 0.0001
         numpyro.sample(
             "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
         )
@@ -832,13 +835,15 @@ class HillModel(UptakeModel):
         self.group_combos = extract_group_combos(data, groups)
 
         # Tranform the levels of the grouping factors into numeric codes
-        # A dictionary of dictionaries that map levels to numeric codes
-        # is saved as a model attribute, to use for prediction
+        # Make a dictionary of dictionaries that map levels to numeric codes
+        # Save this as a model attribute, along with the number of grouping factors
+        # and the number of levels for each grouping factor. These will be
+        # useful to have saved as model attributes during prediction.
         if groups is not None:
             group_codes = data.select(groups)
-            num_group_factors = group_codes.shape[1]
+            self.num_group_factors = group_codes.shape[1]
             self.value_to_index = {}
-            for i in range(num_group_factors):
+            for i in range(self.num_group_factors):
                 col_name = group_codes.columns[i]
                 unique_values = (
                     group_codes.select(col_name).unique().to_series().to_list()
@@ -853,8 +858,14 @@ class HillModel(UptakeModel):
                     .alias(col_name)
                 )
             group_codes = group_codes.to_numpy()
+            # Get the number of grouping factors and the number of levels for each
+            self.num_group_levels = [
+                len(np.unique(group_codes[:, i])) for i in range(self.num_group_factors)
+            ]
         else:
             group_codes = None
+            self.num_group_factors = 0
+            self.num_group_levels = [0]
 
         # Prepare the data to be fed to the model. Must be numpy arrays.
         # Cannot have zero as a standard deviation.
@@ -878,6 +889,8 @@ class HillModel(UptakeModel):
             cum_uptake=cum_uptake,
             std_dev=std_dev,
             groups=group_codes,
+            num_group_factors=self.num_group_factors,
+            num_group_levels=self.num_group_levels,
             A_shape1=params["A_shape1"],
             A_shape2=params["A_shape2"],
             A_sig=params["A_sig"],
@@ -916,6 +929,7 @@ class HillModel(UptakeModel):
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
+            / 365
         ).drop("estimate")
 
         return scaffold
@@ -978,17 +992,26 @@ class HillModel(UptakeModel):
         if groups is not None:
             # Make a numpy array of numeric codes for grouping factor levels
             # that matches the same codes used when fitting the model
-            group_codes = scaffold.select(groups).to_numpy()
+            group_codes = scaffold.select(groups)
             num_group_factors = group_codes.shape[1]
             for i in range(num_group_factors):
-                index = np.array([self.value_to_index[i][v] for v in group_codes[:, i]])
-                group_codes[:, i] = index
+                col_name = groups[i]
+                group_codes = group_codes.with_columns(
+                    pl.col(col_name)
+                    .replace(self.value_to_index[col_name])
+                    .cast(pl.Int8)
+                    .alias(col_name)
+                )
+            group_codes = group_codes.to_numpy()
+
             # Make a prediction-machine from the fit model
             predictions = np.array(
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
                     groups=group_codes,
+                    num_group_factors=self.num_group_factors,
+                    num_group_levels=self.num_group_levels,
                 )["obs"]
             ).transpose()
         else:
@@ -1092,6 +1115,7 @@ def build_scaffold(
             test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
             .select(["time_end", "season"])
             .with_columns(estimate=pl.lit(0.0))
+            .unique()
         )
     # If there are no test data, use exactly the dates that were provided
     else:
@@ -1113,6 +1137,14 @@ def build_scaffold(
         )
 
     if group_combos is not None:
-        scaffold = scaffold.join(group_combos, how="cross")
+        # Even if season is a grouping factor, predictions should not
+        # be made for every season
+        if "season" in group_combos.columns:
+            group_combos = group_combos.drop("season").unique()
+
+        # Only include grouping factors in the scaffold if season
+        # wasn't the only grouping factor
+        if group_combos.shape[1] > 0:
+            scaffold = scaffold.join(group_combos, how="cross")
 
     return scaffold
