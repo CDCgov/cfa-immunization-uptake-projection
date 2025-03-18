@@ -661,7 +661,7 @@ class HillModel(UptakeModel):
         H_shape2=50.0,
         H_sig=40.0,
         n_shape=20.0,
-        n_rate=0.2,
+        n_rate=5.0,
     ):
         """
         Fit a Hill model on training data.
