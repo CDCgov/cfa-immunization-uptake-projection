@@ -89,7 +89,7 @@ At a high level, the Hill model is structured as follows:
 \end{align*}
 ```
 
-More details on the Hill model are given below.
+For the Hill model, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. This is not a problem because $t$ need not be an integer here, and it helps keep all parameters on a similar scale. More details on the Hill model are given below.
 
 ## Observation Layer
 
@@ -122,10 +122,10 @@ and similarly for $H$.
 
 ```math
 \begin{align*}
-&A \sim \text{Beta}(\text{shape1 = }2.4, \text{ shape2 = }3.6) \\
-&H \sim \text{Gamma}(\text{shape = }100.0, \text{ rate = }1.0) \\
-&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{mean = }0.1) ~\forall~i~\text{ in } 1, ..., I \\
-&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }5.0) ~\forall~i~\text{ in } 1, ..., I \\
-&n \sim \text{Gamma}(\text{shape = }2.0, \text{ rate = }1.0) \\
+&A \sim \text{Beta}(\text{shape1 = }15.0, \text{ shape2 = }20.0) \\
+&H \sim \text{Beta}(\text{shape1 = }25.0, \text{ shape2 = }50.0) \\
+&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{mean = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
+&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
+&n \sim \text{Gamma}(\text{shape = }20.0, \text{ rate = }5.0) \\
 \end{align*}
 ```
