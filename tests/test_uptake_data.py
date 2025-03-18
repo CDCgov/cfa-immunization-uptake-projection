@@ -169,7 +169,7 @@ def test_trim_outlier_intervals_handles_above_threshold():
                     dt.date(2020, 1, 21),
                 ]
                 * 2,
-                "estimate": [0.0, 1.0, 3.0, 4.0] * 2,
+                "estimate": [0.0, 0.1, 0.3, 0.4] * 2,
                 "season": ["2019/2020"] * 8,
                 "interval": [None, 14, 7, 7, None, 14, 7, 7],
             }

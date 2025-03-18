@@ -27,7 +27,7 @@ def frame():
                     "2020-01-21",
                     "2020-01-21",
                 ],
-                "estimate": [0.0, 0.0, 1.0, 0.1, 3.0, 0.3, 4.0, 0.4],
+                "estimate": [0.0, 0.0, 0.1, 0.01, 0.3, 0.03, 0.4, 0.04],
                 "season": "2019/2020",
                 "elapsed": [0, 0, 7, 7, 14, 14, 21, 21],
                 "interval": [None, None, 7, 7, 7, 7, 7, 7],
@@ -92,9 +92,9 @@ def test_extract_starting_conditions(frame):
                 "geography": ["USA", "PA"],
                 "season": ["2019/2020", "2019/2020"],
                 "last_date": [dt.date(2020, 1, 21), dt.date(2020, 1, 21)],
-                "last_daily": [4.0 / 7, 0.4 / 7],
+                "last_daily": [0.4 / 7, 0.04 / 7],
                 "last_elapsed": [21, 21],
-                "last_cumulative": [8.0, 0.8],
+                "last_cumulative": [0.8, 0.08],
             }
         ).sort("geography")
     )

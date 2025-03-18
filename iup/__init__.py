@@ -82,6 +82,24 @@ class UptakeData(Data):
 
 
 class IncidentUptakeData(UptakeData):
+    def validate(self):
+        # same validations as UptakeData
+        super().validate()
+        # and also require that uptake be a proportion. Incident uptakes can be negative because
+        # of corrections or data errors, but the biggest jumps possible are from 0% up to 100%
+        # (i.e., +1.0) or from 100% down to 0% (i.e., -1.0). We do not do further validation, e.g.
+        # to check that cumulative uptake is always within 0% to 100%
+        if not self["estimate"].is_between(-1.0, 1.0).all():
+            bad_values = (
+                self.filter(pl.col("estimate").is_between(-1.0, 1.0).not_())["estimate"]
+                .unique()
+                .to_list()
+            )
+            raise ValueError(
+                f"Incident uptake `estimate` must be have values between -1 and +1. "
+                f"Values included {bad_values}"
+            )
+
     def to_cumulative(
         self, groups: List[str,] | None, prev_cumulative=None
     ) -> "CumulativeUptakeData":
@@ -182,7 +200,7 @@ class CumulativeUptakeData(UptakeData):
         super().validate()
         # and also require that uptake be a proportion
         assert self["estimate"].is_between(0.0, 1.0).all(), (
-            "cumulative uptake `estimate` must be a proportion"
+            "Cumulative uptake `estimate` must be a proportion"
         )
 
     def to_incident(self, groups: List[str,] | None) -> IncidentUptakeData:
