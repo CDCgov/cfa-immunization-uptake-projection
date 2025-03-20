@@ -122,22 +122,22 @@ def run_forecast(
             for inner_dict in fit_model.value_to_index.values()
             for k in inner_dict.keys()
         ]
-        group_factor_dict = {
+        group_factors_dict = {
             "[" + str(i) + "]": "_" + v.replace(" ", "_")
             for i, v in enumerate(group_factors)
         }
-        group_level_dict = {
+        group_levels_dict = {
             "[" + str(i) + "]": "_" + v.replace(" ", "_")
             for i, v in enumerate(group_levels)
         }
-        for k, v in group_factor_dict.items():
+        for k, v in group_factors_dict.items():
             posterior = posterior.rename(
                 {
                     col: col.replace(k, v) if "sigs" in col else col
                     for col in posterior.columns
                 }
             )
-        for k, v in group_level_dict.items():
+        for k, v in group_levels_dict.items():
             posterior = posterior.rename(
                 {
                     col: col.replace(k, v) if "devs" in col else col
