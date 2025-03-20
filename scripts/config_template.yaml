@@ -44,17 +44,17 @@ models:
   - name: HillModel
     seed: 0
     params:
-      A_shape1: 15.0
-      A_shape2: 20.0
+      A_shape1: 60.0
+      A_shape2: 80.0
       A_sig: 40.0
-      H_shape1: 25.0
-      H_shape2: 50.0
+      H_shape1: 125.0
+      H_shape2: 300.0
       H_sig: 40.0
       n_shape: 20.0
       n_rate: 5.0
     mcmc:
-      num_warmup: 500
-      num_samples: 500
+      num_warmup: 1000
+      num_samples: 1000
       num_chains: 1
 
 # score metrics
