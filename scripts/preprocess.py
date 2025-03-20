@@ -34,6 +34,11 @@ def preprocess(
         )
         .with_columns(sdev=pl.max_horizontal("uci", "lci") / st.norm.ppf(0.975, 0, 1))
         .drop(["lci", "uci"])
+        .with_columns(
+            sdev=pl.when(pl.col("sdev") < 0.0000005)
+            .then(0.0000005)
+            .otherwise(pl.col("sdev"))
+        )
     )
 
     if groups is not None:

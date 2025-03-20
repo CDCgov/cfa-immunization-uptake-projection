@@ -725,7 +725,7 @@ class HillModel(UptakeModel):
         # Consider the observations to be a sample with empirically known std dev,
         # centered on the postulated latent true uptake.
         if std_dev is None:
-            std_dev = 0.0001
+            std_dev = 0.0000005
         numpyro.sample(
             "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
         )
