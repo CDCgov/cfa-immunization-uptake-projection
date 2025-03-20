@@ -124,8 +124,8 @@ and similarly for $H$.
 \begin{align*}
 &A \sim \text{Beta}(\text{shape1 = }15.0, \text{ shape2 = }20.0) \\
 &H \sim \text{Beta}(\text{shape1 = }25.0, \text{ shape2 = }50.0) \\
-&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{mean = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{mean = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
+&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
+&\sigma_{H_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
 &n \sim \text{Gamma}(\text{shape = }20.0, \text{ rate = }5.0) \\
 \end{align*}
 ```

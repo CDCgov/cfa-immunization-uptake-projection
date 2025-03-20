@@ -2,7 +2,6 @@ import abc
 import datetime as dt
 from typing import List
 
-import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -703,31 +702,20 @@ class HillModel(UptakeModel):
             H_sigs = numpyro.sample(
                 "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
             )
-            # Draw a sample of the centered deviation from the overall average
-            # A and H for each level of each grouping factor
+            # Draw deviations from the overall average A and H for each level
+            # of each grouping factor and scale them by the characteristic spread
+            # for each grouping factor
             A_devs = numpyro.sample(
                 "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            )
-            H_devs = numpyro.sample(
+            ) * np.repeat(A_sigs, np.array(num_group_levels))
+            H_devs = H_devs = numpyro.sample(
                 "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            )
-            # Scale the centered deviation for each level of each grouping factor
-            # by the characteristic spread for each grouping factor
-            A_devs = A_devs * jnp.repeat(
-                A_sigs,
-                jnp.array(num_group_levels),
-                total_repeat_length=sum(num_group_levels),
-            )
-            H_devs = H_devs * jnp.repeat(
-                H_sigs,
-                jnp.array(num_group_levels),
-                total_repeat_length=sum(num_group_levels),
-            )
+            ) * np.repeat(H_sigs, np.array(num_group_levels))
             # Across all data points, look up the A and H deviations due to the
             # grouping factors. Sum across grouping factors and include the overall
             # average A and H to get the final total A and H for each datum
-            A_tot = jnp.sum(A_devs[groups], axis=1) + A
-            H_tot = jnp.sum(H_devs[groups], axis=1) + H
+            A_tot = np.sum(A_devs[groups], axis=1) + A
+            H_tot = np.sum(H_devs[groups], axis=1) + H
             # Calculate the postulated latent true uptake given the time elapsed at
             # each datum, accounting for the final total A and H values
             mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
@@ -831,39 +819,13 @@ class HillModel(UptakeModel):
         self.group_combos = extract_group_combos(data, groups)
 
         # Tranform the levels of the grouping factors into numeric codes
-        # Make a dictionary of dictionaries that map levels to numeric codes
-        # Save this as a model attribute, along with the number of grouping factors
-        # and the number of levels for each grouping factor. These will be
-        # useful to have saved as model attributes during prediction.
         if groups is not None:
-            group_codes = data.select(groups)
-            self.num_group_factors = group_codes.shape[1]
-            self.value_to_index = {}
-            for i in range(self.num_group_factors):
-                col_name = group_codes.columns[i]
-                unique_values = (
-                    group_codes.select(col_name).unique().to_series().to_list()
-                )
-                self.value_to_index[col_name] = {
-                    v: j for j, v in enumerate(unique_values)
-                }
-                group_codes = group_codes.with_columns(
-                    pl.col(col_name)
-                    .replace(self.value_to_index[col_name])
-                    .cast(pl.Int8)
-                    .alias(col_name)
-                )
-            group_codes = group_codes.to_numpy()
-            # Get the number of grouping factors and the number of levels for each
-            self.num_group_levels = [
-                len(np.unique(group_codes[:, i])) for i in range(self.num_group_factors)
-            ]
-            # Recode the integer array that assigns each datum (rows) to a level of
-            # each grouping factor (cols), such that the integer codes are distinct
-            # across grouping factors
-            group_codes = group_codes + np.cumsum(
-                np.array([0] + self.num_group_levels[:-1])
+            self.num_group_factors = len(groups)
+            self.value_to_index = iup.utils.map_value_to_index(data.select(groups))
+            group_codes = iup.utils.value_to_index(
+                data.select(groups), self.value_to_index
             )
+            self.num_group_levels = iup.utils.count_unique_values(group_codes)
         else:
             group_codes = None
             self.num_group_factors = 0
@@ -991,25 +953,12 @@ class HillModel(UptakeModel):
         )
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
+
         if groups is not None:
             # Make a numpy array of numeric codes for grouping factor levels
             # that matches the same codes used when fitting the model
-            group_codes = scaffold.select(groups)
-            num_group_factors = group_codes.shape[1]
-            for i in range(num_group_factors):
-                col_name = groups[i]
-                group_codes = group_codes.with_columns(
-                    pl.col(col_name)
-                    .replace(self.value_to_index[col_name])
-                    .cast(pl.Int8)
-                    .alias(col_name)
-                )
-            group_codes = group_codes.to_numpy()
-            # Recode the integer array that assigns each datum (rows) to a level of
-            # each grouping factor (cols), such that the integer codes are distinct
-            # across grouping factors
-            group_codes = group_codes + np.cumsum(
-                np.array([0] + self.num_group_levels[:-1])
+            group_codes = iup.utils.value_to_index(
+                scaffold.select(groups), self.value_to_index
             )
 
             # Make a prediction-machine from the fit model
