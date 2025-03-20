@@ -7,7 +7,7 @@ import numpyro
 import numpyro.distributions as dist
 import polars as pl
 from jax import random
-from numpyro.infer import MCMC, NUTS, Predictive
+from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup.utils
@@ -650,30 +650,38 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        season=None,
         cum_uptake=None,
-        n_low=1.0,
-        n_high=5.0,
-        A_low=0.0,
-        A_high=1.0,
-        A_sig=1.0,
-        H_low=10.0,
-        H_high=180.0,
-        H_sig=1.0,
-        sig_mn=1.0,
+        std_dev=None,
+        groups=None,
+        num_group_factors=0,
+        num_group_levels=[0],
+        A_shape1=15.0,
+        A_shape2=20.0,
+        A_sig=40.0,
+        H_shape1=25.0,
+        H_shape2=50.0,
+        H_sig=40.0,
+        n_shape=20.0,
+        n_rate=5.0,
     ):
         """
         Fit a Hill model on training data.
 
         Parameters
         elapsed: np.array
-            days elapsed since the season start for each data point
-        season: np.array | None
-            numeric code for the season each data point belongs to
+            column of days elapsed since the season start for each data point
         cum_uptake: np.array | None
-            cumulative uptake measured at each data point
+            column of cumulative uptake measured at each data point
+        std_dev: np.array | None
+            column of standard deviations in cumulative uptake estimate
+        groups: np.array | None
+            numeric codes for groups: row = data point, col = grouping factor
+        num_group_factors: Int
+            number of grouping factors
+        num_group_levels: List[Int,]
+            number of unique levels of each grouping factor
         other parameters: float
-            means and standard deviations to specify the prior distributions
+            parameters to specify the prior distributions
 
         Returns
         Nothing
@@ -681,27 +689,46 @@ class HillModel(UptakeModel):
         Details
         Provides the model structure and priors for a Hill model.
         """
-        n = numpyro.sample("n", dist.Uniform(n_low, n_high))
-        A = numpyro.sample("A", dist.Uniform(A_low, A_high))
-        sig_A = numpyro.sample("sig_A", dist.Exponential(A_sig))
-        H = numpyro.sample("H", dist.Uniform(H_low, H_high))
-        sig_H = numpyro.sample("sig_H", dist.Exponential(H_sig))
-        if season is not None:
-            A_s = numpyro.sample(
-                "A_s",
-                dist.TruncatedNormal(A, sig_A, low=A_low, high=A_high),
-                sample_shape=(len(np.unique(season)),),
+        # Sample the overall average value for each Hill function parameter
+        A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+        H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
+        n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+        # If grouping factors are given, find the specific A and H for each datum
+        if groups is not None:
+            # Draw a sample of the spread among levels for each grouping factor
+            A_sigs = numpyro.sample(
+                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
-            H_s = numpyro.sample(
-                "H_s",
-                dist.TruncatedNormal(H, sig_H, low=H_low, high=H_high),
-                sample_shape=(len(np.unique(season)),),
+            H_sigs = numpyro.sample(
+                "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
             )
-            mu = A_s[season] * (elapsed**n) / (H_s[season] ** n + elapsed**n)
+            # Draw deviations from the overall average A and H for each level
+            # of each grouping factor and scale them by the characteristic spread
+            # for each grouping factor
+            A_devs = numpyro.sample(
+                "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(A_sigs, np.array(num_group_levels))
+            H_devs = H_devs = numpyro.sample(
+                "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(H_sigs, np.array(num_group_levels))
+            # Across all data points, look up the A and H deviations due to the
+            # grouping factors. Sum across grouping factors and include the overall
+            # average A and H to get the final total A and H for each datum
+            A_tot = np.sum(A_devs[groups], axis=1) + A
+            H_tot = np.sum(H_devs[groups], axis=1) + H
+            # Calculate the postulated latent true uptake given the time elapsed at
+            # each datum, accounting for the final total A and H values
+            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
         else:
+            # Without grouping factors, use the same A and H across all data
             mu = A * (elapsed**n) / (H**n + elapsed**n)
-        sig = numpyro.sample("sig", dist.Exponential(sig_mn))
-        numpyro.sample("obs", dist.Normal(mu, sig), obs=cum_uptake)
+        # Consider the observations to be a sample with empirically known std dev,
+        # centered on the postulated latent true uptake.
+        if std_dev is None:
+            std_dev = 0.0000005
+        numpyro.sample(
+            "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
+        )
 
     @staticmethod
     def augment_data(
@@ -711,6 +738,30 @@ class HillModel(UptakeModel):
         groups: List[str] | None,
         rollouts: List[dt.date] | None,
     ) -> CumulativeUptakeData:
+        """
+        Format preprocessed data for fitting a Hill model.
+
+        Parameters:
+        data: CumulativeUptakeData
+            training data for fitting a Hill model
+         season_start_month: int
+            first month of the overwinter disease season
+        season_start_day: int
+            first day of the first month of the overwinter disease season
+        groups: List[str, ] | None - UNUSED HERE
+            column name(s) for grouping factors
+        rollouts: List[dt.date] | None - UNUSED HERE
+            rollout dates for each season in the training data
+
+        Returns:
+            Cumulative uptake data ready for fitting a Hill model.
+
+        Details
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident uptake model:
+        - Add an extra columns for time elapsed since rollout, in days
+        - Rescale this time elapsed to a proportion of the year
+        """
         data = CumulativeUptakeData(
             data.with_columns(
                 elapsed=iup.utils.date_to_elapsed(
@@ -718,6 +769,7 @@ class HillModel(UptakeModel):
                     season_start_month,
                     season_start_day,
                 )
+                / 365
             )
         )
 
@@ -766,19 +818,28 @@ class HillModel(UptakeModel):
         """
         self.group_combos = extract_group_combos(data, groups)
 
-        if groups is None:
-            groups = []
-
-        if "season" in groups:
-            season = data["season"].to_numpy()
-            unique_seasons = np.unique(season)
-            season_to_index = {s: i for i, s in enumerate(unique_seasons)}
-            season = np.array([season_to_index[s] for s in season])
-            self.season = season
+        # Tranform the levels of the grouping factors into numeric codes
+        if groups is not None:
+            self.num_group_factors = len(groups)
+            self.value_to_index = iup.utils.map_value_to_index(data.select(groups))
+            group_codes = iup.utils.value_to_index(
+                data.select(groups), self.value_to_index
+            )
+            self.num_group_levels = iup.utils.count_unique_values(group_codes)
         else:
-            season = None
+            group_codes = None
+            self.num_group_factors = 0
+            self.num_group_levels = [0]
 
-        self.kernel = NUTS(self.model)
+        # Prepare the data to be fed to the model. Must be numpy arrays.
+        # Cannot have zero as a standard deviation.
+        elapsed = data["elapsed"].to_numpy()
+        cum_uptake = data["estimate"].to_numpy()
+        std_dev = np.where(
+            data["sdev"].to_numpy() == 0, 0.0001, data["sdev"].to_numpy()
+        )
+
+        self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(
             self.kernel,
             num_warmup=mcmc["num_warmup"],
@@ -788,16 +849,20 @@ class HillModel(UptakeModel):
 
         self.mcmc.run(
             self.rng_key,
-            cum_uptake=data["estimate"].to_numpy(),
-            elapsed=data["elapsed"].to_numpy(),
-            season=season,
-            n_low=params["n_low"],
-            n_high=params["n_high"],
-            A_low=params["A_low"],
-            A_high=params["A_high"],
-            H_low=params["H_low"],
-            H_high=params["H_high"],
-            sig_mn=params["sig_mn"],
+            elapsed=elapsed,
+            cum_uptake=cum_uptake,
+            std_dev=std_dev,
+            groups=group_codes,
+            num_group_factors=self.num_group_factors,
+            num_group_levels=self.num_group_levels,
+            A_shape1=params["A_shape1"],
+            A_shape2=params["A_shape2"],
+            A_sig=params["A_sig"],
+            H_shape1=params["H_shape1"],
+            H_shape2=params["H_shape2"],
+            H_sig=params["H_sig"],
+            n_shape=params["n_shape"],
+            n_rate=params["n_rate"],
         )
 
         return self
@@ -828,6 +893,7 @@ class HillModel(UptakeModel):
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
+            / 365
         ).drop("estimate")
 
         return scaffold
@@ -887,12 +953,22 @@ class HillModel(UptakeModel):
         )
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
+
         if groups is not None:
+            # Make a numpy array of numeric codes for grouping factor levels
+            # that matches the same codes used when fitting the model
+            group_codes = iup.utils.value_to_index(
+                scaffold.select(groups), self.value_to_index
+            )
+
+            # Make a prediction-machine from the fit model
             predictions = np.array(
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
-                    season=np.repeat(self.season.max(), scaffold.shape[0]),
+                    groups=group_codes,
+                    num_group_factors=self.num_group_factors,
+                    num_group_levels=self.num_group_levels,
                 )["obs"]
             ).transpose()
         else:
@@ -996,6 +1072,7 @@ def build_scaffold(
             test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
             .select(["time_end", "season"])
             .with_columns(estimate=pl.lit(0.0))
+            .unique()
         )
     # If there are no test data, use exactly the dates that were provided
     else:
@@ -1017,6 +1094,14 @@ def build_scaffold(
         )
 
     if group_combos is not None:
-        scaffold = scaffold.join(group_combos, how="cross")
+        # Even if season is a grouping factor, predictions should not
+        # be made for every season
+        if "season" in group_combos.columns:
+            group_combos = group_combos.drop("season").unique()
+
+        # Only include grouping factors in the scaffold if season
+        # wasn't the only grouping factor
+        if group_combos.shape[1] > 0:
+            scaffold = scaffold.join(group_combos, how="cross")
 
     return scaffold

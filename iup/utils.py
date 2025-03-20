@@ -1,3 +1,6 @@
+from typing import List
+
+import numpy as np
 import polars as pl
 
 
@@ -180,3 +183,78 @@ def date_to_elapsed(
 
         # return the number of days from season start to each date
         return (date_col - season_start).dt.total_days()
+
+
+def map_value_to_index(groups: pl.DataFrame) -> dict:
+    """
+    Choose a numeric index for each level of each grouping factor in a data frame.
+
+    Parameters
+    groups: pl.DataFrame
+        levels of grouping factors (cols) for multiple data points (rows)
+
+    Returns
+    dict
+        Dictionary of dictionaries: for each grouping factor, a dictionary mapping levels to numeric codes
+    """
+    mapping = {}
+    for i in range(groups.shape[1]):
+        col_name = groups.columns[i]
+        unique_values = groups.select(col_name).unique().to_series().to_list()
+        mapping[col_name] = {v: j for j, v in enumerate(unique_values)}
+
+    return mapping
+
+
+def value_to_index(groups: pl.DataFrame, mapping: dict, unique=True) -> np.ndarray:
+    """
+    Replace each level of each grouping factor in a data frame, using a pre-determined mapping.
+
+    Parameters
+    groups: pl.DataFrame
+        levels of grouping factors (cols) for multiple data points (rows)
+    mapping: dict
+        mapping of each level of each grouping factor to a numeric code
+    unique: bool
+        whether numeric codes should be unique across grouping factors
+
+    Returns
+    np.ndarray
+        array of group levels but with numeric codes instead of level names
+
+    Details
+    If unique is False, numeric codes will be reused across grouping factors.
+    If unique is True (default), numeric codes will be used only once across grouping factors.
+    The keys of mapping must match the column names of groups.
+    """
+    assert set(mapping.keys()) == set(groups.columns), (
+        "Keys of mapping do not match grouping factor names."
+    )
+
+    for i in range(groups.shape[1]):
+        col_name = groups.columns[i]
+        groups = groups.with_columns(
+            pl.col(col_name).replace(mapping[col_name]).cast(pl.UInt8).alias(col_name)
+        )
+
+    array = groups.to_numpy()
+
+    if unique:
+        unique_counts = count_unique_values(array)
+        array = array + np.cumsum(np.array([0] + unique_counts[:-1]))
+
+    return array
+
+
+def count_unique_values(array: np.ndarray) -> List[int,]:
+    """
+    Count unique values in each column of an array
+
+    Parameters
+    array: np.ndarray
+
+    Returns
+    List[int,]
+        Number of unique values in each column of the array
+    """
+    return [len(np.unique(array[:, i])) for i in range(array.shape[1])]

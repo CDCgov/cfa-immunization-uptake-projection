@@ -25,6 +25,7 @@ def frame():
             ],
             "estimate": [0.0, 0.0, 0.1, 0.01, 0.3, 0.03, 0.4, 0.04],
             "season": "2019/2020",
+            "sdev": [0.01] * 8,
         }
     ).with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
 
@@ -40,15 +41,14 @@ def params():
     """
 
     params = {
-        "n_low": 1.0,
-        "n_high": 5.0,
-        "A_low": 0.0,
-        "A_high": 1.0,
-        "A_sig": 1.0,
-        "H_low": 10.0,
-        "H_high": 180.0,
-        "H_sig": 1.0,
-        "sig_mn": 1.0,
+        "A_shape1": 15.0,
+        "A_shape2": 20.0,
+        "A_sig": 40.0,
+        "H_shape1": 25.0,
+        "H_shape2": 50.0,
+        "H_sig": 40.0,
+        "n_shape": 20.0,
+        "n_rate": 5.0,
     }
 
     return params
@@ -70,7 +70,7 @@ def test_augment_data(frame):
     """
     output = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
 
-    assert output["elapsed"].to_list() == [
+    assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
         121.0,
         121.0,
         128.0,
@@ -115,7 +115,7 @@ def test_augment_scaffold(frame):
     output = iup.models.HillModel.augment_scaffold(frame, 9, 1)
 
     assert output.shape[1] == frame.shape[1]
-    assert output["elapsed"].to_list() == [
+    assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
         121.0,
         121.0,
         128.0,

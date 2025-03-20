@@ -62,11 +62,13 @@ def test_build_scaffold_handles_no_test_data():
     interval = "7d"
     output = iup.models.build_scaffold(start_date, end_date, interval, None, None, 9, 1)
 
-    assert [d.strftime("%Y-%m-%d") for d in output["time_end"].to_list()] == [
-        "2020-01-03",
-        "2020-01-10",
-        "2020-01-17",
-    ]
+    assert set([d.strftime("%Y-%m-%d") for d in output["time_end"].to_list()]) == set(
+        [
+            "2020-01-03",
+            "2020-01-10",
+            "2020-01-17",
+        ]
+    )
 
 
 def test_build_scaffold_handles_test_data(frame):
@@ -81,10 +83,12 @@ def test_build_scaffold_handles_test_data(frame):
         start_date, end_date, interval, frame, None, 9, 1
     )
 
-    assert [d.strftime("%Y-%m-%d") for d in output["time_end"].to_list()] == [
-        "2020-01-07",
-        "2020-01-14",
-    ]
+    assert set([d.strftime("%Y-%m-%d") for d in output["time_end"].to_list()]) == set(
+        [
+            "2020-01-07",
+            "2020-01-14",
+        ]
+    )
 
 
 def test_build_scaffold_handles_groups():
