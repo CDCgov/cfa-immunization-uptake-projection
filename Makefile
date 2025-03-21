@@ -4,6 +4,7 @@ TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
 RAW_DATA = data/nis_raw.parquet
 FORECASTS = data/forecasts.parquet
+POSTERIORS = data/posteriors.parquet
 SCORES = data/scores.parquet
 PROJ_PLOTS = output/projections.png
 SUMMARY_PLOTS = output/summary.png
@@ -26,9 +27,10 @@ $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 # $(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
 # 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
-
-$(FORECASTS): scripts/forecast.py $(RAW_DATA) $(CONFIG)
-	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
+$(FORECASTS) $(POSTERIORS): scripts/forecast.py $(RAW_DATA) $(CONFIG)
+	python $< \
+	--input=$(RAW_DATA) --config=$(CONFIG) \
+	--output_forecast=$(FORECASTS) --output_posterior=$(POSTERIORS)
 
 $(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
 	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
