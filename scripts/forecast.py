@@ -29,7 +29,7 @@ def run_all_forecasts(data, config) -> dict:
         forecast_dates = [config["forecast_timeframe"]["start"]]
 
     all_forecast = pl.DataFrame()
-    all_posterior = pl.DataFrame()
+    all_posterior = []
 
     for config_model in config["models"]:
         model_name = config_model["name"]
@@ -46,6 +46,8 @@ def run_all_forecasts(data, config) -> dict:
             config["data"]["groups"],
             config["data"]["rollouts"],
         )
+
+        model_posterior = pl.DataFrame()
 
         for forecast_date in forecast_dates:
             model_output = run_forecast(
@@ -77,7 +79,9 @@ def run_all_forecasts(data, config) -> dict:
                 forecast_end=config["forecast_timeframe"]["end"],
                 model=pl.lit(model_name),
             )
-            all_posterior = pl.concat([all_posterior, posterior])
+            model_posterior = pl.concat([model_posterior, posterior])
+
+        all_posterior.append(model_posterior)
 
     return {"forecasts": all_forecast, "posteriors": all_posterior}
 
@@ -109,12 +113,14 @@ def run_forecast(
         mcmc,
     )
 
+    # Extract the posterior distribution from the model as a data frame
     posterior = pl.from_pandas(
         az.from_numpyro(fit_model.mcmc).to_dataframe(
             groups="posterior", include_coords=False
         )
     )
 
+    # Rename columns using the actual levels of grouping factors, not numeric codes
     if fit_model.value_to_index is not None:
         group_factors = list(fit_model.value_to_index.keys())
         group_levels = [
@@ -178,7 +184,18 @@ if __name__ == "__main__":
 
     input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
 
-    out = run_all_forecasts(input_data, config)
+    output = run_all_forecasts(input_data, config)
 
-    out["forecasts"].write_parquet(args.output_forecast)
-    out["posteriors"].write_parquet(args.output_posterior)
+    output["forecasts"].write_parquet(args.output_forecast)
+
+    file_name_parts = args.output_posterior.split(".")
+    for i in range(len(output["posteriors"])):
+        model_name = output["posteriors"][i]["model"][0]
+        file_name = (
+            "".join(file_name_parts[:-1])
+            + "_"
+            + model_name
+            + "."
+            + "".join(file_name_parts[-1])
+        )
+        output["posteriors"][i].write_parquet(file_name)
