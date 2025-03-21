@@ -830,6 +830,7 @@ class HillModel(UptakeModel):
             group_codes = None
             self.num_group_factors = 0
             self.num_group_levels = [0]
+            self.value_to_index = None
 
         # Prepare the data to be fed to the model. Must be numpy arrays.
         # Cannot have zero as a standard deviation.
