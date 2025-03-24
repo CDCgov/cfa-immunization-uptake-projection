@@ -86,6 +86,8 @@ class LinearIncidentUptakeModel(UptakeModel):
     - number of days "elapsed" between rollout and the report date
     - daily-average uptake for the interval preceding the "previous" report date
     - interaction of "elapsed" and "previous"
+    This will soon be refactored to a different autoregressive structure.
+    For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
     """
 
     def __init__(self, seed: int):
@@ -628,12 +630,8 @@ class LinearIncidentUptakeModel(UptakeModel):
 
 class HillModel(UptakeModel):
     """
-    Subclass of UptakeModel for a Hill function model constructed as follows:
-    Outcome: cumulative uptake as of a report date
-    Predictors:
-    - number of days "elapsed" between the start of the season and the report date
-    Possible Random Effects:
-    - season
+    Subclass of UptakeModel for a Hill function model.
+    For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
     """
 
     def __init__(self, seed: int):
