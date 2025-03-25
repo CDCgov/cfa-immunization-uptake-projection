@@ -722,11 +722,93 @@ class HillModel(UptakeModel):
             mu = A * (elapsed**n) / (H**n + elapsed**n)
         # Consider the observations to be a sample with empirically known std dev,
         # centered on the postulated latent true uptake.
-        if std_dev is None:
-            std_dev = 0.0000005
+        std_dev = numpyro.sample("std_dev", dist.Exponential(40))
         numpyro.sample(
             "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
         )
+
+    # @staticmethod
+    # def hill(
+    #     elapsed,
+    #     cum_uptake=None,
+    #     std_dev=None,
+    #     groups=None,
+    #     num_group_factors=0,
+    #     num_group_levels=[0],
+    #     A_shape1=15.0,
+    #     A_shape2=20.0,
+    #     A_sig=40.0,
+    #     H_shape1=25.0,
+    #     H_shape2=50.0,
+    #     H_sig=40.0,
+    #     n_shape=20.0,
+    #     n_rate=5.0,
+    # ):
+    #     """
+    #     Fit a Hill model on training data.
+
+    #     Parameters
+    #     elapsed: np.array
+    #         column of days elapsed since the season start for each data point
+    #     cum_uptake: np.array | None
+    #         column of cumulative uptake measured at each data point
+    #     std_dev: np.array | None
+    #         column of standard deviations in cumulative uptake estimate
+    #     groups: np.array | None
+    #         numeric codes for groups: row = data point, col = grouping factor
+    #     num_group_factors: Int
+    #         number of grouping factors
+    #     num_group_levels: List[Int,]
+    #         number of unique levels of each grouping factor
+    #     other parameters: float
+    #         parameters to specify the prior distributions
+
+    #     Returns
+    #     Nothing
+
+    #     Details
+    #     Provides the model structure and priors for a Hill model.
+    #     """
+    #     # Sample the overall average value for each Hill function parameter
+    #     A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+    #     H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
+    #     n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+    #     # If grouping factors are given, find the specific A and H for each datum
+    #     if groups is not None:
+    #         # Draw a sample of the spread among levels for each grouping factor
+    #         A_sigs = numpyro.sample(
+    #             "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         H_sigs = numpyro.sample(
+    #             "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         # Draw deviations from the overall average A and H for each level
+    #         # of each grouping factor and scale them by the characteristic spread
+    #         # for each grouping factor
+    #         A_devs = numpyro.sample(
+    #             "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(A_sigs, np.array(num_group_levels))
+    #         H_devs = H_devs = numpyro.sample(
+    #             "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(H_sigs, np.array(num_group_levels))
+    #         # Across all data points, look up the A and H deviations due to the
+    #         # grouping factors. Sum across grouping factors and include the overall
+    #         # average A and H to get the final total A and H for each datum
+    #         A_tot = np.sum(A_devs[groups], axis=1) + A
+    #         H_tot = np.sum(H_devs[groups], axis=1) + H
+    #         # Calculate the postulated latent true uptake given the time elapsed at
+    #         # each datum, accounting for the final total A and H values
+    #         mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+    #     else:
+    #         # Without grouping factors, use the same A and H across all data
+    #         mu = A * (elapsed**n) / (H**n + elapsed**n)
+    #     # Consider the observations to be a sample with empirically known std dev,
+    #     # centered on the postulated latent true uptake.
+    #     if std_dev is None:
+    #         std_dev = 0.0000005
+    #     numpyro.sample(
+    #         "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
+    #     )
 
     @staticmethod
     def augment_data(
@@ -834,9 +916,8 @@ class HillModel(UptakeModel):
         # Cannot have zero as a standard deviation.
         elapsed = data["elapsed"].to_numpy()
         cum_uptake = data["estimate"].to_numpy()
-        std_dev = np.where(
-            data["sdev"].to_numpy() == 0, 0.0001, data["sdev"].to_numpy()
-        )
+        # std_dev = data["sdev"].to_numpy()
+        std_dev = None
 
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(
@@ -863,6 +944,8 @@ class HillModel(UptakeModel):
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
         )
+
+        print(self.mcmc.print_summary())
 
         return self
 

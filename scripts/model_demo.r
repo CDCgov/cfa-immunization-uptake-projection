@@ -131,6 +131,19 @@ ggplot(
     xlab("Days Since Rollout") +
     ylab("Cumulative Uptake (%)")
 
+# TEMPORARY PLOT OF ALL DATA VS. A HILL FIT FROM NUMPYRO: A = 0.42, H = 0.32, N = 5.26
+data$elapsed_frac <- data$elapsed / 365
+d <- dplyr::select(data, -c(incident, interval, daily, previous, elapsed))
+m <- data.frame(elapsed_frac = 0:365 / 365)
+m$cumulative <- 0.42 * (m$elapsed_frac^5.26) / (0.32^5.26 + m$elapsed_frac^5.26)
+ggplot() +
+    geom_point(data = m, aes(x = elapsed_frac, y = 100 * cumulative)) +
+    geom_line(data = d, aes(x = elapsed_frac, y = 100 * cumulative, color = season)) +
+    theme_bw() +
+    theme(text = element_text(size = 15)) +
+    xlab("Fraction of Season") +
+    ylab("Cumulative Uptake (%)")
+
 # Tailor training data for LIM: drop first 2 dates per season & standardize
 train_lim <- train %>%
     group_by(season) %>%
