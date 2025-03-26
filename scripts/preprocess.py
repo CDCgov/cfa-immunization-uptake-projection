@@ -52,12 +52,11 @@ def preprocess(
             lci_logodds=-(((1 / pl.col("lci")) - 1).log()),
         )
         .with_columns(logodds=(pl.col("uci_logodds") + pl.col("lci_logodds")) / 2)
-        .with_columns(p=(pl.col("logodds").exp()) / (1 + (pl.col("logodds").exp())))
         .with_columns(
             N=1
             / (
-                pl.col("p")
-                * (1 - pl.col("p"))
+                pl.col("estimate")
+                * (1 - pl.col("estimate"))
                 * (
                     (
                         (pl.col("uci_logodds") - pl.col("logodds"))
@@ -68,28 +67,10 @@ def preprocess(
             )
         )
         .with_columns(
-            sample_sig=(
-                (
-                    ((pl.col("p") ** 2) * (1 - pl.col("p")))
-                    + (((1 - pl.col("p")) ** 2) * pl.col("p"))
-                )
-                * pl.col("N")
-                / (pl.col("N") - 1)
-            ).sqrt()
+            N_vax=(pl.col("estimate") * pl.col("N")).round(0),
+            N_tot=pl.col("N").round(0),
         )
-        .with_columns(sdev=pl.col("sample_sig") / (pl.col("N").sqrt()))
-        .drop(
-            [
-                "uci",
-                "lci",
-                "uci_logodds",
-                "lci_logodds",
-                "logodds",
-                "N",
-                "sample_sig",
-                "p",
-            ]
-        )
+        .drop(["uci", "lci", "uci_logodds", "lci_logodds", "logodds", "N"])
     )
 
     if groups is not None:
