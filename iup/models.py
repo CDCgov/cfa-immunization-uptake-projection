@@ -978,7 +978,8 @@ class HillModel(UptakeModel):
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
-            / 365
+            / 365,
+            N_tot=pl.lit(1000),
         ).drop("estimate")
 
         return scaffold
@@ -1051,6 +1052,7 @@ class HillModel(UptakeModel):
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
+                    N_tot=scaffold["N_tot"].to_numpy(),
                     groups=group_codes,
                     num_group_factors=self.num_group_factors,
                     num_group_levels=self.num_group_levels,
