@@ -648,8 +648,8 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        cum_uptake=None,
-        std_dev=None,
+        N_vax=None,
+        N_tot=None,
         groups=None,
         num_group_factors=0,
         num_group_levels=[0],
@@ -661,6 +661,8 @@ class HillModel(UptakeModel):
         H_sig=40.0,
         n_shape=20.0,
         n_rate=5.0,
+        S2_shape=10.0,
+        S2_rate=5.0,
     ):
         """
         Fit a Hill model on training data.
@@ -668,10 +670,10 @@ class HillModel(UptakeModel):
         Parameters
         elapsed: np.array
             column of days elapsed since the season start for each data point
-        cum_uptake: np.array | None
-            column of cumulative uptake measured at each data point
-        std_dev: np.array | None
-            column of standard deviations in cumulative uptake estimate
+        N_vax: np.array | None
+            column of number of people vaccinated at each data point
+        N_tot: np.array | None
+            column of number of people contacted at each data point
         groups: np.array | None
             numeric codes for groups: row = data point, col = grouping factor
         num_group_factors: Int
@@ -691,6 +693,7 @@ class HillModel(UptakeModel):
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
         H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+        S2 = numpyro.sample("S2", dist.Gamma(S2_shape, S2_rate))
         # If grouping factors are given, find the specific A and H for each datum
         if groups is not None:
             # Draw a sample of the spread among levels for each grouping factor
@@ -720,12 +723,9 @@ class HillModel(UptakeModel):
         else:
             # Without grouping factors, use the same A and H across all data
             mu = A * (elapsed**n) / (H**n + elapsed**n)
-        # Consider the observations to be a sample with empirically known std dev,
-        # centered on the postulated latent true uptake.
-        std_dev = numpyro.sample("std_dev", dist.Exponential(40))
-        numpyro.sample(
-            "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
-        )
+        # Calculate the first shape parameter for the beta-binomial likelihood
+        S1 = (mu / (1 - mu)) * S2
+        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
 
     # @staticmethod
     # def hill(
@@ -915,9 +915,10 @@ class HillModel(UptakeModel):
         # Prepare the data to be fed to the model. Must be numpy arrays.
         # Cannot have zero as a standard deviation.
         elapsed = data["elapsed"].to_numpy()
-        cum_uptake = data["estimate"].to_numpy()
+        # cum_uptake = data["estimate"].to_numpy()
         # std_dev = data["sdev"].to_numpy()
-        std_dev = None
+        N_vax = data["N_vax"].to_numpy()
+        N_tot = data["N_tot"].to_numpy()
 
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(
@@ -930,8 +931,10 @@ class HillModel(UptakeModel):
         self.mcmc.run(
             self.rng_key,
             elapsed=elapsed,
-            cum_uptake=cum_uptake,
-            std_dev=std_dev,
+            # cum_uptake=cum_uptake,
+            # std_dev=std_dev,
+            N_vax=N_vax,
+            N_tot=N_tot,
             groups=group_codes,
             num_group_factors=self.num_group_factors,
             num_group_levels=self.num_group_levels,
