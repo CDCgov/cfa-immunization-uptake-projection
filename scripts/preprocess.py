@@ -29,48 +29,32 @@ def preprocess(
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
-            uci=pl.when(pl.col("uci") > pl.col("estimate"))
-            .then(pl.col("uci"))
-            .otherwise(pl.col("estimate") + 0.0000005),
-            lci=pl.when(pl.col("lci") < pl.col("estimate"))
-            .then(pl.col("lci"))
-            .otherwise(pl.col("estimate") - 0.0000005),
+            uwald=pl.col("uci") - pl.col("estimate"),
+            lwald=pl.col("estimate") - pl.col("lci"),
         )
         .with_columns(
-            estimate=pl.when(pl.col("estimate") > 0)
-            .then(pl.col("estimate"))
-            .otherwise(0.0005),
-            uci=pl.when(pl.col("estimate") > 0)
-            .then(pl.col("uci"))
-            .otherwise(pl.col("uci") + 0.0005),
-            lci=pl.when(pl.col("estimate") > 0)
-            .then(pl.col("lci"))
-            .otherwise(pl.col("lci") + 0.0005),
+            sem=pl.max_horizontal("uwald", "lwald") / st.norm.ppf(0.975, 0, 1)
         )
         .with_columns(
-            uci_logodds=-(((1 / pl.col("uci")) - 1).log()),
-            lci_logodds=-(((1 / pl.col("lci")) - 1).log()),
+            sem=pl.when(pl.col("sem") < 0.0005).then(0.0005).otherwise(pl.col("sem"))
         )
-        .with_columns(logodds=(pl.col("uci_logodds") + pl.col("lci_logodds")) / 2)
         .with_columns(
-            N=1
-            / (
-                pl.col("estimate")
-                * (1 - pl.col("estimate"))
-                * (
-                    (
-                        (pl.col("uci_logodds") - pl.col("logodds"))
-                        / st.norm.ppf(0.975, 0, 1)
-                    )
-                    ** 2
-                )
+            estimate=pl.when(pl.col("estimate") < 0.0005)
+            .then(0.0005)
+            .otherwise(pl.col("estimate"))
+        )
+        .with_columns(
+            N=(
+                (1 - pl.col("estimate")) * (pl.col("estimate") ** 2)
+                + ((1 - pl.col("estimate")) ** 2) * pl.col("estimate")
             )
+            / (pl.col("sem") ** 2)
         )
         .with_columns(
             N_vax=(pl.col("estimate") * pl.col("N")).round(0),
             N_tot=pl.col("N").round(0),
         )
-        .drop(["uci", "lci", "uci_logodds", "lci_logodds", "logodds", "N"])
+        .drop(["lwald", "uwald", "uci", "lci", "N"])
     )
 
     if groups is not None:
