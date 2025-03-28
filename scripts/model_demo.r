@@ -30,49 +30,49 @@ if (disease == "covid") {
     rec <- read_parquet(".cache/nisapi/clean/id=ksfb-ug5d/part-0.parquet")
     rec <- filter(
         rec,
-        geography_type == "nation",
+        geography_type == "admin1",
         domain_type == "age",
         domain == "18+ years",
         indicator_type == "4-level vaccination and intent",
         indicator == "received a vaccination",
         time_type == "week"
     )
-    rec <- select(rec, time_end, estimate)
+    rec <- select(rec, time_end, geography, estimate)
     his <- read_parquet(".cache/nisapi/clean/id=udsf-9v7b/part-0.parquet")
     his <- filter(
         his,
-        geography_type == "nation",
+        geography_type == "admin1",
         domain_type == "overall",
         indicator_type == "Received updated bivalent booster (among adults who completed primary series)",
         time_type == "week"
     )
-    his <- select(his, time_end, estimate)
+    his <- select(his, time_end, geography, estimate)
     rollouts <- as.Date(c("2022-09-01", "2023-09-22", "2024-09-01"))
     first_month <- 9
 } else if (disease == "flu") {
     rec <- read_parquet(".cache/nisapi/clean/id=sw5n-wg2p/part-0.parquet")
     rec <- filter(
         rec,
-        geography_type == "nation",
+        geography_type == "admin1",
         domain_type == "age",
         domain == "18+ years",
         indicator_type == "4-level vaccination and intent",
         indicator == "received a vaccination",
         time_type == "week"
     )
-    rec <- select(rec, time_end, estimate)
+    rec <- select(rec, time_end, geography, estimate)
     his <- read_parquet(".cache/nisapi/clean/id=vh55-3he6/part-0.parquet")
     his <- filter(
         his,
         vaccine == "flu",
-        geography_type == "nation",
+        geography_type == "admin1",
         domain_type == "age",
         domain == "18+ years",
         indicator_type == "uptake",
         indicator == "received a vaccination",
         time_type == "month"
     )
-    his <- select(his, time_end, estimate)
+    his <- select(his, time_end, geography, estimate)
     his <- his[his$time_end < as.Date("2023-09-30"), ]
     rollouts <- as.Date(c(
         "2009-07-01", "2010-07-01", "2011-07-01", "2012-07-01",
@@ -92,9 +92,10 @@ data <- rbind(
     data.frame(time_end = rollouts, estimate = rep(0, length(rollouts)))
 )
 data <- arrange(distinct(data), time_end)
-colnames(data) <- c("date", "cumulative")
+colnames(data) <- c("date", "geography", "cumulative")
 
 # Add cols: incident uptake, season, days elapsed, interval, daily avg, previous
+# DOES NOT ACCOUNT FOR GEOGRAPHY OR AGE GROUPS
 data$incident <- c(0, diff(data$cumulative))
 data$incident[data$cumulative == 0] <- 0
 data$season <- year(ymd(data$date)) -
@@ -143,6 +144,22 @@ ggplot() +
     theme(text = element_text(size = 15)) +
     xlab("Fraction of Season") +
     ylab("Cumulative Uptake (%)")
+
+# TEMPORARY PLOT OF FLU DATA BY STATE
+
+
+# TEMPORARY PLOT OF HYPERTABASTIC CDF.
+sech <- function(x) {
+    return(2 / (exp(x) + exp(-x)))
+}
+coth <- function(x) {
+    return((exp(x) + exp(-x)) / (exp(x) - exp(-x)))
+}
+t <- seq(0.01, 3.65, by = 0.01)
+A <- 4
+H <- 1
+y <- 1 - sech((A / H) * (1 - (t^H) * coth(t^H)))
+plot(t, y)
 
 # Tailor training data for LIM: drop first 2 dates per season & standardize
 train_lim <- train %>%

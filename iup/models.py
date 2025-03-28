@@ -2,6 +2,7 @@ import abc
 import datetime as dt
 from typing import List
 
+# import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -644,6 +645,91 @@ class HillModel(UptakeModel):
         """
         self.rng_key = random.PRNGKey(seed)
         self.model = HillModel.hill
+
+    # @staticmethod
+    # def hill(
+    #     elapsed,
+    #     N_vax=None,
+    #     N_tot=None,
+    #     groups=None,
+    #     num_group_factors=0,
+    #     num_group_levels=[0],
+    #     A_shape1=15.0,
+    #     A_shape2=20.0,
+    #     A_sig=40.0,
+    #     H_shape1=25.0,
+    #     H_shape2=50.0,
+    #     H_sig=40.0,
+    #     n_shape=20.0,
+    #     n_rate=5.0,
+    #     S2_shape=10.0,
+    #     S2_rate=5.0,
+    # ):
+    #     """
+    #     Fit a Hill model on training data.
+
+    #     Parameters
+    #     elapsed: np.array
+    #         column of days elapsed since the season start for each data point
+    #     N_vax: np.array | None
+    #         column of number of people vaccinated at each data point
+    #     N_tot: np.array | None
+    #         column of number of people contacted at each data point
+    #     groups: np.array | None
+    #         numeric codes for groups: row = data point, col = grouping factor
+    #     num_group_factors: Int
+    #         number of grouping factors
+    #     num_group_levels: List[Int,]
+    #         number of unique levels of each grouping factor
+    #     other parameters: float
+    #         parameters to specify the prior distributions
+
+    #     Returns
+    #     Nothing
+
+    #     Details
+    #     Provides the model structure and priors for a Hill model.
+    #     """
+    #     # Sample the overall average value for each Hill function parameter
+    #     A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+    #     H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
+    #     S2 = numpyro.sample("S2", dist.Gamma(S2_shape, S2_rate))
+    #     # If grouping factors are given, find the specific A and H for each datum
+    #     if groups is not None:
+    #         # Draw a sample of the spread among levels for each grouping factor
+    #         A_sigs = numpyro.sample(
+    #             "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         H_sigs = numpyro.sample(
+    #             "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         # Draw deviations from the overall average A and H for each level
+    #         # of each grouping factor and scale them by the characteristic spread
+    #         # for each grouping factor
+    #         A_devs = numpyro.sample(
+    #             "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(A_sigs, np.array(num_group_levels))
+    #         H_devs = H_devs = numpyro.sample(
+    #             "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(H_sigs, np.array(num_group_levels))
+    #         # Across all data points, look up the A and H deviations due to the
+    #         # grouping factors. Sum across grouping factors and include the overall
+    #         # average A and H to get the final total A and H for each datum
+    #         A_tot = np.sum(A_devs[groups], axis=1) + A
+    #         H_tot = np.sum(H_devs[groups], axis=1) + H
+    #         # Calculate the postulated latent true uptake given the time elapsed at
+    #         # each datum, accounting for the final total A and H values
+    #         mu = 1 - 1 / (
+    #             jnp.cosh(
+    #                 A_tot * (1 - (elapsed**H_tot) / jnp.tanh(elapsed**H_tot)) / H_tot
+    #             )
+    #         )
+    #     else:
+    #         # Without grouping factors, use the same A and H across all data
+    #         mu = 1 - 1 / (jnp.cosh(A * (1 - (elapsed**H) / jnp.tanh(elapsed**H)) / H))
+    #     # Calculate the first shape parameter for the beta-binomial likelihood
+    #     S1 = (mu / (1 - mu)) * S2
+    #     numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
 
     @staticmethod
     def hill(
