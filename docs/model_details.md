@@ -95,20 +95,20 @@ At a high level, the Hill model is structured as follows:
 
 ```math
 \begin{align*}
-&Z_{t,G}^{obs} \sim \text{Pr}(Z_{t,G}^{obs}~|~c_{t,G},~N_{t,G}^{obs}) \\
+&V_{t,G}^{obs} \sim \text{Pr}(V_{t,G}^{obs}~|~c_{t,G},~N_{t,G}^{obs}) \\
 &c_{t,G} := f_{\text{Hill, Linear}}(t,~\phi_G) \\
 &\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
 &\xi \sim \text{Pr}(\xi) \\
 \end{align*}
 ```
 
-Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $Z_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$.
+Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$.
 
 ## Observation Layer
 
 ```math
 \begin{align*}
-&Z_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
+&V_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
 \end{align*}
 ```
 
@@ -120,6 +120,8 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 &\alpha_{t,G_1,...,G_I} = \frac{c_{t,G_1,...,G_I}}{1 - c_{t,G_1,...,G_I}} \cdot \beta \\
 \end{align*}
 ```
+
+Note that it is necessary to convert the latent true uptake into the first shape parameter of a beta distribution using the formula for the mean of a beta distribution.
 
 ## Hierarchical Structure
 
