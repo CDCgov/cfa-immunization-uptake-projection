@@ -132,6 +132,18 @@ ggplot(
     xlab("Days Since Rollout") +
     ylab("Cumulative Uptake (%)")
 
+# TEMPORARY PLOT OF DATA BY STATE WITHIN A SEASON
+ggplot(
+    data = data[data$season == "2020/2021", ],
+    aes(x = elapsed_frac, y = 100 * cumulative, color = geography)
+) +
+    # geom_point() +
+    geom_line() +
+    theme_bw() +
+    theme(text = element_text(size = 15), legend.position = "none") +
+    xlab("Days Since Rollout") +
+    ylab("Cumulative Uptake (%)")
+
 # TEMPORARY PLOT OF ALL DATA VS. A HILL FIT FROM NUMPYRO: A = 0.42, H = 0.32, N = 5.26
 data$elapsed_frac <- data$elapsed / 365
 d <- dplyr::select(data, -c(incident, interval, daily, previous, elapsed))
