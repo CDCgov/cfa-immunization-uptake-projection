@@ -26,6 +26,14 @@ With estimates of pN and N in hand, the observation process was replaced with a 
 
 Even with MCMC proceeding, other warning signs arose:
 - When grouping on season alone, season-specific deviations in both A and H from their overall averages have very wide 95% credible intervals, straddling 0. And yet, it is clear that uptake curves do differ from one another across seasons.
-- When grouping on season and state, the fitting proceeds very slowly (1-2 it/s). A, A deviations by season, H, and H deviations by season all had very low ESS (40-60, despite 500 samples after warmup). A deviations by state had even lower ESS (10-15). H deviations by state had higher ESS, but the magnitude in variation in H among states was estimated very close to 0.
+- When grouping on season and state, the fitting proceeds very slowly (1-2 it/s). A, A-deviations-by-season, H, and H-deviations-by-season all had very low ESS (40-60, despite 500 samples after warmup). A-deviations-by-state had even lower ESS (10-15). H-deviations-by-state had higher ESS, but the magnitude in variation in H among states was estimated very close to 0.
 
 Together, these warning signs suggest some non-identifiability among the parameters that vary by grouping factor, perhaps again driven by the poor fit of the Hill function to uptake curves.
+
+## Solution Pt 2: Hill + Linear Functions
+
+Many warning signs were alleviated by changing the structure of the latent true uptake from a pure Hill function to a Hill function plus a slope-only linear function (intercept = 0). In this model, the linear slope "M" and the Hill asymptote "A" can deviate additively from their overall averages by group, while the Hill midpoint "H" and steepness "n" are fixed across groups. In particular, this mixed function allows uptake to continue creeping upward late in a season.
+
+When grouping on season and state, the fitting still proceeds slowly (1-2 it/s), but only A and A-deviations-by-state have low ESS (50-100, with 500 samples after warmup). A-deviations-by-season, M, and M-deviations-by-state/season all have good ESS (100-500+). The magnitudes of A- and M-deviations are confidently estimated greater than 0. The 95% credible intervals for A- and M-deviations from the overall average often do not overlap 0, for many states and seasons. There are 0 divergences.
+
+The more promising aspects of the MCMC summary likely reflect a more appropriate fit of the latent true uptake model to the shape of the data.
