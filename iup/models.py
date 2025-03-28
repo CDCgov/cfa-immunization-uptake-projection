@@ -744,9 +744,12 @@ class HillModel(UptakeModel):
         A_sig=40.0,
         H_shape1=25.0,
         H_shape2=50.0,
-        H_sig=40.0,
+        # H_sig=40.0,
         n_shape=20.0,
         n_rate=5.0,
+        M_shape=1.0,
+        M_rate=0.1,
+        M_sig=40.0,
         S2_shape=10.0,
         S2_rate=5.0,
     ):
@@ -779,6 +782,7 @@ class HillModel(UptakeModel):
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
         H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+        M = numpyro.sample("M", dist.Gamma(M_shape, M_rate))
         S2 = numpyro.sample("S2", dist.Gamma(S2_shape, S2_rate))
         # If grouping factors are given, find the specific A and H for each datum
         if groups is not None:
@@ -786,8 +790,8 @@ class HillModel(UptakeModel):
             A_sigs = numpyro.sample(
                 "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
-            H_sigs = numpyro.sample(
-                "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+            M_sigs = numpyro.sample(
+                "M_sigs", dist.Exponential(M_sig), sample_shape=(num_group_factors,)
             )
             # Draw deviations from the overall average A and H for each level
             # of each grouping factor and scale them by the characteristic spread
@@ -795,23 +799,105 @@ class HillModel(UptakeModel):
             A_devs = numpyro.sample(
                 "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(A_sigs, np.array(num_group_levels))
-            H_devs = H_devs = numpyro.sample(
-                "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(H_sigs, np.array(num_group_levels))
+            M_devs = M_devs = numpyro.sample(
+                "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(M_sigs, np.array(num_group_levels))
             # Across all data points, look up the A and H deviations due to the
             # grouping factors. Sum across grouping factors and include the overall
             # average A and H to get the final total A and H for each datum
             A_tot = np.sum(A_devs[groups], axis=1) + A
-            H_tot = np.sum(H_devs[groups], axis=1) + H
+            M_tot = np.sum(M_devs[groups], axis=1) + M
             # Calculate the postulated latent true uptake given the time elapsed at
             # each datum, accounting for the final total A and H values
-            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+            mu = A_tot * (elapsed**n) / (H**n + elapsed**n) + (M_tot * elapsed)
         else:
             # Without grouping factors, use the same A and H across all data
-            mu = A * (elapsed**n) / (H**n + elapsed**n)
+            mu = A * (elapsed**n) / (H**n + elapsed**n) + (M * elapsed)
         # Calculate the first shape parameter for the beta-binomial likelihood
         S1 = (mu / (1 - mu)) * S2
         numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
+
+    # @staticmethod
+    # def hill(
+    #     elapsed,
+    #     N_vax=None,
+    #     N_tot=None,
+    #     groups=None,
+    #     num_group_factors=0,
+    #     num_group_levels=[0],
+    #     A_shape1=15.0,
+    #     A_shape2=20.0,
+    #     A_sig=40.0,
+    #     H_shape1=25.0,
+    #     H_shape2=50.0,
+    #     H_sig=40.0,
+    #     n_shape=20.0,
+    #     n_rate=5.0,
+    #     S2_shape=10.0,
+    #     S2_rate=5.0,
+    # ):
+    #     """
+    #     Fit a Hill model on training data.
+
+    #     Parameters
+    #     elapsed: np.array
+    #         column of days elapsed since the season start for each data point
+    #     N_vax: np.array | None
+    #         column of number of people vaccinated at each data point
+    #     N_tot: np.array | None
+    #         column of number of people contacted at each data point
+    #     groups: np.array | None
+    #         numeric codes for groups: row = data point, col = grouping factor
+    #     num_group_factors: Int
+    #         number of grouping factors
+    #     num_group_levels: List[Int,]
+    #         number of unique levels of each grouping factor
+    #     other parameters: float
+    #         parameters to specify the prior distributions
+
+    #     Returns
+    #     Nothing
+
+    #     Details
+    #     Provides the model structure and priors for a Hill model.
+    #     """
+    #     # Sample the overall average value for each Hill function parameter
+    #     A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
+    #     H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
+    #     n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
+    #     S2 = numpyro.sample("S2", dist.Gamma(S2_shape, S2_rate))
+    #     # If grouping factors are given, find the specific A and H for each datum
+    #     if groups is not None:
+    #         # Draw a sample of the spread among levels for each grouping factor
+    #         A_sigs = numpyro.sample(
+    #             "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         H_sigs = numpyro.sample(
+    #             "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+    #         )
+    #         # Draw deviations from the overall average A and H for each level
+    #         # of each grouping factor and scale them by the characteristic spread
+    #         # for each grouping factor
+    #         A_devs = numpyro.sample(
+    #             "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(A_sigs, np.array(num_group_levels))
+    #         H_devs = H_devs = numpyro.sample(
+    #             "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+    #         ) * np.repeat(H_sigs, np.array(num_group_levels))
+    #         # Across all data points, look up the A and H deviations due to the
+    #         # grouping factors. Sum across grouping factors and include the overall
+    #         # average A and H to get the final total A and H for each datum
+    #         A_tot = np.sum(A_devs[groups], axis=1) + A
+    #         H_tot = np.sum(H_devs[groups], axis=1) + H
+    #         # Calculate the postulated latent true uptake given the time elapsed at
+    #         # each datum, accounting for the final total A and H values
+    #         mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+    #     else:
+    #         # Without grouping factors, use the same A and H across all data
+    #         mu = A * (elapsed**n) / (H**n + elapsed**n)
+    #     # Calculate the first shape parameter for the beta-binomial likelihood
+    #     S1 = (mu / (1 - mu)) * S2
+    #     numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
 
     # @staticmethod
     # def hill(
@@ -1029,9 +1115,14 @@ class HillModel(UptakeModel):
             A_sig=params["A_sig"],
             H_shape1=params["H_shape1"],
             H_shape2=params["H_shape2"],
-            H_sig=params["H_sig"],
+            # H_sig=params["H_sig"],
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
+            M_shape=params["M_shape"],
+            M_rate=params["M_rate"],
+            M_sig=params["M_sig"],
+            S2_shape=params["S2_shape"],
+            S2_rate=params["S2_rate"],
         )
 
         print(self.mcmc.print_summary())
