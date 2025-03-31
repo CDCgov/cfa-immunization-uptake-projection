@@ -664,8 +664,8 @@ class HillModel(UptakeModel):
         M_shape=1.0,
         M_rate=0.1,
         M_sig=40.0,
-        S2_shape=5.0,
-        S2_rate=0.5,
+        d_shape=2.0,
+        d_rate=0.5,
     ):
         """
         Fit a mixed Hill + Linear model on training data.
@@ -697,7 +697,7 @@ class HillModel(UptakeModel):
         H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
         M = numpyro.sample("M", dist.Gamma(M_shape, M_rate))
-        S2 = numpyro.sample("S2", dist.Gamma(S2_shape, S2_rate))
+        d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
             A_sigs = numpyro.sample(
@@ -719,8 +719,9 @@ class HillModel(UptakeModel):
         else:
             # Calculate latent true uptake at each datum if no grouping factors
             mu = A * (elapsed**n) / (H**n + elapsed**n) + (M * elapsed)
-        # Calculate the first shape parameter for the beta-binomial likelihood
-        S1 = (mu / (1 - mu)) * S2
+        # Calculate the shape parameters for the beta-binomial likelihood
+        S1 = mu * d
+        S2 = (1 - mu) * d
         numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
 
     @staticmethod
@@ -856,8 +857,8 @@ class HillModel(UptakeModel):
             M_shape=params["M_shape"],
             M_rate=params["M_rate"],
             M_sig=params["M_sig"],
-            S2_shape=params["S2_shape"],
-            S2_rate=params["S2_rate"],
+            d_shape=params["d_shape"],
+            d_rate=params["d_rate"],
         )
 
         print(self.mcmc.print_summary())
