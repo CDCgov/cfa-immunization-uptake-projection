@@ -30,13 +30,13 @@ def standardize(x, mn=None, sd=None):
             return (
                 pl.when(x.drop_nulls().n_unique() == 1)
                 .then(0.0)
-                .otherwise((x - x.mean()) / x.std())
+                .otherwise((x - x.mean()) / x.std(ddof=0))
             )
     else:
         if mn is not None:
             return (x - mn) / sd
         else:
-            return (x - x.mean()) / x.std()
+            return (x - x.nanmean()) / x.nanstd(ddof=0)
 
 
 def unstandardize(x, mn, sd):
