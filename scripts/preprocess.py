@@ -44,11 +44,7 @@ def preprocess(
             .otherwise(pl.col("estimate"))
         )
         .with_columns(
-            N=(
-                (1 - pl.col("estimate")) * (pl.col("estimate") ** 2)
-                + ((1 - pl.col("estimate")) ** 2) * pl.col("estimate")
-            )
-            / (pl.col("sem") ** 2)
+            N=(1 - pl.col("estimate")) * pl.col("estimate") / (pl.col("sem") ** 2)
         )
         .with_columns(
             N_vax=(pl.col("estimate") * pl.col("N")).round(0),
