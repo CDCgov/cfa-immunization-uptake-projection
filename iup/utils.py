@@ -22,6 +22,8 @@ def standardize(x, mn=None, sd=None):
 
     Details
     If the standard deviation is 0, all standardized values are 0.0.
+    If x is an np.ndarray, the mean and standard deviation should be provided,
+    not calculated, to prevent issues handling NaNs.
     """
     assert mn is not None or sd is not None and type(x) is np.ndarray, (
         "Calculating mean and std from a numpy array will not ignore NaNs!"
