@@ -664,8 +664,8 @@ class HillModel(UptakeModel):
         M_shape=1.0,
         M_rate=0.1,
         M_sig=40.0,
-        d_shape=2.0,
-        d_rate=0.5,
+        d_shape=5.0,
+        d_rate=0.01,
     ):
         """
         Fit a mixed Hill + Linear model on training data.
