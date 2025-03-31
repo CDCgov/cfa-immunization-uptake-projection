@@ -23,20 +23,17 @@ def standardize(x, mn=None, sd=None):
     Details
     If the standard deviation is 0, all standardized values are 0.0.
     """
-    if type(x) is pl.Expr:
-        if mn is not None:
-            return (x - mn) / sd
-        else:
-            return (
-                pl.when(x.drop_nulls().n_unique() == 1)
-                .then(0.0)
-                .otherwise((x - x.mean()) / x.std())
-            )
+    assert mn is not None or sd is not None and type(x) is np.ndarray, (
+        "Calculating mean and std from a numpy array will not ignore NaNs!"
+    )
+
+    loc = mn if mn is not None else x.mean()
+    scale = sd if sd is not None else x.std(ddof=0)
+
+    if scale == 0.0:
+        return x * 0.0
     else:
-        if mn is not None:
-            return (x - mn) / sd
-        else:
-            return (x - x.mean()) / x.std()
+        return (x - loc) / scale
 
 
 def unstandardize(x, mn, sd):
