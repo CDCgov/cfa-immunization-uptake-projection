@@ -52,8 +52,8 @@ def params():
         "M_shape": 1.0,
         "M_rate": 0.1,
         "M_sig": 40,
-        "S2_shape": 5.0,
-        "S2_rate": 0.5,
+        "d_shape": 5.0,
+        "d_rate": 0.01,
     }
 
     return params
