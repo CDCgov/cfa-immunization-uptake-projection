@@ -102,7 +102,14 @@ At a high level, the Hill model is structured as follows:
 \end{align*}
 ```
 
-Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$.
+Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$. As a result, the standard error of the mean $\sigma_{t,G}^{SEM}$ is known for each data point, and $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are as follows:
+
+```math
+\begin{align*}
+&N_{t,G}^{obs} = \frac{c^{obs} \cdot (1-c^{obs})}{{\sigma_{t,G}^{SEM}}^2} \\
+&V_{t,G}^{obs} = N^{obs} \cdot c^{obs} \\
+\end{align*}
+```
 
 ## Observation Layer
 
@@ -117,11 +124,17 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 ```math
 \begin{align*}
 &c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I} \cdot t^{n}}{H^{n} + t^{n}} + M_{G_1,...,G_I} \cdot t \\
-&\alpha_{t,G_1,...,G_I} = \frac{c_{t,G_1,...,G_I}}{1 - c_{t,G_1,...,G_I}} \cdot \beta \\
 \end{align*}
 ```
 
-Note that it is necessary to convert the latent true uptake into the first shape parameter of a beta distribution using the formula for the mean of a beta distribution.
+The model's functional structure describes the latent true uptake curve $c_{t,G_1,...,G_I}$, which will serve as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required to completely describe this beta distribution. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
+
+```math
+\begin{align*}
+&\alpha_{t,G_1,...,G_I} = c_{t,G_1,...,G_I} \cdot d \\
+&\beta_{t,G_1,...,G_I} = (1 - c_{t,G_1,...,G_I}) \cdot d \\
+\end{align*}
+```
 
 ## Hierarchical Structure
 
@@ -144,6 +157,6 @@ and similarly for $M$.
 &n \sim \text{Gamma}(\text{shape = }20.0, \text{ rate = }5.0) \\
 &M \sim \text{Gamma}(\text{shape = }1.0, \text{ rate = }0.1) \\
 &\sigma_{M_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&\beta \sim \text{Gamma}(\text{shape = }5.0, \text{ rate = }0.05) \\
+&d \sim \text{Gamma}(\text{shape = }5.0, \text{ rate = }0.01) \\
 \end{align*}
 ```
