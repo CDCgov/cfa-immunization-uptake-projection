@@ -159,12 +159,12 @@ and similarly for $M$.
 
 ```math
 \begin{align*}
-&A \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }140.0) \\
+&A \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }180.0) \\
 &\sigma_{A_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
 &H \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }225.0) \\
-&n \sim \text{Gamma}(\text{shape = }20.0, \text{ rate = }5.0) \\
-&M \sim \text{Gamma}(\text{shape = }1.0, \text{ rate = }0.1) \\
+&n \sim \text{Gamma}(\text{shape = }25.0, \text{ rate = }1.0) \\
+&M \sim \text{Gamma}(\text{shape = }1.0, \text{ rate = }10.0) \\
 &\sigma_{M_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&d \sim \text{Gamma}(\text{shape = }5.0, \text{ rate = }0.01) \\
+&d \sim \text{Gamma}(\text{shape = }350.0, \text{ rate = }1.0) \\
 \end{align*}
 ```
