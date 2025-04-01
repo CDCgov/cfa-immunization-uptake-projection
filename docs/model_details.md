@@ -102,7 +102,7 @@ At a high level, the Hill model is structured as follows:
 \end{align*}
 ```
 
-Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$. As a result, the standard error of the mean $\sigma_{t,G}^{SEM}$ is known for each data point, and $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are as follows:
+Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$. As a result, the standard error of the mean $\sigma_{t,G}^{SEM}$ is considered known for each data point, and $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are as follows:
 
 ```math
 \begin{align*}
@@ -112,6 +112,8 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 ```
 
 ## Observation Layer
+
+The observed uptake is considered a draw from the beta-binomial distribution, governed in part by the true latent uptake in the population.
 
 ```math
 \begin{align*}
@@ -127,11 +129,11 @@ The model's functional structure describes the latent true uptake curve:
 
 ```math
 \begin{align*}
-&c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I} \cdot t^{n}}{H^{n} + t^{n}} + M_{G_1,...,G_I} \cdot t \\
+&c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I}}{1 + e^{-n \cdot (t - H)}} + M_{G_1,...,G_I} \cdot t \\
 \end{align*}
 ```
 
- $c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required to completely describe this beta distribution. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
+ $c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
 
 ```math
 \begin{align*}
