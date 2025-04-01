@@ -106,8 +106,8 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 
 ```math
 \begin{align*}
-&N_{t,G}^{obs} = \frac{c^{obs} \cdot (1-c^{obs})}{{\sigma_{t,G}^{SEM}}^2} \\
-&V_{t,G}^{obs} = N^{obs} \cdot c^{obs} \\
+&N_{t,G}^{obs} = \frac{c_{t,G}^{obs} \cdot (1-c_{t,G}^{obs})}{{\sigma_{t,G}^{SEM}}^2} \\
+&V_{t,G}^{obs} = N_{t,G}^{obs} \cdot c_{t,G}^{obs} \\
 \end{align*}
 ```
 
@@ -115,11 +115,15 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 
 ```math
 \begin{align*}
-&V_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
+&V_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta_{t,G_1,...,G_I}, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
 \end{align*}
 ```
 
+Note that the shape parameters $\alpha$ and $\beta$ are not declared explicitly. Rather they are implied by an alternate mean and concentration parametrization, described below.
+
 ## Functional Structure
+
+The model's functional structure describes the latent true uptake curve:
 
 ```math
 \begin{align*}
@@ -127,7 +131,7 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 \end{align*}
 ```
 
-The model's functional structure describes the latent true uptake curve $c_{t,G_1,...,G_I}$, which will serve as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required to completely describe this beta distribution. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
+ $c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required to completely describe this beta distribution. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
 
 ```math
 \begin{align*}
@@ -137,6 +141,8 @@ The model's functional structure describes the latent true uptake curve $c_{t,G_
 ```
 
 ## Hierarchical Structure
+
+Certain parameters of the latent true uptake curve have group-specific deviations, determined as follows:
 
 ```math
 \begin{align*}
