@@ -57,8 +57,6 @@ def fit_all_models(data, config) -> List[iup.models.UptakeModel]:
                 forecast_start=forecast_date,
             )
 
-            print(f"{model_name},{forecast_date}")
-
             all_models.append(deepcopy(fitted_model))
 
     return all_models
