@@ -2,7 +2,7 @@ import abc
 import datetime as dt
 from typing import List
 
-# import jax.numpy as jnp
+import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -655,17 +655,17 @@ class HillModel(UptakeModel):
         num_group_factors=0,
         num_group_levels=[0],
         A_shape1=100.0,
-        A_shape2=140.0,
+        A_shape2=180.0,
         A_sig=40.0,
         H_shape1=100.0,
         H_shape2=225.0,
-        n_shape=20.0,
-        n_rate=5.0,
+        n_shape=25.0,
+        n_rate=1.0,
         M_shape=1.0,
-        M_rate=0.1,
+        M_rate=10.0,
         M_sig=40.0,
-        d_shape=5.0,
-        d_rate=0.01,
+        d_shape=350.0,
+        d_rate=1.0,
     ):
         """
         Fit a mixed Hill + Linear model on training data.
@@ -715,10 +715,10 @@ class HillModel(UptakeModel):
             A_tot = np.sum(A_devs[groups], axis=1) + A
             M_tot = np.sum(M_devs[groups], axis=1) + M
             # Calculate latent true uptake at each datum
-            mu = A_tot * (elapsed**n) / (H**n + elapsed**n) + (M_tot * elapsed)
+            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
         else:
             # Calculate latent true uptake at each datum if no grouping factors
-            mu = A * (elapsed**n) / (H**n + elapsed**n) + (M * elapsed)
+            mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d

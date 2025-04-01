@@ -157,8 +157,10 @@ ggplot() +
     xlab("Fraction of Season") +
     ylab("Cumulative Uptake (%)")
 
-# TEMPORARY PLOT OF FLU DATA BY STATE
-
+# TEMPORARY PLOT OF MIXED LOGISTIC AND LINEAR
+x <- seq(0, 1, by = 0.01)
+y <- 0.37 / (1 + exp(-25.35 * (x - 0.32))) + 0.06 * x
+plot(x, y)
 
 # TEMPORARY PLOT OF HYPERTABASTIC CDF.
 sech <- function(x) {
