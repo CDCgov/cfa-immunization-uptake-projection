@@ -1,8 +1,9 @@
 import argparse
 import datetime as dt
-from typing import Any, List, Type
+import pickle
+from typing import Any, List
 
-import arviz as az
+import numpy as np
 import polars as pl
 import yaml
 
@@ -10,13 +11,22 @@ import iup
 import iup.models
 
 
-def run_all_forecasts(data, config) -> dict:
+def run_all_forecasts(
+    data: iup.UptakeData,
+    fitted_models: List[iup.models.UptakeModel],
+    config: dict[str, Any],
+) -> pl.DataFrame:
     """Run all forecasts
 
     Returns:
         dictionary of two data frames: forecasts and posterior distributions,
         both organized by model and forecast date
     """
+
+    train_end_dates_list = [model.end_date[0, 0] for model in fitted_models]
+    train_end_dates = np.array(train_end_dates_list)
+    train_end_dates = np.unique(train_end_dates)
+    train_end_dates.sort()
 
     if config["evaluation_timeframe"]["interval"] is not None:
         forecast_dates = pl.date_range(
@@ -28,11 +38,12 @@ def run_all_forecasts(data, config) -> dict:
     else:
         forecast_dates = [config["forecast_timeframe"]["start"]]
 
+    model_names = [model.__class__.__name__ for model in fitted_models]
+
     all_forecast = pl.DataFrame()
     all_posterior = []
 
-    for config_model in config["models"]:
-        model_name = config_model["name"]
+    for model_name in model_names:
         model_class = getattr(iup.models, model_name)
 
         assert issubclass(model_class, iup.models.UptakeModel), (
@@ -49,13 +60,30 @@ def run_all_forecasts(data, config) -> dict:
 
         model_posterior = pl.DataFrame()
 
-        for forecast_date in forecast_dates:
-            model_output = run_forecast(
+        for i, train_end in enumerate(train_end_dates):
+            # train end maps to forecast date on 1-on-1 base,
+            # # can directly index forecast date using index of train end #
+            # print(
+            #     f"train_end: {train_end}, forecast_date: {forecast_dates[i]}, model: {model_name}"
+            # )
+            forecast_date = forecast_dates[i]
+
+            fitted_model_list = [
+                model
+                for model in fitted_models
+                if model.end_date[0, 0] == train_end
+                if model.__class__.__name__ == model_name
+            ]
+
+            assert len(fitted_model_list) == 1, (
+                f"More than one fitted model found for {model_name} with {train_end}"
+            )
+
+            fitted_model = fitted_model_list[0]
+
+            forecast = run_forecast(
                 data=augmented_data,
-                model_class=model_class,
-                seed=config_model["seed"],
-                params=config_model["params"],
-                mcmc=config_model["mcmc"],
+                fit_model=fitted_model,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
@@ -88,69 +116,15 @@ def run_all_forecasts(data, config) -> dict:
 
 def run_forecast(
     data: iup.UptakeData,
-    model_class: Type[iup.models.UptakeModel],
-    seed: int,
-    params: dict[str, Any],
-    mcmc: dict[str, Any],
     grouping_factors: List[str] | None,
+    fit_model: iup.models.UptakeModel,
     forecast_start: dt.date,
     forecast_end: dt.date,
     forecast_interval: str,
     season_start_month: int,
     season_start_day: int,
-) -> dict:
-    """
-    Run a single model for a single forecast date.
-    Return the model posterior and the projections.
-    """
-    train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
-
-    # Make an instance of the model, fit it using training data, and make projections
-    fit_model = model_class(seed).fit(
-        train_data,
-        grouping_factors,
-        params,
-        mcmc,
-    )
-
-    # Extract the posterior distribution from the model as a data frame
-    posterior = pl.from_pandas(
-        az.from_numpyro(fit_model.mcmc).to_dataframe(
-            groups="posterior", include_coords=False
-        )
-    )
-
-    # Rename columns using the actual levels of grouping factors, not numeric codes
-    if fit_model.value_to_index is not None:
-        group_factors = list(fit_model.value_to_index.keys())
-        group_levels = [
-            k
-            for inner_dict in fit_model.value_to_index.values()
-            for k in inner_dict.keys()
-        ]
-        group_factors_dict = {
-            "[" + str(i) + "]": "_" + v.replace(" ", "_")
-            for i, v in enumerate(group_factors)
-        }
-        group_levels_dict = {
-            "[" + str(i) + "]": "_" + v.replace(" ", "_")
-            for i, v in enumerate(group_levels)
-        }
-        for k, v in group_factors_dict.items():
-            posterior = posterior.rename(
-                {
-                    col: col.replace(k, v) if "sigs" in col else col
-                    for col in posterior.columns
-                }
-            )
-        for k, v in group_levels_dict.items():
-            posterior = posterior.rename(
-                {
-                    col: col.replace(k, v) if "devs" in col else col
-                    for col in posterior.columns
-                }
-            )
-
+) -> pl.DataFrame:
+    """Given fitted model object, get forecast using predictors in test data"""
     # Get test data, if there is any, to know exact dates for projection
     test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
     if test_data.height == 0:
@@ -173,10 +147,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
     p.add_argument("--input", help="input data")
-    p.add_argument("--output_forecast", help="output parquet file for forecasts")
-    p.add_argument(
-        "--output_posterior", help="output parquet file for posterior distributions"
-    )
+    p.add_argument("--models", help="fitted models")
+    p.add_argument("--output", help="output parquet file")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
@@ -184,18 +156,7 @@ if __name__ == "__main__":
 
     input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
 
-    output = run_all_forecasts(input_data, config)
+    with open(args.models, "rb") as f:
+        models = pickle.load(f)
 
-    output["forecasts"].write_parquet(args.output_forecast)
-
-    file_name_parts = args.output_posterior.split(".")
-    for i in range(len(output["posteriors"])):
-        model_name = output["posteriors"][i]["model"][0]
-        file_name = (
-            "".join(file_name_parts[:-1])
-            + "_"
-            + model_name
-            + "."
-            + "".join(file_name_parts[-1])
-        )
-        output["posteriors"][i].write_parquet(file_name)
+    run_all_forecasts(input_data, models, config).write_parquet(args.output)
