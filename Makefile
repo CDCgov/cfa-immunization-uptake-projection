@@ -3,6 +3,8 @@ TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
 RAW_DATA = data/nis_raw.parquet
+MODEL_FITS = output/model_fits.pkl
+DIAGNOSTICS = output/
 FORECASTS = data/forecasts.parquet
 POSTERIORS = data/posteriors.parquet
 SCORES = data/scores.parquet
@@ -12,25 +14,21 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-# all: $(PROJ_PLOTS) $(SCORE_PLOTS)
-all: $(PROJ_PLOTS) $(SUMMARY_PLOTS)
-# $(PROJ_PLOTS) $(SCORE_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA) $(SCORES)
-# 	python $< \
-# 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --score=$(SCORES) \
-# 		--proj_output=$(PROJ_PLOTS) --score_output=$(SCORE_PLOTS)
+all: $(FORECASTS)
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
 		--proj_output=$(PROJ_PLOTS) --summary_output=$(SUMMARY_PLOTS)
 
-# $(SCORES): scripts/eval.py $(FORECASTS) $(CONFIG)
-# 	python $< --pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) --output=$@
+$(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
+	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) --output=$@
 
-$(FORECASTS) $(POSTERIORS): scripts/forecast.py $(RAW_DATA) $(CONFIG)
-	python $< \
-	--input=$(RAW_DATA) --config=$(CONFIG) \
-	--output_forecast=$(FORECASTS) --output_posterior=$(POSTERIORS)
+$(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
+	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_dir=$@
+
+$(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
+	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
 $(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
 	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@

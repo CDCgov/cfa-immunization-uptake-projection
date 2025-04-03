@@ -74,3 +74,10 @@ forecast_plots:
     lower: 2.5
     upper: 97.5
   n_trajectories: 20
+
+diagnostics:
+  model: HillModel
+  train_end: 2024-01-27
+  # training end date is forecast_start - interval #
+  plot: [posterior_density_plot,parameter_trace_plot,parameter_pairwise_plot]
+  table: [print_posterior_dist]
