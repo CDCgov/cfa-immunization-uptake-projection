@@ -268,7 +268,13 @@ class CumulativeUptakeData(UptakeData):
         else:
             # add arbitrary sdev #
             rollout_rows = pl.DataFrame(
-                {"time_end": rollouts, "estimate": 0.0, "sem": 0.0000005}
+                {
+                    "time_end": rollouts,
+                    "estimate": 0.0,
+                    "sem": 0.0000005,
+                    "N_vax": 0.0,
+                    "N_tot": 10000.0,
+                }
             )
 
         # add season as a column only after making rollout rows
