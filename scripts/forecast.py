@@ -41,7 +41,6 @@ def run_all_forecasts(
     model_names = [model.__class__.__name__ for model in fitted_models]
 
     all_forecast = pl.DataFrame()
-    all_posterior = []
 
     for model_name in model_names:
         model_class = getattr(iup.models, model_name)
@@ -58,14 +57,9 @@ def run_all_forecasts(
             config["data"]["rollouts"],
         )
 
-        model_posterior = pl.DataFrame()
-
         for i, train_end in enumerate(train_end_dates):
             # train end maps to forecast date on 1-on-1 base,
             # # can directly index forecast date using index of train end #
-            # print(
-            #     f"train_end: {train_end}, forecast_date: {forecast_dates[i]}, model: {model_name}"
-            # )
             forecast_date = forecast_dates[i]
 
             fitted_model_list = [
@@ -92,26 +86,15 @@ def run_all_forecasts(
                 season_start_day=config["data"]["season_start_day"],
             )
 
-            forecast = model_output["projections"]
-
             forecast = forecast.with_columns(
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
                 model=pl.lit(model_name),
             )
+
             all_forecast = pl.concat([all_forecast, forecast])
 
-            posterior = model_output["posterior"]
-            posterior = posterior.with_columns(
-                forecast_start=forecast_date,
-                forecast_end=config["forecast_timeframe"]["end"],
-                model=pl.lit(model_name),
-            )
-            model_posterior = pl.concat([model_posterior, posterior])
-
-        all_posterior.append(model_posterior)
-
-    return {"forecasts": all_forecast, "posteriors": all_posterior}
+    return all_forecast
 
 
 def run_forecast(
@@ -140,7 +123,7 @@ def run_forecast(
         season_start_day=season_start_day,
     )
 
-    return {"posterior": posterior, "projections": cumulative_projections}
+    return cumulative_projections
 
 
 if __name__ == "__main__":
