@@ -14,7 +14,7 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(PROJ_PLOTS)
+all: $(FORECASTS)
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
