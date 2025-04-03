@@ -29,16 +29,28 @@ def preprocess(
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
-            uci=pl.col("uci") - pl.col("estimate"),
-            lci=pl.col("estimate") - pl.col("lci"),
+            uwald=pl.col("uci") - pl.col("estimate"),
+            lwald=pl.col("estimate") - pl.col("lci"),
         )
-        .with_columns(sdev=pl.max_horizontal("uci", "lci") / st.norm.ppf(0.975, 0, 1))
-        .drop(["lci", "uci"])
         .with_columns(
-            sdev=pl.when(pl.col("sdev") < 0.0000005)
-            .then(0.0000005)
-            .otherwise(pl.col("sdev"))
+            sem=pl.max_horizontal("uwald", "lwald") / st.norm.ppf(0.975, 0, 1)
         )
+        .with_columns(
+            sem=pl.when(pl.col("sem") < 0.0005).then(0.0005).otherwise(pl.col("sem"))
+        )
+        .with_columns(
+            estimate=pl.when(pl.col("estimate") < 0.0005)
+            .then(0.0005)
+            .otherwise(pl.col("estimate"))
+        )
+        .with_columns(
+            N=(1 - pl.col("estimate")) * pl.col("estimate") / (pl.col("sem") ** 2)
+        )
+        .with_columns(
+            N_vax=(pl.col("estimate") * pl.col("N")).round(0),
+            N_tot=pl.col("N").round(0),
+        )
+        .drop(["lwald", "uwald", "uci", "lci", "N"])
     )
 
     if groups is not None:

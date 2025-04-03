@@ -2,6 +2,7 @@ import abc
 import datetime as dt
 from typing import List
 
+import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -630,7 +631,7 @@ class LinearIncidentUptakeModel(UptakeModel):
 
 class HillModel(UptakeModel):
     """
-    Subclass of UptakeModel for a Hill function model.
+    Subclass of UptakeModel for a mixed Hill + Linear model.
     For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
     """
 
@@ -648,30 +649,34 @@ class HillModel(UptakeModel):
     @staticmethod
     def hill(
         elapsed,
-        cum_uptake=None,
-        std_dev=None,
+        N_vax=None,
+        N_tot=None,
         groups=None,
         num_group_factors=0,
         num_group_levels=[0],
-        A_shape1=15.0,
-        A_shape2=20.0,
+        A_shape1=100.0,
+        A_shape2=180.0,
         A_sig=40.0,
-        H_shape1=25.0,
-        H_shape2=50.0,
-        H_sig=40.0,
-        n_shape=20.0,
-        n_rate=5.0,
+        H_shape1=100.0,
+        H_shape2=225.0,
+        n_shape=25.0,
+        n_rate=1.0,
+        M_shape=1.0,
+        M_rate=10.0,
+        M_sig=40.0,
+        d_shape=350.0,
+        d_rate=1.0,
     ):
         """
-        Fit a Hill model on training data.
+        Fit a mixed Hill + Linear model on training data.
 
         Parameters
         elapsed: np.array
-            column of days elapsed since the season start for each data point
-        cum_uptake: np.array | None
-            column of cumulative uptake measured at each data point
-        std_dev: np.array | None
-            column of standard deviations in cumulative uptake estimate
+            fraction of a year elapsed since the start of season at each data point
+        N_vax: np.array | None
+            number of people vaccinated at each data point
+        N_tot: np.array | None
+            number of people contacted at each data point
         groups: np.array | None
             numeric codes for groups: row = data point, col = grouping factor
         num_group_factors: Int
@@ -687,46 +692,37 @@ class HillModel(UptakeModel):
         Details
         Provides the model structure and priors for a Hill model.
         """
-        # Sample the overall average value for each Hill function parameter
+        # Sample the overall average value for each parameter
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
         H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
-        # If grouping factors are given, find the specific A and H for each datum
+        M = numpyro.sample("M", dist.Gamma(M_shape, M_rate))
+        d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
+        # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
-            # Draw a sample of the spread among levels for each grouping factor
             A_sigs = numpyro.sample(
                 "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
             )
-            H_sigs = numpyro.sample(
-                "H_sigs", dist.Exponential(H_sig), sample_shape=(num_group_factors,)
+            M_sigs = numpyro.sample(
+                "M_sigs", dist.Exponential(M_sig), sample_shape=(num_group_factors,)
             )
-            # Draw deviations from the overall average A and H for each level
-            # of each grouping factor and scale them by the characteristic spread
-            # for each grouping factor
             A_devs = numpyro.sample(
                 "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(A_sigs, np.array(num_group_levels))
-            H_devs = H_devs = numpyro.sample(
-                "H_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(H_sigs, np.array(num_group_levels))
-            # Across all data points, look up the A and H deviations due to the
-            # grouping factors. Sum across grouping factors and include the overall
-            # average A and H to get the final total A and H for each datum
+            M_devs = M_devs = numpyro.sample(
+                "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(M_sigs, np.array(num_group_levels))
             A_tot = np.sum(A_devs[groups], axis=1) + A
-            H_tot = np.sum(H_devs[groups], axis=1) + H
-            # Calculate the postulated latent true uptake given the time elapsed at
-            # each datum, accounting for the final total A and H values
-            mu = A_tot * (elapsed**n) / (H_tot**n + elapsed**n)
+            M_tot = np.sum(M_devs[groups], axis=1) + M
+            # Calculate latent true uptake at each datum
+            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
         else:
-            # Without grouping factors, use the same A and H across all data
-            mu = A * (elapsed**n) / (H**n + elapsed**n)
-        # Consider the observations to be a sample with empirically known std dev,
-        # centered on the postulated latent true uptake.
-        if std_dev is None:
-            std_dev = 0.0000005
-        numpyro.sample(
-            "obs", dist.TruncatedNormal(mu, std_dev, low=0, high=1), obs=cum_uptake
-        )
+            # Calculate latent true uptake at each datum if no grouping factors
+            mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+        # Calculate the shape parameters for the beta-binomial likelihood
+        S1 = mu * d
+        S2 = (1 - mu) * d
+        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
 
     @staticmethod
     def augment_data(
@@ -737,11 +733,11 @@ class HillModel(UptakeModel):
         rollouts: List[dt.date] | None,
     ) -> CumulativeUptakeData:
         """
-        Format preprocessed data for fitting a Hill model.
+        Format preprocessed data for fitting a mixed Hill + Linear model.
 
         Parameters:
         data: CumulativeUptakeData
-            training data for fitting a Hill model
+            training data for fitting a mixed Hill + Linear model
          season_start_month: int
             first month of the overwinter disease season
         season_start_day: int
@@ -752,7 +748,7 @@ class HillModel(UptakeModel):
             rollout dates for each season in the training data
 
         Returns:
-            Cumulative uptake data ready for fitting a Hill model.
+            Cumulative uptake data ready for fitting a mixed Hill + Linear model.
 
         Details
         The following steps are required to prepare preprocessed data
@@ -781,7 +777,7 @@ class HillModel(UptakeModel):
         mcmc: dict,
     ) -> Self:
         """
-        Fit a hill model on training data.
+        Fit a mixed Hill + Linear model on training data.
 
         Parameters
         data: CumulativeUptakeData
@@ -831,12 +827,9 @@ class HillModel(UptakeModel):
             self.value_to_index = None
 
         # Prepare the data to be fed to the model. Must be numpy arrays.
-        # Cannot have zero as a standard deviation.
         elapsed = data["elapsed"].to_numpy()
-        cum_uptake = data["estimate"].to_numpy()
-        std_dev = np.where(
-            data["sdev"].to_numpy() == 0, 0.0001, data["sdev"].to_numpy()
-        )
+        N_vax = data["N_vax"].to_numpy()
+        N_tot = data["N_tot"].to_numpy()
 
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(
@@ -849,8 +842,8 @@ class HillModel(UptakeModel):
         self.mcmc.run(
             self.rng_key,
             elapsed=elapsed,
-            cum_uptake=cum_uptake,
-            std_dev=std_dev,
+            N_vax=N_vax,
+            N_tot=N_tot,
             groups=group_codes,
             num_group_factors=self.num_group_factors,
             num_group_levels=self.num_group_levels,
@@ -859,10 +852,16 @@ class HillModel(UptakeModel):
             A_sig=params["A_sig"],
             H_shape1=params["H_shape1"],
             H_shape2=params["H_shape2"],
-            H_sig=params["H_sig"],
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
+            M_shape=params["M_shape"],
+            M_rate=params["M_rate"],
+            M_sig=params["M_sig"],
+            d_shape=params["d_shape"],
+            d_rate=params["d_rate"],
         )
+
+        print(self.mcmc.print_summary())
 
         return self
 
@@ -871,7 +870,7 @@ class HillModel(UptakeModel):
         scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
     ) -> pl.DataFrame:
         """
-        Add columns to a scaffold of dates for forecasting from a Hill model.
+        Add columns to a scaffold of dates for forecasting from a mixed Hill + Linear model.
 
         Parameters:
         scaffold: pl.DataFrame
@@ -882,17 +881,18 @@ class HillModel(UptakeModel):
             first day of the first month of the overwinter disease season
 
         Returns:
-            Scaffold with extra columns required by the Hill model.
+            Scaffold with extra columns required by the mixed Hill + Linear model.
 
         Details
         An extra column is added for the time elapsed since the season start.
-        That is all that's required to prepare the data for a Hill model.
+        Predictions are made as if 10,000 individuals are sampled.
         """
         scaffold = scaffold.with_columns(
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
-            / 365
+            / 365,
+            N_tot=pl.lit(10000),
         ).drop("estimate")
 
         return scaffold
@@ -908,7 +908,7 @@ class HillModel(UptakeModel):
         season_start_day: int,
     ) -> pl.DataFrame:
         """
-        Make projections from a fit hill model.
+        Make projections from a fit mixed Hill + Linear model.
 
         Parameters
         start_date: dt.date
@@ -965,6 +965,7 @@ class HillModel(UptakeModel):
                 predictive(
                     self.rng_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
+                    N_tot=scaffold["N_tot"].to_numpy(),
                     groups=group_codes,
                     num_group_factors=self.num_group_factors,
                     num_group_levels=self.num_group_levels,

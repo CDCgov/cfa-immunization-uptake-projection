@@ -23,9 +23,10 @@ def frame():
                 "2020-01-21",
                 "2020-01-21",
             ],
-            "estimate": [0.0, 0.0, 0.1, 0.01, 0.3, 0.03, 0.4, 0.04],
+            "N_vax": [1, 1, 100, 10, 300, 30, 400, 40],
+            "N_tot": [1000] * 8,
+            "estimate": [0.001, 0.001, 0.1, 0.01, 0.3, 0.03, 0.4, 0.04],
             "season": "2019/2020",
-            "sdev": [0.01] * 8,
         }
     ).with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
 
@@ -41,14 +42,18 @@ def params():
     """
 
     params = {
-        "A_shape1": 15.0,
-        "A_shape2": 20.0,
+        "A_shape1": 100.0,
+        "A_shape2": 140.0,
         "A_sig": 40.0,
-        "H_shape1": 25.0,
-        "H_shape2": 50.0,
-        "H_sig": 40.0,
+        "H_shape1": 100.0,
+        "H_shape2": 225.0,
         "n_shape": 20.0,
         "n_rate": 5.0,
+        "M_shape": 1.0,
+        "M_rate": 0.1,
+        "M_sig": 40,
+        "d_shape": 5.0,
+        "d_rate": 0.01,
     }
 
     return params
