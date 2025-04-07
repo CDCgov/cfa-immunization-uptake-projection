@@ -236,7 +236,6 @@ class LinearIncidentUptakeModel(UptakeModel):
             "LinearIncidentUptakeModel requires rollout dates, but none provided"
         )
 
-        data = iup.CumulativeUptakeData(data)
         data = data.insert_rollouts(
             rollouts, groups, season_start_month, season_start_day
         )
