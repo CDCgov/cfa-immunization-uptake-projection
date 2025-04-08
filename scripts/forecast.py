@@ -1,7 +1,8 @@
 import argparse
 import datetime as dt
 import pickle
-from typing import Any, List
+import re
+from typing import Any, Dict, List
 
 import numpy as np
 import polars as pl
@@ -13,71 +14,65 @@ import iup.models
 
 def run_all_forecasts(
     data: iup.UptakeData,
-    fitted_models: List[iup.models.UptakeModel],
+    fitted_models: Dict[str, iup.models.UptakeModel],
     config: dict[str, Any],
 ) -> pl.DataFrame:
-    """Run all forecasts
+    """Run all forecasts for all the fitted models across model name and forecast start.
+
+    Args:
+        data: iup.UptakeData
+            all available data including training and testing.
+        fitted_models: dict
+            a dictionary containing all fitted models, indexed by a
+            combo of model name and forecast start date.
+        config: yaml
+            config file to specify args in augment_data and run_forecast.
+
 
     Returns:
-        dictionary of two data frames: forecasts and posterior distributions,
-        both organized by model and forecast date
+        A pl.DataFrame saving predictive distribution at each time point between
+        forecast start and end, at least grouped by model name, forecast start, and forecast end.
     """
 
-    train_end_dates_list = [model.end_date[0, 0] for model in fitted_models]
-    train_end_dates = np.array(train_end_dates_list)
-    train_end_dates = np.unique(train_end_dates)
-    train_end_dates.sort()
+    key_list = [key for key in fitted_models]
+    forecast_dates_list = [
+        parse_name_and_date(str)["forecast_date"] for str in key_list
+    ]
+    forecast_dates = np.array(forecast_dates_list)
+    forecast_dates = np.unique(forecast_dates)
+    forecast_dates.sort()
 
-    if config["evaluation_timeframe"]["interval"] is not None:
-        forecast_dates = pl.date_range(
-            config["forecast_timeframe"]["start"],
-            config["forecast_timeframe"]["end"],
-            config["evaluation_timeframe"]["interval"],
-            eager=True,
-        ).to_list()
-    else:
-        forecast_dates = [config["forecast_timeframe"]["start"]]
-
-    model_names = [model.__class__.__name__ for model in fitted_models]
-
+    model_names = [parse_name_and_date(str)["model_name"] for str in key_list]
     all_forecast = pl.DataFrame()
 
     for model_name in model_names:
-        model_class = getattr(iup.models, model_name)
-
-        assert issubclass(model_class, iup.models.UptakeModel), (
-            f"{model_name} is not a valid model type!"
-        )
-
-        augmented_data = model_class.augment_data(
-            data,
-            config["data"]["season_start_month"],
-            config["data"]["season_start_day"],
-            config["data"]["groups"],
-            config["data"]["rollouts"],
-        )
-
-        for i, train_end in enumerate(train_end_dates):
-            # train end maps to forecast date on 1-on-1 base,
-            # # can directly index forecast date using index of train end #
-            forecast_date = forecast_dates[i]
-
-            fitted_model_list = [
-                model
-                for model in fitted_models
-                if model.end_date[0, 0] == train_end
-                if model.__class__.__name__ == model_name
+        for forecast_date in forecast_dates:
+            sel_key = [
+                key
+                for key in fitted_models
+                if parse_name_and_date(key)["forecast_date"] == forecast_date
+                if parse_name_and_date(key)["model_name"] == model_name
             ]
 
-            assert len(fitted_model_list) == 1, (
-                f"More than one fitted model found for {model_name} with {train_end}"
+            model = fitted_models[sel_key[0]]
+
+            model_class = getattr(iup.models, model_name)
+
+            assert issubclass(model_class, iup.models.UptakeModel), (
+                f"{model_name} is not a valid model type!"
             )
 
-            fitted_model = fitted_model_list[0]
+            augmented_data = model_class.augment_data(
+                data,
+                config["data"]["season_start_month"],
+                config["data"]["season_start_day"],
+                config["data"]["groups"],
+                config["data"]["rollouts"],
+            )
 
             forecast = run_forecast(
                 data=augmented_data,
-                fit_model=fitted_model,
+                fit_model=model,
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
                 forecast_end=config["forecast_timeframe"]["end"],
@@ -107,7 +102,29 @@ def run_forecast(
     season_start_month: int,
     season_start_day: int,
 ) -> pl.DataFrame:
-    """Given fitted model object, get forecast using predictors in test data"""
+    """
+    Given fitted model object, get forecast using predictors in test data.
+
+    Args:
+        data: iup.UptakeData
+            all available data including training and testing data.
+        grouping factors: List[str] | None
+            A list of column names to group "estimate" (dependent variable) in the data.
+        fit_model: iup.models.UptakeModel
+            A single iup.models.UptakeModel that is fitted.
+        forecast_start: dt.date
+            The first day of forecast.
+        forecast_end: dt.date
+            The last day of forecast.
+        season_start_month: int
+            The first month of an overwinter season.
+        season_start_day: int
+            The first day in the first month of an overwinter season.
+
+    Return:
+        A pl.DataFrame that records a predictive distribution at each time point
+        between forecast start and end from a fitted model.
+    """
     # Get test data, if there is any, to know exact dates for projection
     test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
     if test_data.height == 0:
@@ -124,6 +141,26 @@ def run_forecast(
     )
 
     return cumulative_projections
+
+
+def parse_name_and_date(str) -> dict[str, dt.date]:
+    """
+    Parse a string to get the model name and forecast date
+
+    Args:
+        str: A string that has a pattern of "'Model name'_forecast_starts_'Forecast date'"
+
+    Return:
+        A dictionary of model name and forecast date.
+    """
+    """Given the string that is in a format of 'Model name'_forecasts_starts_'Forecast date',
+    parse Model name and Forecast date. Return a two-element tuple."""
+    pattern = re.compile("(.+)_forecast_starts_(.+)")
+    result = pattern.fullmatch(str).groups()
+    model_name = result[0]
+    date = dt.datetime.strptime(result[1], "%Y-%m-%d").date()
+
+    return {"model_name": model_name, "forecast_date": date}
 
 
 if __name__ == "__main__":

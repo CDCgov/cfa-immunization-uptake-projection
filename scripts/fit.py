@@ -1,8 +1,7 @@
 import argparse
 import datetime as dt
 import pickle as pkl
-from copy import deepcopy
-from typing import Any, List, Type
+from typing import Any, Dict, List, Type
 
 import polars as pl
 import yaml
@@ -11,7 +10,7 @@ import iup
 import iup.models
 
 
-def fit_all_models(data, config) -> List[iup.models.UptakeModel]:
+def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
     """Run all forecasts
 
     Returns:
@@ -28,7 +27,7 @@ def fit_all_models(data, config) -> List[iup.models.UptakeModel]:
     else:
         forecast_dates = [config["forecast_timeframe"]["start"]]
 
-    all_models = []
+    all_models = {}
 
     for config_model in config["models"]:
         model_name = config_model["name"]
@@ -57,7 +56,8 @@ def fit_all_models(data, config) -> List[iup.models.UptakeModel]:
                 forecast_start=forecast_date,
             )
 
-            all_models.append(deepcopy(fitted_model))
+            label = f"{model_name}_forecast_starts_{forecast_date}"
+            all_models[label] = fitted_model
 
     return all_models
 

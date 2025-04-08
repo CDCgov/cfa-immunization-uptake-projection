@@ -337,7 +337,6 @@ class LinearIncidentUptakeModel(UptakeModel):
         )
 
         self.start = self.extract_starting_conditions(data, groups)
-        self.end_date = data.sort("time_end").select(pl.last("time_end"))
 
         data = IncidentUptakeData(
             data.trim_outlier_intervals(groups).with_columns(
@@ -812,7 +811,6 @@ class HillModel(UptakeModel):
         Finally, the model is fit using numpyro.
         """
         self.group_combos = extract_group_combos(data, groups)
-        self.end_date = data.sort("time_end").select(pl.last("time_end"))
 
         # Tranform the levels of the grouping factors into numeric codes
         if groups is not None:
