@@ -1,7 +1,6 @@
 import argparse
 import datetime as dt
 import pickle
-import re
 from typing import Any, Dict, List
 
 import numpy as np
@@ -10,6 +9,7 @@ import yaml
 
 import iup
 import iup.models
+from iup.utils import parse_name_and_date
 
 
 def run_all_forecasts(
@@ -141,26 +141,6 @@ def run_forecast(
     )
 
     return cumulative_projections
-
-
-def parse_name_and_date(str) -> dict[str, dt.date]:
-    """
-    Parse a string to get the model name and forecast date
-
-    Args:
-        str: A string that has a pattern of "'Model name'_forecast_starts_'Forecast date'"
-
-    Return:
-        A dictionary of model name and forecast date.
-    """
-    """Given the string that is in a format of 'Model name'_forecasts_starts_'Forecast date',
-    parse Model name and Forecast date. Return a two-element tuple."""
-    pattern = re.compile("(.+)_forecast_starts_(.+)")
-    result = pattern.fullmatch(str).groups()
-    model_name = result[0]
-    date = dt.datetime.strptime(result[1], "%Y-%m-%d").date()
-
-    return {"model_name": model_name, "forecast_date": date}
 
 
 if __name__ == "__main__":
