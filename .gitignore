@@ -46,6 +46,9 @@ __pycache__/
 # C extensions
 *.so
 
+# MISE
+mise.toml
+
 # Distribution / packaging
 .Python
 build/
