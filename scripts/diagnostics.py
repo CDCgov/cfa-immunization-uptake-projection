@@ -51,7 +51,11 @@ def diagnostic_table(
 
             for table_name in diagnose_table_names:
                 table_func = getattr(iup.diagnostics, table_name)
-                output = pl.from_pandas(table_func(idata))
+                if table_name == "print_posterior_dist":
+                    output = table_func(model, idata)
+                else:
+                    output = pl.from_pandas(table_func(idata))
+
                 output.write_parquet(f"{output_dir}/{model_key}_{table_name}.parquet")
 
 
