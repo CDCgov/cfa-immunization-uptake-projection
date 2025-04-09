@@ -47,6 +47,20 @@ def run_all_forecasts(
     all_forecast = pl.DataFrame()
 
     for model_name in model_names:
+        model_class = getattr(iup.models, model_name)
+
+        assert issubclass(model_class, iup.models.UptakeModel), (
+            f"{model_name} is not a valid model type!"
+        )
+
+        augmented_data = model_class.augment_data(
+            data,
+            config["data"]["season_start_month"],
+            config["data"]["season_start_day"],
+            config["data"]["groups"],
+            config["data"]["rollouts"],
+        )
+
         for forecast_date in forecast_dates:
             sel_key = [
                 key
@@ -56,20 +70,6 @@ def run_all_forecasts(
             ]
 
             model = fitted_models[sel_key[0]]
-
-            model_class = getattr(iup.models, model_name)
-
-            assert issubclass(model_class, iup.models.UptakeModel), (
-                f"{model_name} is not a valid model type!"
-            )
-
-            augmented_data = model_class.augment_data(
-                data,
-                config["data"]["season_start_month"],
-                config["data"]["season_start_day"],
-                config["data"]["groups"],
-                config["data"]["rollouts"],
-            )
 
             forecast = run_forecast(
                 data=augmented_data,
