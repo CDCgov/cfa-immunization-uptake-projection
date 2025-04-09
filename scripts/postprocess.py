@@ -51,6 +51,9 @@ def plot_individual_projections(
         pl.col("season").is_in(pred["season"].unique())
     )
 
+    # drop sdev column in plot_obs #
+    plot_obs = plot_obs.drop("sdev")
+
     plot_pred = pred.select(plot_obs.columns)
 
     obs_chart = (
@@ -116,6 +119,8 @@ def plot_summary(
     plot_obs = obs.join(models_forecasts, how="cross").filter(
         pl.col("season").is_in(pred["season"].unique())
     )
+
+    plot_obs = plot_obs.drop("sdev")
 
     plot_pred = (
         pred.select(plot_obs.columns)
@@ -235,6 +240,3 @@ if __name__ == "__main__":
         config["forecast_plots"]["interval"]["lower"],
         config["forecast_plots"]["interval"]["upper"],
     ).save(args.summary_output)
-
-    # score = pl.read_parquet(args.score)
-    # plot_score(score).save(args.score_output)

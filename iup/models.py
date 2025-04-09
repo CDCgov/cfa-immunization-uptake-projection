@@ -995,9 +995,9 @@ class HillModel(UptakeModel):
             )
             .with_columns(
                 sample_id=pl.col("sample_id"),
-                estimate=pl.col("estimate").cast(pl.Float64),
+                estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .drop("elapsed")
+            .drop(["elapsed", "N_tot"])
         )
 
         return SampleForecast(pred)
