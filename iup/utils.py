@@ -272,8 +272,6 @@ def parse_name_and_date(str) -> dict[str, dt.date]:
     Return:
         A dictionary of model name and forecast date.
     """
-    """Given the string that is in a format of 'Model name'_forecasts_starts_'Forecast date',
-    parse Model name and Forecast date. Return a two-element tuple."""
     pattern = re.compile("(.+)_forecast_starts_(.+)")
     result = pattern.fullmatch(str).groups()
     model_name = result[0]
