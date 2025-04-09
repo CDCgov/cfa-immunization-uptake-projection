@@ -1,5 +1,4 @@
 import arviz as az
-import pandas as pd
 import polars as pl
 
 import iup.models
@@ -7,10 +6,6 @@ import iup.models
 
 def posterior_density_plot(idata: az.InferenceData) -> dict:
     return az.plot_posterior(idata)
-
-
-def posterior_histogram_plot(idata: az.InferenceData) -> dict:
-    return az.plot_dist(idata)
 
 
 def parameter_trace_plot(idata: az.InferenceData) -> dict:
@@ -59,5 +54,12 @@ def print_posterior_dist(
     return posterior
 
 
-def print_model_summary(idata: az.InferenceData) -> pd.DataFrame:
-    return az.summary(idata)
+def print_model_summary(idata: az.InferenceData) -> pl.DataFrame:
+    summary_pd = az.summary(idata)
+    print(summary_pd.shape)
+    summary = pl.DataFrame(summary_pd)
+    summary = summary.with_columns(params=pl.Series(summary_pd.index)).select(
+        ["params"] + [col for col in summary.columns if col != "params"]
+    )
+    print(summary.shape)
+    return summary

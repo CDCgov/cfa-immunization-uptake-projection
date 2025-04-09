@@ -54,7 +54,7 @@ def diagnostic_table(
                 if table_name == "print_posterior_dist":
                     output = table_func(model, idata)
                 else:
-                    output = pl.from_pandas(table_func(idata))
+                    output = table_func(idata)
 
                 output.write_parquet(f"{output_dir}/{model_key}_{table_name}.parquet")
 
