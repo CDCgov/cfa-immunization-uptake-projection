@@ -66,11 +66,15 @@ def select_model_to_diagnose(
     """Select the model to diagnose based on the model name and the training end date"""
     key_list = [key for key in models]
 
+    assert len(config["diagnostics"]["forecast_date"]) <= 2, (
+        "forecast_date should be None or a list of length 1 or 2"
+    )
+
     if config["diagnostics"]["forecast_date"] is None:
         forecast_dates = pl.date_range(
             config["forecast_timeframe"]["start"],
             config["forecast_timeframe"]["end"],
-            config["forecast_timeframe"]["interval"],
+            config["evaluation_timeframe"]["interval"],
             eager=True,
         )
     elif len(config["diagnostics"]["forecast_date"]) == 1:
@@ -79,7 +83,7 @@ def select_model_to_diagnose(
         forecast_dates = pl.date_range(
             config["diagnostics"]["forecast_date"][0],
             config["diagnostics"]["forecast_date"][1],
-            interval=config["forecast_timeframe"]["interval"],
+            interval=config["evaluation_timeframe"]["interval"],
             eager=True,
         )
 
