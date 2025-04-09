@@ -47,11 +47,11 @@ def run_all_forecasts(
     all_forecast = pl.DataFrame()
 
     for model_name in model_names:
-        model_class = getattr(iup.models, model_name)
-
-        assert issubclass(model_class, iup.models.UptakeModel), (
+        assert hasattr(iup.models.UptakeModel, model_name), (
             f"{model_name} is not a valid model type!"
         )
+
+        model_class = getattr(iup.models, model_name)
 
         augmented_data = model_class.augment_data(
             data,
