@@ -77,11 +77,11 @@ forecast_plots:
 
 diagnostics:
   model: [HillModel]
-  forecast_date: [2024-02-03] 
-  # If blank: use start and end in "forecast_timeframe" and interval 
-  # in "evaluation_timeframe". 
+  forecast_date: [2024-02-03]
+  # If blank: use start and end in "forecast_timeframe" and interval
+  # in "evaluation_timeframe".
   # If one element: use that date only.
-  # If two elements: use the first date as start and 
+  # If two elements: use the first date as start and
   # the second date as end, separated by ["evaluation_timeframe"]["interval"].
   plot: [posterior_density_plot]
   table: [print_posterior_dist]
