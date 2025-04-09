@@ -34,15 +34,16 @@ def run_all_forecasts(
         forecast start and end, at least grouped by model name, forecast start, and forecast end.
     """
 
-    key_list = [key for key in fitted_models]
     forecast_dates_list = [
-        parse_name_and_date(str)["forecast_date"] for str in key_list
+        parse_name_and_date(str)["forecast_date"] for str in fitted_models.keys()
     ]
     forecast_dates = np.array(forecast_dates_list)
     forecast_dates = np.unique(forecast_dates)
     forecast_dates.sort()
 
-    model_names = [parse_name_and_date(str)["model_name"] for str in key_list]
+    model_names = [
+        parse_name_and_date(str)["model_name"] for str in fitted_models.keys()
+    ]
     all_forecast = pl.DataFrame()
 
     for model_name in model_names:
