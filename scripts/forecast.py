@@ -47,7 +47,7 @@ def run_all_forecasts(
     all_forecast = pl.DataFrame()
 
     for model_name in model_names:
-        assert hasattr(iup.models.UptakeModel, model_name), (
+        assert hasattr(iup.models, model_name), (
             f"{model_name} is not a valid model type!"
         )
 
@@ -131,7 +131,7 @@ def run_forecast(
     if test_data.height == 0:
         test_dates = None
     else:
-        test_dates = test_data.select(pl.col("time_end"))
+        test_dates = test_data.select(["time_end", "season"])
 
     cumulative_projections = fit_model.predict(
         start_date=forecast_start,
