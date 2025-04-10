@@ -1,6 +1,6 @@
 import argparse
 import pickle
-from typing import Any, Dict, List
+from typing import Any, Dict  # , List
 
 import arviz as az
 import polars as pl
@@ -12,27 +12,24 @@ import iup.models
 from iup.utils import parse_name_and_date
 
 
-#### Given fit_model.mcmc, return diagnostic plot and summary ###
 def diagnostic_plot(
     models: Dict[str, iup.models.UptakeModel], config: Dict[str, Any], output_dir
 ):
     """select the fitted model using model name and training end date
     and generate selected diagnostic plots"""
 
-    sel_model_dicts = select_model_to_diagnose(models, config)
+    sel_model_dict = select_model_to_diagnose(models, config)
 
     diagnose_plot_names = config["diagnostics"]["plot"]
 
-    for model_dict in sel_model_dicts:
-        for key, model in model_dict.items():
-            model_key = key
-            idata = az.from_numpyro(model.mcmc)
+    for key, model in sel_model_dict.items():
+        idata = az.from_numpyro(model.mcmc)
 
-            for plot_name in diagnose_plot_names:
-                plot_func = getattr(iup.diagnostics, plot_name)
-                axes = plot_func(idata)
-                fig = axes.ravel()[0].figure
-                fig.savefig(f"{output_dir}/{model_key}_{plot_name}.png")
+        for plot_name in diagnose_plot_names:
+            plot_func = getattr(iup.diagnostics, plot_name)
+            axes = plot_func(idata)
+            fig = axes.ravel()[0].figure
+            fig.savefig(f"{output_dir}/{key}_{plot_name}.png")
 
 
 def diagnostic_table(
@@ -40,31 +37,26 @@ def diagnostic_table(
 ):
     """select the fitted model using model name and training end date
     and generate selected diagnostics: summary/posterior as parquet"""
-    sel_model_dicts = select_model_to_diagnose(models, config)
+
+    sel_model_dict = select_model_to_diagnose(models, config)
 
     diagnose_table_names = config["diagnostics"]["table"]
 
-    for model_dict in sel_model_dicts:
-        for key, model in model_dict.items():
-            model_key = key
-            idata = az.from_numpyro(model.mcmc)
+    for key, model in sel_model_dict.items():
+        idata = az.from_numpyro(model.mcmc)
 
-            for table_name in diagnose_table_names:
-                table_func = getattr(iup.diagnostics, table_name)
-                if table_name == "print_posterior_dist":
-                    output = table_func(model, idata)
-                else:
-                    output = table_func(idata)
+        for table_name in diagnose_table_names:
+            table_func = getattr(iup.diagnostics, table_name)
+            if table_name == "print_posterior_dist":
+                output = table_func(model, idata)
+            else:
+                output = table_func(idata)
 
-                output.write_parquet(f"{output_dir}/{model_key}_{table_name}.parquet")
+            output.write_parquet(f"{output_dir}/{key}_{table_name}.parquet")
 
 
-## select the model to diagnose ##
-def select_model_to_diagnose(
-    models: Dict[str, iup.models.UptakeModel], config
-) -> List[dict]:
+def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) -> dict:
     """Select the model to diagnose based on the model name and the training end date"""
-    key_list = [key for key in models]
 
     assert len(config["diagnostics"]["forecast_date"]) <= 2, (
         "forecast_date should be None or a list of length 1 or 2"
@@ -89,14 +81,12 @@ def select_model_to_diagnose(
 
     sel_keys = [
         key
-        for key in key_list
+        for key in models.keys()
         if parse_name_and_date(key)["model_name"] in config["diagnostics"]["model"]
         if parse_name_and_date(key)["forecast_date"] in forecast_dates
     ]
 
-    sel_models = [{key: models[key]} for key in sel_keys]
-
-    return sel_models
+    return {key: models[key] for key in sel_keys}
 
 
 if __name__ == "__main__":
