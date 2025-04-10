@@ -68,7 +68,7 @@ class UptakeModel(abc.ABC):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        test_data: pl.DataFrame | None,
+        test_dates: pl.DataFrame | None,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
