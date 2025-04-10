@@ -129,13 +129,15 @@ def run_forecast(
     # Get test data, if there is any, to know exact dates for projection
     test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
     if test_data.height == 0:
-        test_data = None
+        test_dates = None
+    else:
+        test_dates = test_data.select(pl.col("time_end"))
 
     cumulative_projections = fit_model.predict(
         start_date=forecast_start,
         end_date=forecast_end,
         interval=forecast_interval,
-        test_data=test_data,
+        test_dates=test_dates,
         groups=grouping_factors,
         season_start_month=season_start_month,
         season_start_day=season_start_day,

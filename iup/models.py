@@ -516,7 +516,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        test_data: pl.DataFrame | None,
+        test_dates: pl.DataFrame | None,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -532,7 +532,7 @@ class LinearIncidentUptakeModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
-        test_data: pl.DataFrame | None
+        test_dates: pl.DataFrame | None
             test data, if evaluation is being done, to provide exact dates
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
@@ -561,7 +561,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             start_date,
             end_date,
             interval,
-            test_data,
+            test_dates,
             self.group_combos,
             season_start_month,
             season_start_day,
@@ -902,7 +902,7 @@ class HillModel(UptakeModel):
         start_date: dt.date,
         end_date: dt.date,
         interval: str,
-        test_data: pl.DataFrame | None,
+        test_dates: pl.DataFrame | None,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -918,7 +918,7 @@ class HillModel(UptakeModel):
         interval: str
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
-        test_data: pl.DataFrame | None
+        test_dates: pl.DataFrame | None
             test data, if evaluation is being done, to provide exact dates
         groups: (str,) | None
             name(s) of the columns for the grouping factors
@@ -941,7 +941,7 @@ class HillModel(UptakeModel):
             start_date,
             end_date,
             interval,
-            test_data,
+            test_dates,
             self.group_combos,
             season_start_month,
             season_start_day,
@@ -1032,7 +1032,7 @@ def build_scaffold(
     start_date: dt.date,
     end_date: dt.date,
     interval: str,
-    test_data: pl.DataFrame | None,
+    test_dates: pl.DataFrame | None,
     group_combos: pl.DataFrame | None,
     season_start_month: int,
     season_start_day: int,
@@ -1048,7 +1048,7 @@ def build_scaffold(
     interval: str
         the time interval between projection dates,
         following timedelta convention (e.g. '7d' = seven days)
-    test_data: pl.DataFrame | None
+    test_dates pl.DataFrame | None
         test data, if evaluation is being done, to provide exact dates
     group_combos: pl.DataFrame | None
         all unique combinations of grouping factors in the data
@@ -1067,9 +1067,9 @@ def build_scaffold(
     """
     # If there is test data such that evaluation will be performed,
     # use exactly the dates that are in the test data
-    if test_data is not None:
+    if test_dates is not None:
         scaffold = (
-            test_data.filter((pl.col("time_end").is_between(start_date, end_date)))
+            test_dates.filter((pl.col("time_end").is_between(start_date, end_date)))
             .select(["time_end", "season"])
             .with_columns(estimate=pl.lit(0.0))
             .unique()
