@@ -1,7 +1,6 @@
 import argparse
-import datetime as dt
 import pickle
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import numpy as np
 import polars as pl
@@ -71,13 +70,20 @@ def run_all_forecasts(
 
             model = fitted_models[sel_key[0]]
 
-            forecast = run_forecast(
-                data=augmented_data,
-                fit_model=model,
-                grouping_factors=config["data"]["groups"],
-                forecast_start=forecast_date,
-                forecast_end=config["forecast_timeframe"]["end"],
-                forecast_interval=config["forecast_timeframe"]["interval"],
+            test_data = iup.UptakeData.split_train_test(
+                augmented_data, forecast_date, "test"
+            )
+            if test_data.height == 0:
+                test_dates = None
+            else:
+                test_dates = test_data.select(["time_end", "season"])
+
+            forecast = model.predict(
+                start_date=forecast_date,
+                end_date=config["forecast_timeframe"]["end"],
+                interval=config["forecast_timeframe"]["interval"],
+                test_dates=test_dates,
+                groups=config["data"]["groups"],
                 season_start_month=config["data"]["season_start_month"],
                 season_start_day=config["data"]["season_start_day"],
             )
@@ -91,59 +97,6 @@ def run_all_forecasts(
             all_forecast = pl.concat([all_forecast, forecast])
 
     return all_forecast
-
-
-def run_forecast(
-    data: iup.UptakeData,
-    grouping_factors: List[str] | None,
-    fit_model: iup.models.UptakeModel,
-    forecast_start: dt.date,
-    forecast_end: dt.date,
-    forecast_interval: str,
-    season_start_month: int,
-    season_start_day: int,
-) -> pl.DataFrame:
-    """
-    Given fitted model object, get forecast using predictors in test data.
-
-    Args:
-        data: iup.UptakeData
-            all available data including training and testing data.
-        grouping factors: List[str] | None
-            A list of column names to group "estimate" (dependent variable) in the data.
-        fit_model: iup.models.UptakeModel
-            A single iup.models.UptakeModel that is fitted.
-        forecast_start: dt.date
-            The first day of forecast.
-        forecast_end: dt.date
-            The last day of forecast.
-        season_start_month: int
-            The first month of an overwinter season.
-        season_start_day: int
-            The first day in the first month of an overwinter season.
-
-    Return:
-        A pl.DataFrame that records a predictive distribution at each time point
-        between forecast start and end from a fitted model.
-    """
-    # Get test data, if there is any, to know exact dates for projection
-    test_data = iup.UptakeData.split_train_test(data, forecast_start, "test")
-    if test_data.height == 0:
-        test_dates = None
-    else:
-        test_dates = test_data.select(["time_end", "season"])
-
-    cumulative_projections = fit_model.predict(
-        start_date=forecast_start,
-        end_date=forecast_end,
-        interval=forecast_interval,
-        test_dates=test_dates,
-        groups=grouping_factors,
-        season_start_month=season_start_month,
-        season_start_day=season_start_day,
-    )
-
-    return cumulative_projections
 
 
 if __name__ == "__main__":
