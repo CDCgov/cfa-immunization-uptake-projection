@@ -1,6 +1,6 @@
 import argparse
 import pickle
-from typing import Any, Dict  # , List
+from typing import Any, Dict
 
 import arviz as az
 import polars as pl
