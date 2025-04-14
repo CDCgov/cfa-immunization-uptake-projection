@@ -51,9 +51,7 @@ def run_all_forecasts(
             config["data"]["rollouts"],
         )
 
-        test_data = iup.UptakeData.split_train_test(
-            augmented_data, forecast_date, "test"
-        )
+        _, test_data = iup.UptakeData.split_train_test(augmented_data, forecast_date)
         if test_data.height == 0:
             test_dates = None
         else:
