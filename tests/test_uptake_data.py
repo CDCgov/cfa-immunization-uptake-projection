@@ -39,15 +39,15 @@ def test_split_train_test(frame):
     Return the data in two halves
     """
     frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
-    start_date = dt.date(2020, 6, 1)
+    split_date = dt.date(2020, 6, 1)
 
     output = iup.UptakeData.split_train_test(
-        iup.CumulativeUptakeData(pl.concat([frame, frame2])), start_date
+        iup.CumulativeUptakeData(pl.concat([frame, frame2])), split_date
     )
 
     assert output[0].equals(iup.CumulativeUptakeData(frame))
 
-    assert output[1].equals(iup.CumulativeUptakeData(pl.concat([frame, frame2])))
+    assert output[1].equals(iup.CumulativeUptakeData(frame2))
 
 
 def test_to_cumulative_handles_no_last(frame):
