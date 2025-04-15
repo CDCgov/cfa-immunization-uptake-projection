@@ -51,11 +51,6 @@ def plot_individual_projections(
         pl.col("season").is_in(pred["season"].unique())
     )
 
-    # drop sdev column in plot_obs #
-    plot_obs = plot_obs.drop("sdev")
-
-    plot_pred = pred.select(plot_obs.columns)
-
     obs_chart = (
         alt.Chart(plot_obs)
         .mark_point(filled=True, color="black")
@@ -83,7 +78,7 @@ def plot_individual_projections(
         )
     )
 
-    return alt.layer(pred_chart, obs_chart, data=plot_pred).facet(
+    return alt.layer(pred_chart, obs_chart, data=pred).facet(
         column="model", row="forecast_start"
     )
 
@@ -120,20 +115,14 @@ def plot_summary(
         pl.col("season").is_in(pred["season"].unique())
     )
 
-    plot_obs = plot_obs.drop("sdev")
-
-    plot_pred = (
-        pred.select(plot_obs.columns)
-        .with_columns(
-            lower=pl.col("estimate")
-            .quantile(lci / 100)
-            .over(["model", "forecast_start", "time_end", "season", groups]),
-            upper=pl.col("estimate")
-            .quantile(uci / 100)
-            .over(["model", "forecast_start", "time_end", "season", groups]),
-        )
-        .sort("time_end")
-    )
+    plot_pred = pred.with_columns(
+        lower=pl.col("estimate")
+        .quantile(lci / 100)
+        .over(["model", "forecast_start", "time_end", "season", groups]),
+        upper=pl.col("estimate")
+        .quantile(uci / 100)
+        .over(["model", "forecast_start", "time_end", "season", groups]),
+    ).sort("time_end")
 
     obs_chart = (
         alt.Chart(plot_obs)
@@ -233,6 +222,7 @@ if __name__ == "__main__":
     plot_individual_projections(
         data, pred, config["forecast_plots"]["n_trajectories"]
     ).save(args.proj_output)
+
     plot_summary(
         data,
         pred,
