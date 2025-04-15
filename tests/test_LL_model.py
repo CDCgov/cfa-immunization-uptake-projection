@@ -73,7 +73,7 @@ def test_augment_data(frame):
     """
     Add a column for time elapsed since season start
     """
-    output = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
+    output = iup.models.LLModel.augment_data(frame, 9, 1)
 
     assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
         121.0,
@@ -94,8 +94,8 @@ def test_fit_handles_no_groups(frame, params, mcmc_params):
     frame = iup.CumulativeUptakeData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
-    data = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
-    iup.models.HillModel(0).fit(data, None, params, mcmc_params)
+    data = iup.models.LLModel.augment_data(frame, 9, 1)
+    iup.models.LLModel(0).fit(data, None, params, mcmc_params)
 
 
 def test_fit_handles_groups(frame, params, mcmc_params):
@@ -105,8 +105,8 @@ def test_fit_handles_groups(frame, params, mcmc_params):
     frame = iup.CumulativeUptakeData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
-    data = iup.models.HillModel.augment_data(frame, 9, 1, None, None)
-    model = iup.models.HillModel(0).fit(data, ["season"], params, mcmc_params)
+    data = iup.models.LLModel.augment_data(frame, 9, 1)
+    model = iup.models.LLModel(0).fit(data, ["season"], params, mcmc_params)
 
     dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
 
@@ -117,7 +117,7 @@ def test_augment_scaffold(frame):
     """
     Add elapsed an elapsed column to a scaffold.
     """
-    output = iup.models.HillModel.augment_scaffold(frame, 9, 1)
+    output = iup.models.LLModel.augment_scaffold(frame, 9, 1)
 
     assert output.shape[1] == frame.shape[1]
     assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [

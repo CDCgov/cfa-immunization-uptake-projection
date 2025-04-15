@@ -47,8 +47,6 @@ def run_all_forecasts(
             data,
             config["data"]["season_start_month"],
             config["data"]["season_start_day"],
-            config["data"]["groups"],
-            config["data"]["rollouts"],
         )
 
         _, test_data = iup.UptakeData.split_train_test(augmented_data, forecast_date)
