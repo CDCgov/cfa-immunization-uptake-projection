@@ -1070,7 +1070,6 @@ def build_scaffold(
     if test_dates is not None:
         scaffold = (
             test_dates.filter((pl.col("time_end").is_between(start_date, end_date)))
-            .select(["time_end", "season"])
             .with_columns(estimate=pl.lit(0.0))
             .unique()
         )
