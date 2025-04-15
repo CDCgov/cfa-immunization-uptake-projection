@@ -533,7 +533,7 @@ class LinearIncidentUptakeModel(UptakeModel):
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
         test_dates: pl.DataFrame | None
-            test data, if evaluation is being done, to provide exact dates
+            exact target dates to use, when test data exists
         group_cols: (str,) | None
             name(s) of the columns for the grouping factors
         season_start_month: int
@@ -919,7 +919,7 @@ class HillModel(UptakeModel):
             the time interval between projection dates,
             following timedelta convention (e.g. '7d' = seven days)
         test_dates: pl.DataFrame | None
-            test data, if evaluation is being done, to provide exact dates
+            exact target dates to use, when test data exists
         groups: (str,) | None
             name(s) of the columns for the grouping factors
         season_start_month: int
@@ -1049,7 +1049,7 @@ def build_scaffold(
         the time interval between projection dates,
         following timedelta convention (e.g. '7d' = seven days)
     test_dates pl.DataFrame | None
-        test data, if evaluation is being done, to provide exact dates
+        exact target dates to use, when test data exists
     group_combos: pl.DataFrame | None
         all unique combinations of grouping factors in the data
     season_start_month: int
