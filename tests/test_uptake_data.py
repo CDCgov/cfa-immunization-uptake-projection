@@ -34,32 +34,20 @@ def frame() -> iup.UptakeData:
     return iup.UptakeData(frame)
 
 
-def test_split_train_test_handles_train(frame):
+def test_split_train_test(frame):
     """
-    Return the training half of a data set.
-    """
-    frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
-    start_date = dt.date(2020, 6, 1)
-
-    output = iup.UptakeData.split_train_test(
-        iup.CumulativeUptakeData(pl.concat([frame, frame2])), start_date, "train"
-    )
-
-    assert output.equals(iup.CumulativeUptakeData(frame))
-
-
-def test_split_train_test_handles_test(frame):
-    """
-    Return the testing half of a data set.
+    Return the data in two halves
     """
     frame2 = frame.with_columns(time_end=pl.col("time_end") + pl.duration(days=365))
-    start_date = dt.date(2020, 6, 1)
+    split_date = dt.date(2020, 6, 1)
 
     output = iup.UptakeData.split_train_test(
-        iup.CumulativeUptakeData(pl.concat([frame, frame2])), start_date, "test"
+        iup.CumulativeUptakeData(pl.concat([frame, frame2])), split_date
     )
 
-    assert output.equals(frame2)
+    assert output[0].equals(iup.CumulativeUptakeData(frame))
+
+    assert output[1].equals(iup.CumulativeUptakeData(frame2))
 
 
 def test_to_cumulative_handles_no_last(frame):

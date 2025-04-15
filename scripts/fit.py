@@ -74,7 +74,7 @@ def fit_model(
     """fit model using training data, return fitted model object"""
 
     """Run a single model for a single forecast date"""
-    train_data = iup.UptakeData.split_train_test(data, forecast_start, "train")
+    train_data, _ = iup.UptakeData.split_train_test(data, forecast_start)
 
     # Make an instance of the model, fit it using training data, and make projections
     fit_model = model_class(seed).fit(

@@ -49,36 +49,28 @@ class UptakeData(Data):
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
     @classmethod
-    def split_train_test(
-        cls, uptake_data: "UptakeData", start_date: dt.date, side: str
-    ) -> "UptakeData":
+    def split_train_test(cls, uptake_data: "UptakeData", split_date: dt.date) -> tuple:
         """
         Subset a training or test set from data.
 
         Parameters
         uptake_data: UptakeData
             cumulative or incident uptake data
-        start_date: dt.date
-            first date for which forecasts should be made
-        side: str
-            whether the "train" or "test" portion of the data is desired
+        split_date: dt.date
+            date at which to split data
 
         Returns
-        pl.DataFrame
-            training or test portion of the cumulative or uptake data
+        pl.DataFrames
+            training and test portions of the cumulative or uptake data
 
         Details
         Training data are before the start date; test data are on or after.
         Infers what type of UptakeData to return from what type was given.
         """
-        if side == "train":
-            out = uptake_data.sort("time_end").filter(pl.col("time_end") < start_date)
-        elif side == "test":
-            out = uptake_data.sort("time_end").filter(pl.col("time_end") >= start_date)
-        else:
-            raise RuntimeError(f"Unrecognized side '{side}'")
+        train = uptake_data.sort("time_end").filter(pl.col("time_end") < split_date)
+        test = uptake_data.sort("time_end").filter(pl.col("time_end") >= split_date)
 
-        return type(uptake_data)(out)
+        return type(uptake_data)(train), type(uptake_data)(test)
 
 
 class IncidentUptakeData(UptakeData):
