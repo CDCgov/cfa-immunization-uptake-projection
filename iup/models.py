@@ -77,9 +77,9 @@ class UptakeModel(abc.ABC):
         pass
 
 
-class LLModel(UptakeModel):
+class LPLModel(UptakeModel):
     """
-    Subclass of UptakeModel for a mixed Logistic + Linear model.
+    Subclass of UptakeModel for a mixed Logistic Plus Linear model.
     For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
     """
 
@@ -92,10 +92,10 @@ class LLModel(UptakeModel):
             The random seed for stochastic elements of the model.
         """
         self.rng_key = random.PRNGKey(seed)
-        self.model = LLModel.logistic_linear
+        self.model = LPLModel.logistic_plus_linear
 
     @staticmethod
-    def logistic_linear(
+    def logistic_plus_linear(
         elapsed,
         N_vax=None,
         N_tot=None,
@@ -116,7 +116,7 @@ class LLModel(UptakeModel):
         d_rate=1.0,
     ):
         """
-        Fit a mixed Hill + Linear model on training data.
+        Fit a mixed Logistic Plus Linear model on training data.
 
         Parameters
         elapsed: np.array
@@ -138,7 +138,7 @@ class LLModel(UptakeModel):
         Nothing
 
         Details
-        Provides the model structure and priors for a Hill model.
+        Provides the model structure and priors for a Logistic Plus Linear model.
         """
         # Sample the overall average value for each parameter
         A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
@@ -179,23 +179,23 @@ class LLModel(UptakeModel):
         season_start_day: int,
     ) -> CumulativeUptakeData:
         """
-        Format preprocessed data for fitting a mixed Hill + Linear model.
+        Format preprocessed data for fitting a Logistic Plus Linear model.
 
         Parameters:
         data: CumulativeUptakeData
-            training data for fitting a mixed Hill + Linear model
+            training data for fitting a Logistic Plus Linear model
          season_start_month: int
             first month of the overwinter disease season
         season_start_day: int
             first day of the first month of the overwinter disease season
 
         Returns:
-            Cumulative uptake data ready for fitting a mixed Hill + Linear model.
+            Cumulative uptake data ready for fitting a Logistic Plus Linear model.
 
         Details
         The following steps are required to prepare preprocessed data
         for fitting a linear incident uptake model:
-        - Add an extra columns for time elapsed since rollout, in days
+        - Add an extra columns for time elapsed since start-of-season
         - Rescale this time elapsed to a proportion of the year
         """
         data = CumulativeUptakeData(
@@ -219,7 +219,7 @@ class LLModel(UptakeModel):
         mcmc: dict,
     ) -> Self:
         """
-        Fit a mixed Hill + Linear model on training data.
+        Fit a mixed Logistic Plus Linear model on training data.
 
         Parameters
         data: CumulativeUptakeData
@@ -232,25 +232,14 @@ class LLModel(UptakeModel):
             control parameters for mcmc fitting
 
         Returns
-        HillModel
+        LPLModel
             model object with grouping factor combinaions
             and the model fit all stored as attributes
 
         Details
-        If season is provided as a grouping factor for the training data,
-        a hierarchical model will be built with season-specific parameters
-        for maximum uptake and half-maximal time, drawn from a shared distribution.
-        Season is recoded numerically in this case, and the code for the last
-        season (in which training data leaves off and forecasts begin)
-        is recorded as a model attribute.
-
-        If season is omitted as a grouping factor for the training data,
-        all data are pooled to fit single parameters for maximum uptake
-        and half-maximal time.
-
-        The Hill exponent is always a single non-hierarchical parameter.
-
-        Finally, the model is fit using numpyro.
+        If grouping factors are specified, a hierarchical model will be built with
+        group-specific parameters for the logistic maximum and linear slope,
+        drawn from a shared distribution. Other parameters are non-hierarchical.
         """
         self.group_combos = extract_group_combos(data, groups)
 
@@ -312,7 +301,7 @@ class LLModel(UptakeModel):
         scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
     ) -> pl.DataFrame:
         """
-        Add columns to a scaffold of dates for forecasting from a mixed Hill + Linear model.
+        Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
 
         Parameters:
         scaffold: pl.DataFrame
@@ -323,7 +312,7 @@ class LLModel(UptakeModel):
             first day of the first month of the overwinter disease season
 
         Returns:
-            Scaffold with extra columns required by the mixed Hill + Linear model.
+            Scaffold with extra columns required by the Logistic Plus Linear model.
 
         Details
         An extra column is added for the time elapsed since the season start.
@@ -350,7 +339,7 @@ class LLModel(UptakeModel):
         season_start_day: int,
     ) -> pl.DataFrame:
         """
-        Make projections from a fit mixed Hill + Linear model.
+        Make projections from a fit Logistic Plus Linear model.
 
         Parameters
         start_date: dt.date
@@ -370,7 +359,7 @@ class LLModel(UptakeModel):
             first day of the first month of the overwinter disease season
 
         Returns
-        HillModel
+        LPLModel
             the model with incident and cumulative projections as attributes
 
         Details
@@ -389,7 +378,7 @@ class LLModel(UptakeModel):
             season_start_day,
         )
 
-        scaffold = LLModel.augment_scaffold(
+        scaffold = LPLModel.augment_scaffold(
             scaffold, season_start_month, season_start_day
         )
 

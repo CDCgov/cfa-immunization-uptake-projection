@@ -2,11 +2,11 @@
 
 These are the mathematical details of the models used to capture and forecast vaccine uptake. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true uptake curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
 
-# Logistic + Linear (LL) Model
+# Logistic Plus Linear (LPL) Model
 
 ## Notation
 
-The following notation will be used for the LL model:
+The following notation will be used for the LPL model:
 - $t$ = time since the start of the season, expressed as the fraction of a year elapsed
 - $V_t^{obs}$ = number of people surveyed at time $t$ who are vaccinated
 - $N_t^{obs}$ = total number of people surveyed at time $t$
@@ -15,12 +15,12 @@ The following notation will be used for the LL model:
 
 ## Summary
 
-At a high level, the LL model is structured as follows:
+At a high level, the LPL model is structured as follows:
 
 ```math
 \begin{align*}
 &V_{t,G}^{obs} \sim \text{Pr}(V_{t,G}^{obs}~|~c_{t,G},~N_{t,G}^{obs}) \\
-&c_{t,G} := f_{\text{Hill, Linear}}(t,~\phi_G) \\
+&c_{t,G} := f_{\text{Logistic + Linear}}(t,~\phi_G) \\
 &\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
 &\xi \sim \text{Pr}(\xi) \\
 \end{align*}

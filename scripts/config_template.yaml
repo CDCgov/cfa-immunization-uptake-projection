@@ -24,7 +24,7 @@ forecast_timeframe:
 
 # Details of the models to fit
 models:
-  - name: LLModel
+  - name: LPLModel
     seed: 0
     params:
       A_shape1: 100.0
