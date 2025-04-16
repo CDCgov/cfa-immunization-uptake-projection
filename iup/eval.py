@@ -2,7 +2,7 @@ from typing import Callable
 
 import polars as pl
 
-from iup import IncidentUptakeData, PointForecast
+from iup import IncidentUptakeData, PointForecast, SampleForecast
 
 
 ###### evaluation metrics #####
@@ -35,7 +35,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     )
 
 
-def score(
+def point_score(
     data: IncidentUptakeData,
     pred: PointForecast,
     score_fun: Callable[[pl.Expr, pl.Expr], pl.Expr],
@@ -72,27 +72,34 @@ def score(
     )
 
 
+def sample_to_quantile_score(
+    data: IncidentUptakeData, pred: SampleForecast, quantile: float, score_fun: Callable
+):
+    """
+    Calculate the metrics at quantiles of sample distributions.
+    """
+
+    # 1. Convert sample forecast pred into quantiles
+    summary_pred = pred.group_by("time_end").agg(pl.col("estimate").quantile(quantile))
+
+    # 2. Calculate the score for each quantile
+    return (
+        data.join(summary_pred, on="time_end", how="inner", validate="1:1")
+        .rename({"estimate": "data", "estimate_right": "pred"})
+        .select(
+            forecast_start=pl.col("time_end").min(),
+            forecast_end=pl.col("time_end").max(),
+            score=score_fun(pl.col("data"), pl.col("pred")),
+        )
+    )
+
+
 def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
     return ((x - y) ** 2).mean()
 
 
-def mean_bias(pred: pl.Expr, data: pl.Expr) -> pl.Expr:
-    """
-    Note the bias here is not the classical bias calculated from the posterior distribution.
-    The bias here is defined as: at time t,
-    bias = -1 if pred_t < data_t; bias = 0 if pred_t == data_t; bias = 1 if pred_t > bias_t
+def abs_diff(df, selected_date, date):
+    def abs_diff_date_fun(x, y):
+        return df.filter(date == selected_date).with_columns(abs(x - y).alias("score"))
 
-    mean_bias = sum of the bias across time/length of data
-    """
-
-    return (pred - data).sign().mean()
-
-
-def eos_abe(data: pl.Expr, pred: pl.Expr) -> pl.Expr:
-    """
-    Calculate the absolute error of the total uptake at the end of season between data and prediction
-    relative to data.
-    """
-    cum_data = data.cum_sum().tail(1)
-    cum_pred = pred.cum_sum().tail(1)
-    return abs(cum_data - cum_pred) / cum_data
+    return abs_diff_date_fun
