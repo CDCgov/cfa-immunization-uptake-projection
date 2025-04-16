@@ -41,8 +41,6 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
             data,
             config["data"]["season_start_month"],
             config["data"]["season_start_day"],
-            config["data"]["groups"],
-            config["data"]["rollouts"],
         )
 
         for forecast_date in forecast_dates:

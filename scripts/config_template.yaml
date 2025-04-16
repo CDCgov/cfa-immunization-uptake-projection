@@ -1,6 +1,5 @@
 # The data sets to load and how to interpret them
 data:
-  rollouts: [2022-09-01, 2023-09-01, 2024-09-01]
   season_start_month: 9
   season_start_day: 1
   # filter data; eg `vaccine: covid` means filter column "vaccine" for value "covid"
@@ -25,23 +24,7 @@ forecast_timeframe:
 
 # Details of the models to fit
 models:
-  - name: LinearIncidentUptakeModel
-    seed: 0
-    params:
-      a_mn: 0.0
-      a_sd: 0.1
-      bP_mn: 0.0
-      bP_sd: 0.1
-      bE_mn: 0.0
-      bE_sd: 0.1
-      bPE_mn: 0.0
-      bPE_sd: 0.1
-      sig_mn: 0.1
-    mcmc:
-      num_warmup: 1000
-      num_samples: 100
-      num_chains: 4
-  - name: HillModel
+  - name: LPLModel
     seed: 0
     params:
       A_shape1: 100.0
@@ -76,7 +59,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [HillModel]
+  model: [LPLModel]
   forecast_date: [2024-02-03]
   # If blank: use start and end in "forecast_timeframe" and interval
   # in "evaluation_timeframe".
