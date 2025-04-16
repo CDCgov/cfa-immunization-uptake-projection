@@ -59,7 +59,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [LLModel]
+  model: [LPLModel]
   forecast_date: [2024-02-03]
   # If blank: use start and end in "forecast_timeframe" and interval
   # in "evaluation_timeframe".
