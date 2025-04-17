@@ -1,3 +1,5 @@
+import datetime as dt
+
 import polars as pl
 import pytest
 
@@ -109,3 +111,24 @@ def test_date_to_interval(frame):
     expected = pl.Series("interval", ([None] + [7.0] * 3) * 2)
 
     assert (output["interval"] == expected).all()
+
+
+@pytest.fixture
+def test_str():
+    """
+    Provides a test string for test_parse_name_and_date().
+    """
+    return "HillModel_forecast_starts_2023-10-01"
+
+
+def test_parse_name_and_date(test_str):
+    """Parse a string in a certain pattern to get a dictionary of model name and forecast date."""
+
+    expected = {
+        "model_name": "HillModel",
+        "forecast_date": dt.date(2023, 10, 1),
+    }
+
+    result = iup.utils.parse_name_and_date(test_str)
+
+    assert result == expected
