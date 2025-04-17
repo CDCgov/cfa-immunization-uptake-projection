@@ -89,9 +89,10 @@ class LPLModel(UptakeModel):
 
         Parameters
         seed: int
-            The random seed for stochastic elements of the model.
+            The random seed for stochastic elements of the model, to be split for fitting vs. predicting.
         """
-        self.rng_key = random.PRNGKey(seed)
+        self.rng_key = random.key(seed)
+        self.fit_key, self.pred_key = random.split(self.rng_key, 2)
         self.model = LPLModel.logistic_plus_linear
 
     @staticmethod
@@ -271,7 +272,7 @@ class LPLModel(UptakeModel):
         )
 
         self.mcmc.run(
-            self.rng_key,
+            self.fit_key,
             elapsed=elapsed,
             N_vax=N_vax,
             N_tot=N_tot,
@@ -394,7 +395,7 @@ class LPLModel(UptakeModel):
             # Make a prediction-machine from the fit model
             predictions = np.array(
                 predictive(
-                    self.rng_key,
+                    self.pred_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
                     N_tot=scaffold["N_tot"].to_numpy(),
                     groups=group_codes,
@@ -404,7 +405,7 @@ class LPLModel(UptakeModel):
             ).transpose()
         else:
             predictions = np.array(
-                predictive(self.rng_key, elapsed=scaffold["elapsed"].to_numpy())["obs"]
+                predictive(self.pred_key, elapsed=scaffold["elapsed"].to_numpy())["obs"]
             ).transpose()
 
         pred = pl.concat(
