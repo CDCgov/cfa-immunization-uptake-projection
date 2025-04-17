@@ -1,8 +1,9 @@
+import datetime as dt
 from typing import Callable
 
 import polars as pl
 
-from iup import IncidentUptakeData, PointForecast, SampleForecast
+from iup import IncidentUptakeData, PointForecast
 
 
 ###### evaluation metrics #####
@@ -72,34 +73,48 @@ def point_score(
     )
 
 
-def sample_to_quantile_score(
-    data: IncidentUptakeData, pred: SampleForecast, quantile: float, score_fun: Callable
-):
-    """
-    Calculate the metrics at quantiles of sample distributions.
-    """
-
-    # 1. Convert sample forecast pred into quantiles
-    summary_pred = pred.group_by("time_end").agg(pl.col("estimate").quantile(quantile))
-
-    # 2. Calculate the score for each quantile
-    return (
-        data.join(summary_pred, on="time_end", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .select(
-            forecast_start=pl.col("time_end").min(),
-            forecast_end=pl.col("time_end").max(),
-            score=score_fun(pl.col("data"), pl.col("pred")),
-        )
-    )
-
-
 def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+    """
+    Calculate Mean Squared Prediction Error with polars column expression
+    ---------------------
+    Arguments:
+    x: either observed data or predictions
+    y: either observed data or predictions
+    Return:
+        Mean Squared Prediction Error as a polars column expression
+
+    """
     return ((x - y) ** 2).mean()
 
 
-def abs_diff(df, selected_date, date):
-    def abs_diff_date_fun(x, y):
-        return df.filter(date == selected_date).with_columns(abs(x - y).alias("score"))
+def abs_diff(
+    selected_date: dt.date, date_col: pl.Expr
+) -> Callable[[pl.Expr, pl.Expr], pl.Expr]:
+    """
+    Generate a function that calculates the absolute difference between
+    observed data and prediction on a certain date.
+    ----------------------
+    Arguments:
+    selected_date: a datetime date object to specify which date to do the calculation
+    date_col: a polars column expression used to select the date
 
-    return abs_diff_date_fun
+    Return:
+        A function that takes two polars column expressions to do the calculation.
+    """
+
+    lit_date = pl.lit(selected_date)
+
+    def f(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+        """
+        Calculate the absolute difference between two polars column expressions
+        -----------------------
+        Arguments:
+        x: either observed data or predictions
+        y: either observed data or predictions
+
+        Return:
+        A polars column expression that returns the absolute difference at the certain date, otherwise None
+        """
+        return pl.when(date_col == lit_date).then((x - y).abs()).otherwise(None)
+
+    return f
