@@ -46,7 +46,7 @@ def test_score_df(data, pred):
     data = iup.IncidentUptakeData(data)
     pred = iup.PointForecast(pred)
 
-    output = eval.score(data=data, pred=pred, score_fun=eval.mspe)
+    output = eval.point_score(data=data, pred=pred, score_fun=eval.mspe)
     assert output.item(0, "forecast_start") == date(2020, 1, 1)
     assert output.item(0, "forecast_end") == date(2020, 1, 5)
     # we're not testing the actual value, just that we get some value
@@ -54,24 +54,43 @@ def test_score_df(data, pred):
 
 
 def test_mspe():
+    """
+    Test the mean squared prediction error.
+    """
     x = np.array([0.0, 0.1, 0.7, 0.4, 0.5])
     y = np.array([0.0, 0.2, 1.0, 0.6, 0.5])
     assert np.isclose(eval.mspe(x, y), 0.028)
 
 
-def test_mean_bias(data, pred):
+@pytest.fixture
+def score_df():
     """
-    Return the expected forecast start, end and correct mean bias.
+    Mock of the joined data frame between data and prediction
     """
-    x = pl.Series([0.0, 0.1, 0.7, 0.4, 0.5])
-    y = pl.Series([0.0, 0.2, 1.0, 0.6, 0.5])
-    assert np.isclose(eval.mean_bias(x, y), -0.6)
+    return pl.DataFrame(
+        {
+            "time_end": [
+                date(2020, 1, 1),
+                date(2020, 1, 2),
+                date(2020, 1, 3),
+                date(2020, 1, 4),
+                date(2020, 1, 5),
+            ],
+            "data": [0.0, 0.1, 0.7, 0.4, 0.5],
+            "pred": [0.0, 0.2, 1.0, 0.6, 0.5],
+        }
+    )
 
 
-def test_eos_abe(data, pred):
+def test_abs_diff(score_df):
     """
-    Return the expected forecast start, end and correct end-of-season error%.
+    Test the absolute difference.
     """
-    x = pl.Series([0.0, 0.1, 0.7, 0.4, 0.5])
-    y = pl.Series([0.0, 0.2, 1.0, 0.6, 0.5])
-    assert np.isclose(eval.eos_abe(x, y), 0.352941)
+    selected_date = date(2020, 1, 1)
+
+    f = eval.abs_diff(selected_date, pl.col("time_end"))
+
+    score_df = score_df.select(score=f(pl.col("data"), pl.col("pred")))
+
+    expected = pl.DataFrame({"score": [0.0, None, None, None, None]})
+    assert score_df.equals(expected)
