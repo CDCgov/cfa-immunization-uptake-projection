@@ -14,12 +14,17 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(FORECASTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(POSTERIORS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
 		--proj_output=$(PROJ_PLOTS) --summary_output=$(SUMMARY_PLOTS)
+
+$(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
+	python $< \
+		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
+		--output=$(SCORES)
 
 $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) --output=$@
