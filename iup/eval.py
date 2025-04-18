@@ -1,13 +1,13 @@
 import datetime as dt
-from typing import Callable
+from typing import Callable, Dict
 
 import polars as pl
 
-from iup import IncidentUptakeData, PointForecast
+from iup import IncidentUptakeData, QuantileForecast
 
 
 ###### evaluation metrics #####
-def check_date_match(data: IncidentUptakeData, pred: PointForecast):
+def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
     """
     Check the dates between data and pred.
     Dates must be 1-on-1 equal and no duplicate.
@@ -17,7 +17,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     data:
         The observed data used for modeling. Should be IncidentUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
+        The forecast made by model. Can be QuantileForecast or PointForecast
 
     Return
     Error if conditions fail to meet.
@@ -25,7 +25,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     """
     # sort data and pred by date #
     data = IncidentUptakeData(data.sort("time_end"))
-    pred = PointForecast(pred.sort("time_end"))
+    pred = QuantileForecast(pred.sort("time_end"))
 
     # 1. Dates must be 1-on-1 equal
     (data["time_end"] == pred["time_end"]).all()
@@ -36,10 +36,8 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     )
 
 
-def point_score(
-    data: IncidentUptakeData,
-    pred: PointForecast,
-    score_fun: Callable[[pl.Expr, pl.Expr], pl.Expr],
+def summarize_score(
+    data: IncidentUptakeData, pred: QuantileForecast, score_funs: Dict[str, Callable]
 ) -> pl.DataFrame:
     """
     Calculate score between observed data and forecast.
@@ -49,28 +47,39 @@ def point_score(
     data:
         The observed data used for modeling. Should be IncidentUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
-    score_fun:
-        Scoring function. Takes observed and true values.
+        The forecast made by model. Can be QuantileForecast or PointForecast
+    score_funs:
+        A dictionary of scoring functions. The key is the name of the score, and the value
+        is the scoring function.
 
     Return
-    pl.DataFrame with one row: forecast start date, forecast end date, and score
+    A pl.DataFrame of scores with information including score name and score values, grouped by quantile, forecast
 
     """
-    # validate inputs
+    assert pred.shape[0] == data.shape[0], (
+        "The forecast and the test data do not have the same number of dates."
+    )
+
     assert isinstance(data, IncidentUptakeData)
-    assert isinstance(pred, PointForecast)
+    assert isinstance(pred, QuantileForecast)
     check_date_match(data, pred)
 
-    return (
-        data.join(pred, on="time_end", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .select(
+    joined_df = data.join(pred, on="time_end", how="inner", validate="1:1").rename(
+        {"estimate": "data", "estimate_right": "pred"}
+    )
+
+    all_scores = pl.DataFrame()
+    for score_name in score_funs:
+        score = joined_df.select(
+            quantile=pl.col("quantile").unique().first(),
             forecast_start=pl.col("time_end").min(),
             forecast_end=pl.col("time_end").max(),
-            score=score_fun(pl.col("data"), pl.col("pred")),
-        )
-    )
+            score_name=pl.lit(score_name),
+            score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
+        ).filter(pl.col("score_value").is_not_null())
+        all_scores = pl.concat([all_scores, score])
+
+    return all_scores
 
 
 def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
