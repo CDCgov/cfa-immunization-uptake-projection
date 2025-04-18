@@ -39,18 +39,34 @@ def pred():
     )
 
 
-def test_score_df(data, pred):
+@pytest.fixture
+def score_funs():
+    """
+    Mock of scoring functions.
+    """
+    return {
+        "mspe": eval.mspe,
+    }
+
+
+def test_summarize_score(
+    data,
+    pred,
+    score_funs,
+):
     """
     Return the expected forecast start, end and correct MSPE.
     """
     data = iup.IncidentUptakeData(data)
-    pred = iup.PointForecast(pred)
+    pred = iup.QuantileForecast(pred)
 
-    output = eval.point_score(data=data, pred=pred, score_fun=eval.mspe)
+    output = eval.summarize_score(data=data, pred=pred, score_funs=score_funs)
+
+    assert output.item(0, "quantile") == 0.5
     assert output.item(0, "forecast_start") == date(2020, 1, 1)
     assert output.item(0, "forecast_end") == date(2020, 1, 5)
-    # we're not testing the actual value, just that we get some value
-    assert isinstance(output["score"][0], float)
+    assert output.item(0, "score_name") == "mspe"
+    assert isinstance(output.item(0, "score_value"), float)
 
 
 def test_mspe():
