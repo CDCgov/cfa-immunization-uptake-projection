@@ -1,12 +1,13 @@
-from typing import Callable
+import datetime as dt
+from typing import Callable, Dict
 
 import polars as pl
 
-from iup import IncidentUptakeData, PointForecast
+from iup import IncidentUptakeData, QuantileForecast
 
 
 ###### evaluation metrics #####
-def check_date_match(data: IncidentUptakeData, pred: PointForecast):
+def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
     """
     Check the dates between data and pred.
     Dates must be 1-on-1 equal and no duplicate.
@@ -16,7 +17,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     data:
         The observed data used for modeling. Should be IncidentUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
+        The forecast made by model. Can be QuantileForecast or PointForecast
 
     Return
     Error if conditions fail to meet.
@@ -24,7 +25,7 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     """
     # sort data and pred by date #
     data = IncidentUptakeData(data.sort("time_end"))
-    pred = PointForecast(pred.sort("time_end"))
+    pred = QuantileForecast(pred.sort("time_end"))
 
     # 1. Dates must be 1-on-1 equal
     (data["time_end"] == pred["time_end"]).all()
@@ -35,10 +36,8 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
     )
 
 
-def score(
-    data: IncidentUptakeData,
-    pred: PointForecast,
-    score_fun: Callable[[pl.Expr, pl.Expr], pl.Expr],
+def summarize_score(
+    data: IncidentUptakeData, pred: QuantileForecast, score_funs: Dict[str, Callable]
 ) -> pl.DataFrame:
     """
     Calculate score between observed data and forecast.
@@ -48,51 +47,83 @@ def score(
     data:
         The observed data used for modeling. Should be IncidentUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
-    score_fun:
-        Scoring function. Takes observed and true values.
+        The forecast made by model. Can be QuantileForecast or PointForecast
+    score_funs:
+        A dictionary of scoring functions. The key is the name of the score, and the value
+        is the scoring function.
 
     Return
-    pl.DataFrame with one row: forecast start date, forecast end date, and score
+    A pl.DataFrame of scores with information including score name and score values, grouped by quantile, forecast
 
     """
-    # validate inputs
+    assert pred.shape[0] == data.shape[0], (
+        "The forecast and the test data do not have the same number of dates."
+    )
+
     assert isinstance(data, IncidentUptakeData)
-    assert isinstance(pred, PointForecast)
+    assert isinstance(pred, QuantileForecast)
     check_date_match(data, pred)
 
-    return (
-        data.join(pred, on="time_end", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .select(
+    joined_df = data.join(pred, on="time_end", how="inner", validate="1:1").rename(
+        {"estimate": "data", "estimate_right": "pred"}
+    )
+
+    all_scores = pl.DataFrame()
+    for score_name in score_funs:
+        score = joined_df.select(
+            quantile=pl.col("quantile").unique().first(),
             forecast_start=pl.col("time_end").min(),
             forecast_end=pl.col("time_end").max(),
-            score=score_fun(pl.col("data"), pl.col("pred")),
-        )
-    )
+            score_name=pl.lit(score_name),
+            score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
+        ).filter(pl.col("score_value").is_not_null())
+        all_scores = pl.concat([all_scores, score])
+
+    return all_scores
 
 
 def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+    """
+    Calculate Mean Squared Prediction Error with polars column expression
+    ---------------------
+    Arguments:
+    x: either observed data or predictions
+    y: either observed data or predictions
+    Return:
+        Mean Squared Prediction Error as a polars column expression
+
+    """
     return ((x - y) ** 2).mean()
 
 
-def mean_bias(pred: pl.Expr, data: pl.Expr) -> pl.Expr:
+def abs_diff(
+    selected_date: dt.date, date_col: pl.Expr
+) -> Callable[[pl.Expr, pl.Expr], pl.Expr]:
     """
-    Note the bias here is not the classical bias calculated from the posterior distribution.
-    The bias here is defined as: at time t,
-    bias = -1 if pred_t < data_t; bias = 0 if pred_t == data_t; bias = 1 if pred_t > bias_t
+    Generate a function that calculates the absolute difference between
+    observed data and prediction on a certain date.
+    ----------------------
+    Arguments:
+    selected_date: a datetime date object to specify which date to do the calculation
+    date_col: a polars column expression used to select the date
 
-    mean_bias = sum of the bias across time/length of data
+    Return:
+        A function that takes two polars column expressions to do the calculation.
     """
 
-    return (pred - data).sign().mean()
+    lit_date = pl.lit(selected_date)
 
+    def f(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+        """
+        Calculate the absolute difference between two polars column expressions
+        -----------------------
+        Arguments:
+        x: either observed data or predictions
+        y: either observed data or predictions
 
-def eos_abe(data: pl.Expr, pred: pl.Expr) -> pl.Expr:
-    """
-    Calculate the absolute error of the total uptake at the end of season between data and prediction
-    relative to data.
-    """
-    cum_data = data.cum_sum().tail(1)
-    cum_pred = pred.cum_sum().tail(1)
-    return abs(cum_data - cum_pred) / cum_data
+        Return:
+        A polars column expression that returns the absolute difference at the certain date, otherwise None
+        """
+        return pl.when(date_col == lit_date).then((x - y).abs()).otherwise(None)
+
+    return f
