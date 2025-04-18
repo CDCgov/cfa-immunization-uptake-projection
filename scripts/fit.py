@@ -3,6 +3,7 @@ import datetime as dt
 import pickle as pkl
 from typing import Any, Dict, List, Type
 
+import numpyro
 import polars as pl
 import yaml
 
@@ -49,7 +50,7 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
                 model_class=model_class,
                 seed=config_model["seed"],
                 params=config_model["params"],
-                mcmc=config_model["mcmc"],
+                mcmc=config["mcmc"],
                 grouping_factors=config["data"]["groups"],
                 forecast_start=forecast_date,
             )
@@ -96,6 +97,8 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
+
+    numpyro.set_host_device_count(config["mcmc"]["num_chains"])
 
     all_models = fit_all_models(input_data, config)
 
