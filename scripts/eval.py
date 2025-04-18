@@ -50,19 +50,17 @@ def eval_all_forecasts(
             assert config["scores"]["quantiles"] is not None, (
                 "Quantiles of posterior prediction distribution must be specified in the config file."
             )
+
             for quantile in config["scores"]["quantiles"]:
-                summary_pred = incident_pred.group_by("time_end").agg(
-                    pl.col("estimate").quantile(quantile)
+                summary_pred = iup.QuantileForecast(
+                    (
+                        incident_pred.group_by("time_end")
+                        .agg(pl.col("estimate").quantile(quantile))
+                        .with_columns(quantile=quantile)
+                    )
                 )
 
-                assert summary_pred.shape[0] == test.shape[0], (
-                    "The forecast and the test data do not have the same number of dates."
-                )
-
-                # 2. Calculate the score for each quantile
-                score_df = test.join(
-                    summary_pred, on="time_end", how="inner", validate="1:1"
-                ).rename({"estimate": "data", "estimate_right": "pred"})
+                score_funcs = {}
 
                 if config["scores"]["difference_by_date"] is not None:
                     score_funcs = {
@@ -76,18 +74,13 @@ def eval_all_forecasts(
                     eval, config["scores"]["others"]
                 )
 
-                for score_name in score_funcs:
-                    score_fun = score_funcs[score_name]
-                    score = score_df.select(
-                        model=pl.lit(model),
-                        forecast_start=pl.col("time_end").min(),
-                        forecast_end=pl.col("time_end").max(),
-                        quantile=quantile,
-                        score_name=pl.lit(score_name),
-                        score_value=score_fun(pl.col("data"), pl.col("pred")),
-                    ).filter(pl.col("score_value").is_not_null())
+                scores = eval.summarize_score(test, summary_pred, score_funcs)
 
-                    all_scores = pl.concat([all_scores, score])
+                scores = scores.with_columns(
+                    model=pl.lit(model),
+                )
+
+                all_scores = pl.concat([all_scores, scores])
 
     return all_scores
 
