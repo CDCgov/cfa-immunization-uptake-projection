@@ -1,13 +1,13 @@
 import datetime as dt
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 
 import polars as pl
 
-from iup import IncidentUptakeData, QuantileForecast
+from iup import CumulativeUptakeData, QuantileForecast
 
 
 ###### evaluation metrics #####
-def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
+def check_date_match(data: CumulativeUptakeData, pred: QuantileForecast):
     """
     Check the dates between data and pred.
     Dates must be 1-on-1 equal and no duplicate.
@@ -15,7 +15,7 @@ def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
 
     Parameters
     data:
-        The observed data used for modeling. Should be IncidentUptakeData
+        The observed data used for modeling. Should be CumulativeUptakeData
     pred:
         The forecast made by model. Can be QuantileForecast or PointForecast
 
@@ -24,7 +24,7 @@ def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
 
     """
     # sort data and pred by date #
-    data = IncidentUptakeData(data.sort("time_end"))
+    data = CumulativeUptakeData(data.sort("time_end"))
     pred = QuantileForecast(pred.sort("time_end"))
 
     # 1. Dates must be 1-on-1 equal
@@ -37,7 +37,10 @@ def check_date_match(data: IncidentUptakeData, pred: QuantileForecast):
 
 
 def summarize_score(
-    data: IncidentUptakeData, pred: QuantileForecast, score_funs: Dict[str, Callable]
+    data: CumulativeUptakeData,
+    pred: QuantileForecast,
+    groups: List[str] | None,
+    score_funs: Dict[str, Callable],
 ) -> pl.DataFrame:
     """
     Calculate score between observed data and forecast.
@@ -45,9 +48,11 @@ def summarize_score(
 
     Parameters
     data:
-        The observed data used for modeling. Should be IncidentUptakeData
+        The observed data used for modeling. Should be CumulativeUptakeData
     pred:
         The forecast made by model. Can be QuantileForecast or PointForecast
+    groups:
+        A list of grouping factors, specified in config file.
     score_funs:
         A dictionary of scoring functions. The key is the name of the score, and the value
         is the scoring function.
@@ -60,11 +65,16 @@ def summarize_score(
         "The forecast and the test data do not have the same number of dates."
     )
 
-    assert isinstance(data, IncidentUptakeData)
-    assert isinstance(pred, QuantileForecast)
     check_date_match(data, pred)
+    assert isinstance(data, CumulativeUptakeData)
+    assert isinstance(pred, QuantileForecast)
 
-    joined_df = data.join(pred, on="time_end", how="inner", validate="1:1").rename(
+    if groups is None:
+        columns_to_join = ["time_end"]
+    else:
+        columns_to_join = ["time_end"] + groups
+
+    joined_df = data.join(pred, on=columns_to_join, how="inner", validate="1:1").rename(
         {"estimate": "data", "estimate_right": "pred"}
     )
 
