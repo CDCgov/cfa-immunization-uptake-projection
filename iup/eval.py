@@ -7,7 +7,9 @@ from iup import CumulativeUptakeData, QuantileForecast
 
 
 ###### evaluation metrics #####
-def check_date_match(data: CumulativeUptakeData, pred: QuantileForecast):
+def check_date_match(
+    data: CumulativeUptakeData, pred: QuantileForecast, groups: List[str] | None
+):
     """
     Check the dates between data and pred.
     Dates must be 1-on-1 equal and no duplicate.
@@ -18,22 +20,51 @@ def check_date_match(data: CumulativeUptakeData, pred: QuantileForecast):
         The observed data used for modeling. Should be CumulativeUptakeData
     pred:
         The forecast made by model. Can be QuantileForecast or PointForecast
+    groups:
+        A list of grouping factors
 
     Return
     Error if conditions fail to meet.
 
     """
     # sort data and pred by date #
-    data = CumulativeUptakeData(data.sort("time_end"))
-    pred = QuantileForecast(pred.sort("time_end"))
+    groups_and_time = ["time_end"] + groups if groups is not None else ["time_end"]
 
-    # 1. Dates must be 1-on-1 equal
-    (data["time_end"] == pred["time_end"]).all()
+    data = CumulativeUptakeData(data.sort(groups_and_time))
+    pred = QuantileForecast(pred.sort(groups_and_time))
 
-    # 2. There should not be any duplicated date in either data or prediction.
-    assert not (any(data["time_end"].is_duplicated())), (
-        "Duplicated dates are found in data and prediction."
-    )
+    if groups is not None:
+        assert [
+            (
+                data.filter(pl.col(group) == group_unique)["time_end"]
+                == pred.filter(pl.col(group) == group_unique)["time_end"]
+            ).all()
+            for group in groups
+            for group_unique in data[group].unique()
+        ]
+    else:
+        assert data.shape[0] == pred.shape[0], (
+            "The forecast and the data should have the same forecast dates"
+        )
+
+    if groups is not None:
+        assert not (
+            any(
+                [
+                    any(
+                        data.filter(pl.col(group) == group_unique)
+                        .select("time_end")
+                        .is_duplicated()
+                    )
+                    for group in groups
+                    for group_unique in data[group].unique()
+                ]
+            )
+        )
+    else:
+        assert not (any(data["time_end"].is_duplicated())), (
+            "Duplicated dates are found in data and prediction."
+        )
 
 
 def summarize_score(
@@ -61,11 +92,8 @@ def summarize_score(
     A pl.DataFrame of scores with information including score name and score values, grouped by quantile, forecast
 
     """
-    assert pred.shape[0] == data.shape[0], (
-        "The forecast and the test data do not have the same number of dates."
-    )
 
-    check_date_match(data, pred)
+    check_date_match(data, pred, groups)
     assert isinstance(data, CumulativeUptakeData)
     assert isinstance(pred, QuantileForecast)
 
