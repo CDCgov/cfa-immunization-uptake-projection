@@ -6,9 +6,11 @@ import yaml
 import iup
 from iup import eval
 
+from iup import SampleForecast
+
 
 def eval_all_forecasts(
-    data: pl.DataFrame, pred: pl.DataFrame, config: dict
+    data: pl.DataFrame, pred: SampleForecast, config: dict
 ) -> pl.DataFrame:
     """ "
     Calculates the evaluation metrics selected by config, by model and forecast start date.
@@ -17,12 +19,13 @@ def eval_all_forecasts(
     data:
         observed data with at least "time_end" and "estimate" columns
     pred:
-        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_start" and "estimate"
+        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_start" and "estimate",
+        should be a SampleForecast object
     config:
         config file to specify the expected quantile from the sample distribution and evaluation metrics to calculate
 
     Returns:
-        A pl.DataFrame with score name and score values, grouped by model, forecast start and quantile
+        A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
     """
     model_names = pred["model"].unique()
     forecast_starts = pred["forecast_start"].unique()
