@@ -6,34 +6,6 @@ import pytest
 import iup
 
 
-@pytest.fixture
-def frame() -> iup.UptakeData:
-    """
-    Make a mock data frame to uptake data manipulations.
-    """
-    frame = pl.DataFrame(
-        {
-            "geography": ["USA", "PA", "USA", "PA", "USA", "PA", "USA", "PA"],
-            "time_end": [
-                "2019-12-30",
-                "2019-12-30",
-                "2020-01-07",
-                "2020-01-07",
-                "2020-01-14",
-                "2020-01-14",
-                "2020-01-21",
-                "2020-01-21",
-            ],
-            "estimate": [0.0, 0.0, 0.01, 0.001, 0.03, 0.003, 0.04, 0.004],
-            "season": ["2019/2020"] * 8,
-        }
-    )
-
-    frame = frame.with_columns(time_end=pl.col("time_end").str.to_date("%Y-%m-%d"))
-
-    return iup.UptakeData(frame)
-
-
 def test_split_train_test(frame):
     """
     Return the data in two halves
@@ -54,22 +26,22 @@ def test_to_cumulative_handles_no_last(frame):
     """
     If last_cumulative is not given, then simple cumulative sums are performed
     """
-    frame = iup.IncidentUptakeData(frame)
+    frame = iup.IncidentUptakeData(frame.drop(["N_vax", "N_tot"]))
 
     output = frame.to_cumulative(groups=["geography", "season"])
 
     assert all(
-        output["estimate"]
+        output["estimate"].round(10)
         == pl.Series(
             [
-                0.0,
-                0.0,
-                0.01,
                 0.001,
-                0.04,
-                0.004,
-                0.08,
-                0.008,
+                0.001,
+                0.101,
+                0.011,
+                0.401,
+                0.041,
+                0.801,
+                0.081,
             ]
         )
     )
@@ -98,14 +70,14 @@ def test_to_cumulative_handles_last(frame):
         output["estimate"].round(10)
         == pl.Series(
             [
-                0.01,
-                0.001,
-                0.02,
+                0.011,
                 0.002,
-                0.05,
-                0.005,
-                0.09,
-                0.009,
+                0.111,
+                0.012,
+                0.411,
+                0.042,
+                0.811,
+                0.082,
             ]
         )
     )
@@ -117,12 +89,12 @@ def test_to_cumulative_handles_no_groups(frame):
     Note that season is still considered a group, but there is only one unique season.
     """
     frame = iup.IncidentUptakeData(
-        frame.filter(pl.col("geography") == "USA").drop("geography")
+        frame.filter(pl.col("geography") == "USA").drop(["geography", "N_vax", "N_tot"])
     )
 
     output = frame.to_cumulative(groups=None)
 
-    assert all(output["estimate"] == pl.Series([0.0, 0.01, 0.04, 0.08]))
+    assert all(output["estimate"].round(10) == pl.Series([0.001, 0.101, 0.401, 0.801]))
 
 
 def test_cumulative_uptake_is_proportion(frame):
@@ -140,12 +112,11 @@ def test_to_incident_handles_groups(frame):
     """
     If there are groups, successive differences are taken over the groups.
     """
-    frame = iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 0.01))
-
     output = frame.to_incident(groups=["geography", "season"])
 
     assert all(
-        output["estimate"].round(10) == pl.Series([0.0, 0.0, 0.01, 0.001, 0.002, 0.001])
+        output["estimate"].round(10)
+        == pl.Series([0.0, 0.0, 0.099, 0.009, 0.2, 0.02, 0.1, 0.01])
     )
 
 
@@ -154,14 +125,12 @@ def test_to_incident_handles_no_groups(frame):
     If there are no groups, successive differences are taken over the entire data frame.
     """
     frame = iup.CumulativeUptakeData(
-        frame.filter(pl.col("geography") == "USA", pl.col("estimate") <= 0.01).drop(
-            "geography"
-        )
+        frame.filter(pl.col("geography") == "USA").drop("geography")
     )
 
     output = frame.to_incident(groups=None)
 
-    assert all(output["estimate"].round(10) == pl.Series([0.0, 0.01]))
+    assert all(output["estimate"].round(10) == pl.Series([0.0, 0.099, 0.2, 0.1]))
 
 
 def test_quantile_forecast_validation():
