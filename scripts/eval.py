@@ -27,24 +27,31 @@ def eval_all_forecasts(
     model_names = pred["model"].unique()
     forecast_starts = pred["forecast_start"].unique()
 
+    # group sample forecasts by date and grouping factors #
+    if config["data"]["groups"] is not None:
+        groups = config["data"]["groups"] + ["time_end"]
+    else:
+        groups = ["time_end"]
+
     all_scores = pl.DataFrame()
 
     for model in model_names:
         for forecast_start in forecast_starts:
-            incident_pred = iup.SampleForecast(
+            pred_by_start = iup.SampleForecast(
                 iup.CumulativeUptakeData(
                     pred.filter(
                         pl.col("model") == model,
                         pl.col("forecast_start") == forecast_start,
                     )
-                ).to_incident(config["data"]["groups"])
+                )
             )
+
             test = iup.CumulativeUptakeData(
                 data.filter(
                     pl.col("time_end") >= forecast_start,
                     pl.col("time_end") <= config["forecast_timeframe"]["end"],
                 )
-            ).to_incident(config["data"]["groups"])
+            )
 
             # 1. Convert sample forecast pred into quantiles
             assert config["scores"]["quantiles"] is not None, (
@@ -54,7 +61,7 @@ def eval_all_forecasts(
             for quantile in config["scores"]["quantiles"]:
                 summary_pred = iup.QuantileForecast(
                     (
-                        incident_pred.group_by("time_end")
+                        pred_by_start.group_by(groups)
                         .agg(pl.col("estimate").quantile(quantile))
                         .with_columns(quantile=quantile)
                     )
@@ -74,7 +81,9 @@ def eval_all_forecasts(
                     eval, config["scores"]["others"]
                 )
 
-                scores = eval.summarize_score(test, summary_pred, score_funcs)
+                scores = eval.summarize_score(
+                    test, summary_pred, config["data"]["groups"], score_funcs
+                )
 
                 scores = scores.with_columns(
                     model=pl.lit(model),
