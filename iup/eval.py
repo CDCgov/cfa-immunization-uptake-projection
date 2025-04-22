@@ -97,6 +97,10 @@ def summarize_score(
     assert isinstance(data, CumulativeUptakeData)
     assert isinstance(pred, QuantileForecast)
 
+    assert len(pred["quantile"].unique()) == 1, (
+        "The prediction should only have one quantile."
+    )
+
     if groups is None:
         columns_to_join = ["time_end"]
     else:
@@ -109,7 +113,7 @@ def summarize_score(
     all_scores = pl.DataFrame()
     for score_name in score_funs:
         score = joined_df.select(
-            quantile=pl.col("quantile").unique().first(),
+            quantile=pl.col("quantile").first(),
             forecast_start=pl.col("time_end").min(),
             forecast_end=pl.col("time_end").max(),
             score_name=pl.lit(score_name),
