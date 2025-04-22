@@ -4,9 +4,7 @@ import polars as pl
 import yaml
 
 import iup
-from iup import eval
-
-from iup import SampleForecast
+from iup import SampleForecast, eval
 
 
 def eval_all_forecasts(
