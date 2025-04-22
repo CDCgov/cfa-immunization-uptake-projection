@@ -93,10 +93,10 @@ class LPLModel(UptakeModel):
         """
         self.rng_key = random.key(seed)
         self.fit_key, self.pred_key = random.split(self.rng_key, 2)
-        self.model = LPLModel.logistic_plus_linear
+        self.model = LPLModel._logistic_plus_linear
 
     @staticmethod
-    def logistic_plus_linear(
+    def _logistic_plus_linear(
         elapsed,
         N_vax=None,
         N_tot=None,
