@@ -18,7 +18,8 @@ def data():
             "time_end": pl.date_range(
                 date(2020, 1, 1), date(2020, 1, 5), interval="1d", eager=True
             ),
-            "estimate": [0.0, 0.1, 0.7, 0.4, 0.5],
+            "season": np.repeat("2023/2024", 5),
+            "estimate": [0.1, 0.3, 0.4, 0.7, 0.9],
         }
     )
 
@@ -33,10 +34,19 @@ def pred():
             "time_end": pl.date_range(
                 date(2020, 1, 1), date(2020, 1, 5), interval="1d", eager=True
             ),
-            "estimate": [0.0, 0.2, 1.0, 0.6, 0.5],
+            "season": np.repeat("2023/2024", 5),
+            "estimate": [0.0, 0.2, 0.3, 0.6, 0.8],
             "quantile": 0.5,
         }
     )
+
+
+@pytest.fixture
+def groups():
+    """
+    Mock of grouping factors.
+    """
+    return ["season"]
 
 
 @pytest.fixture
@@ -52,30 +62,24 @@ def score_funs():
 def test_summarize_score(
     data,
     pred,
+    groups,
     score_funs,
 ):
     """
     Return the expected forecast start, end and correct MSPE.
     """
-    data = iup.IncidentUptakeData(data)
+    data = iup.CumulativeUptakeData(data)
     pred = iup.QuantileForecast(pred)
 
-    output = eval.summarize_score(data=data, pred=pred, score_funs=score_funs)
+    output = eval.summarize_score(
+        data=data, pred=pred, groups=groups, score_funs=score_funs
+    )
 
     assert output.item(0, "quantile") == 0.5
     assert output.item(0, "forecast_start") == date(2020, 1, 1)
     assert output.item(0, "forecast_end") == date(2020, 1, 5)
     assert output.item(0, "score_name") == "mspe"
     assert isinstance(output.item(0, "score_value"), float)
-
-
-def test_mspe():
-    """
-    Test the mean squared prediction error.
-    """
-    x = np.array([0.0, 0.1, 0.7, 0.4, 0.5])
-    y = np.array([0.0, 0.2, 1.0, 0.6, 0.5])
-    assert np.isclose(eval.mspe(x, y), 0.028)
 
 
 @pytest.fixture
@@ -96,6 +100,14 @@ def score_df():
             "pred": [0.0, 0.2, 1.0, 0.6, 0.5],
         }
     )
+
+
+def test_mspe(score_df):
+    """
+    Test the mean squared prediction error.
+    """
+    output = score_df.select(score=eval.mspe(pl.col("data"), pl.col("pred")))
+    assert isinstance(output.item(0, "score"), float)
 
 
 def test_abs_diff(score_df):
