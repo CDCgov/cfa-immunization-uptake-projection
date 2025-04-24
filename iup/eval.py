@@ -112,13 +112,22 @@ def summarize_score(
 
     all_scores = pl.DataFrame()
     for score_name in score_funs:
-        score = joined_df.select(
-            quantile=pl.col("quantile").first(),
-            forecast_start=pl.col("time_end").min(),
-            forecast_end=pl.col("time_end").max(),
+        score = joined_df.group_by(groups).agg(
             score_name=pl.lit(score_name),
             score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
-        ).filter(pl.col("score_value").is_not_null())
+        )
+
+        if isinstance(score["score_value"][0], pl.Series):
+            score = score.with_columns(
+                pl.col("score_value").list.drop_nulls().explode()
+            )
+
+        score = score.with_columns(
+            quantile=joined_df["quantile"].first(),
+            forecast_start=joined_df["time_end"].min(),
+            forecast_end=joined_df["time_end"].max(),
+        )
+
         all_scores = pl.concat([all_scores, score])
 
     return all_scores
