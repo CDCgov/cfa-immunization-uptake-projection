@@ -4,50 +4,93 @@ import polars as pl
 import yaml
 
 import iup
-from iup import eval
+from iup import SampleForecast, eval
 
 
-def eval_all_forecasts(data, pred, config):
-    """Evaluate the forecasts for all models, all forecast ends, and all scores"""
-    score_names = config["score_funs"]
+def eval_all_forecasts(
+    data: pl.DataFrame, pred: SampleForecast, config: dict
+) -> pl.DataFrame:
+    """ "
+    Calculates the evaluation metrics selected by config, by model and forecast start date.
+    -----------------------
+    Arguments:
+    data:
+        observed data with at least "time_end" and "estimate" columns
+    pred:
+        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_start" and "estimate",
+        should be a SampleForecast object
+    config:
+        config file to specify the expected quantile from the sample distribution and evaluation metrics to calculate
+
+    Returns:
+        A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
+    """
     model_names = pred["model"].unique()
     forecast_starts = pred["forecast_start"].unique()
 
+    # group sample forecasts by date and grouping factors #
+    if config["data"]["groups"] is not None:
+        groups = config["data"]["groups"] + ["time_end"]
+    else:
+        groups = ["time_end"]
+
     all_scores = pl.DataFrame()
 
-    for score_name in score_names:
-        score_fun = getattr(eval, score_name)
+    for model in model_names:
+        for forecast_start in forecast_starts:
+            pred_by_start = iup.SampleForecast(
+                iup.CumulativeUptakeData(
+                    pred.filter(
+                        pl.col("model") == model,
+                        pl.col("forecast_start") == forecast_start,
+                    )
+                )
+            )
 
-        for model in model_names:
-            for forecast_start in forecast_starts:
-                incident_pred = iup.PointForecast(
-                    iup.CumulativeUptakeData(
-                        pred.filter(
-                            pl.col("model") == model,
-                            pl.col("forecast_start") == forecast_start,
+            test = iup.CumulativeUptakeData(
+                data.filter(
+                    pl.col("time_end") >= forecast_start,
+                    pl.col("time_end") <= config["forecast_timeframe"]["end"],
+                )
+            )
+
+            # 1. Convert sample forecast pred into quantiles
+            assert config["scores"]["quantiles"] is not None, (
+                "Quantiles of posterior prediction distribution must be specified in the config file."
+            )
+
+            for quantile in config["scores"]["quantiles"]:
+                summary_pred = iup.QuantileForecast(
+                    (
+                        pred_by_start.group_by(groups)
+                        .agg(pl.col("estimate").quantile(quantile))
+                        .with_columns(quantile=quantile)
+                    )
+                )
+
+                score_funcs = {}
+
+                if config["scores"]["difference_by_date"] is not None:
+                    score_funcs = {
+                        f"{eval.abs_diff.__name__}_{date}": eval.abs_diff(
+                            date, pl.col("time_end")
                         )
-                    )
-                    .to_incident(config["data"]["groups"])
-                    .with_columns(quantile=0.5)
+                        for date in config["scores"]["difference_by_date"]
+                    }
+
+                if config["scores"]["others"] is not None:
+                    for score_fun_name in config["scores"]["others"]:
+                        score_funcs[score_fun_name] = getattr(eval, score_fun_name)
+
+                scores = eval.summarize_score(
+                    test, summary_pred, config["data"]["groups"], score_funcs
                 )
 
-                test = iup.CumulativeUptakeData(
-                    data.filter(
-                        pl.col("time_end") >= forecast_start,
-                        pl.col("time_end") <= config["forecast_timeframe"]["end"],
-                    )
-                ).to_incident(config["data"]["groups"])
-
-                assert incident_pred.shape[0] == test.shape[0], (
-                    "The forecast and the test data do not have the same number of dates."
-                )
-
-                score = eval.score(test, incident_pred, score_fun).with_columns(
-                    score_fun=pl.lit(score_name),
+                scores = scores.with_columns(
                     model=pl.lit(model),
                 )
 
-                all_scores = pl.concat([all_scores, score])
+                all_scores = pl.concat([all_scores, scores])
 
     return all_scores
 
@@ -63,11 +106,8 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    pred = pl.scan_parquet(args.pred).collect()
-    data = pl.scan_parquet(args.obs).collect()
-
-    # Drop all samples and just use mean estimate, for now
-    pred = pred.drop([col for col in pred.columns if "estimate_" in col])
+    pred = pl.read_parquet(args.pred)
+    data = pl.read_parquet(args.obs)
 
     if config["evaluation_timeframe"]["interval"] is not None:
         eval_all_forecasts(data, pred, config).write_parquet(args.output)
