@@ -84,7 +84,12 @@ def plot_individual_projections(
 
 
 def plot_summary(
-    obs: pl.DataFrame, pred: pl.DataFrame, groups: List[str,], lci: float, uci: float
+    obs: pl.DataFrame,
+    pred: pl.DataFrame,
+    groups: List[str,],
+    lci: float,
+    uci: float,
+    group_to_plot: List[str,],
 ):
     """
     Save a multiple-grid graph of observed data and mean, interval estimate of prediction
@@ -97,8 +102,14 @@ def plot_summary(
     pred: polars.Dataframe
         The predicted daily uptake, differed by forecast date, must include columns
         `forecast_start` and `estimate`.
-    config: yaml
-        config file to specify the lower and upper bounds of credible interval to plot.
+    groups: list
+        A list of grouping factors.
+    lci: float
+        The quantile of the lower bound of the prediction interval. Must be between 0 and 1.
+    uci: float
+        The quantile of the upper bound of the prediction interval. Must be between 0 and 1.
+    group_to_plot: list
+        The list of grouping factors to plot. Must be only one element.
 
     Return:
     -------------
@@ -117,11 +128,11 @@ def plot_summary(
 
     plot_pred = pred.with_columns(
         lower=pl.col("estimate")
-        .quantile(lci / 100)
-        .over(["model", "forecast_start", "time_end", "season", groups]),
+        .quantile(lci)
+        .over(["model", "forecast_start", "time_end", groups]),
         upper=pl.col("estimate")
-        .quantile(uci / 100)
-        .over(["model", "forecast_start", "time_end", "season", groups]),
+        .quantile(uci)
+        .over(["model", "forecast_start", "time_end", groups]),
     ).sort("time_end")
 
     obs_chart = (
@@ -161,19 +172,27 @@ def plot_summary(
         )
     )
 
+    if group_to_plot is not None:
+        assert len(group_to_plot) == 1
+        ("Only one grouping factor is allowed for score plot.")
+        group_to_plot = group_to_plot[0]
+
     return alt.layer(interval_chart, pred_chart, obs_chart, data=plot_pred).facet(
-        column="model", row="forecast_start"
+        column=alt.Column(group_to_plot, type="nominal"), row="forecast_start"
     )
 
 
-def plot_score(scores: pl.DataFrame):
+def plot_score(scores: pl.DataFrame, group_to_plot: List[str,]):
     """
-    Save a evaluation score plot, varied by forecast start date.
+    Save a evaluation score plot changed with forecast start date, grouped by model and score type.
+    Only the metrics for forecast median is plotted.
 
     Arguments:
     --------------
     scores: polars.DataFrame
         The evaluation scores data frame.
+    group_to_plot: list
+        The list of grouping factors to plot. Must be only one element.
 
     Return:
     -------------
@@ -192,8 +211,17 @@ def plot_score(scores: pl.DataFrame):
     # every score name should have a label for the plot
     assert set(score_names).issubset(score_dict.keys())
 
+    plot_score = scores.filter(pl.col("quantile") == 0.5)
+
+    if group_to_plot is not None:
+        assert len(group_to_plot) == 1
+        ("Only one grouping factor is allowed for score plot.")
+        group = group_to_plot[0]
+
     return (
-        alt.Chart(scores.with_columns(pl.col("score_name").replace_strict(score_dict)))
+        alt.Chart(
+            plot_score.with_columns(pl.col("score_name").replace_strict(score_dict))
+        )
         .mark_point()
         .encode(
             alt.X("forecast_start:N", title="Forecast start"),
@@ -201,6 +229,7 @@ def plot_score(scores: pl.DataFrame):
             alt.Shape("quantile:N", title="Quantile"),
             alt.Color("model:N", title="Model"),
             alt.Column("score_name:N", header=alt.Header(labelFontSize=10), title=None),
+            alt.Row(group, type="nominal", title=group),
         )
         .resolve_scale(y="independent")
     )
@@ -236,4 +265,4 @@ if __name__ == "__main__":
         config["forecast_plots"]["interval"]["upper"],
     ).save(args.summary_output)
 
-    plot_score(scores).save(args.score_output)
+    plot_score(scores, config["score"]["group_to_plot"]).save(args.score_output)
