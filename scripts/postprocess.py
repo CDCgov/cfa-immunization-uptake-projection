@@ -179,24 +179,28 @@ def plot_score(scores: pl.DataFrame):
     -------------
         altair.chart object
     """
-    score_names = scores["score_fun"].unique()
+    score_names = scores["score_name"].unique()
 
     score_dict = {
         "mspe": "Mean Squared Prediction Error",
-        "mean_bias": "Mean Bias",
-        "eos_abe": "End-of-season Absolute Error",
     }
+
+    for name in score_names:
+        if name.startswith("abs_diff_"):
+            score_dict[name] = "Absolute differenece at " + name[len("abs_diff_") :]
 
     # every score name should have a label for the plot
     assert set(score_names).issubset(score_dict.keys())
 
     return (
-        alt.Chart(scores.with_columns(pl.col("score_fun").replace_strict(score_dict)))
+        alt.Chart(scores.with_columns(pl.col("score_name").replace_strict(score_dict)))
         .mark_point()
         .encode(
-            alt.X("forecast_start:T", title="Forecast Start"),
-            alt.Y("score:Q", title="Score"),
-            alt.Column("score_fun", header=alt.Header(labelFontSize=20), title=None),
+            alt.X("forecast_start:N", title="Forecast start"),
+            alt.Y("score_value:Q", title="Score value"),
+            alt.Shape("quantile:N", title="Quantile"),
+            alt.Color("model:N", title="Model"),
+            alt.Column("score_name:N", header=alt.Header(labelFontSize=10), title=None),
         )
         .resolve_scale(y="independent")
     )
@@ -215,6 +219,7 @@ if __name__ == "__main__":
 
     pred = pl.read_parquet(args.pred)
     data = pl.read_parquet(args.obs)
+    scores = pl.read_parquet(args.score)
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
@@ -230,3 +235,5 @@ if __name__ == "__main__":
         config["forecast_plots"]["interval"]["lower"],
         config["forecast_plots"]["interval"]["upper"],
     ).save(args.summary_output)
+
+    plot_score(scores).save(args.score_output)
