@@ -43,7 +43,7 @@ def check_date_match(
             for group_unique in data[group].unique()
         ]
     else:
-        assert data.shape[0] == pred.shape[0], (
+        assert (data["time_end"] == pred["time_end"]).all(), (
             "The forecast and the data should have the same forecast dates"
         )
 
@@ -63,7 +63,7 @@ def check_date_match(
         )
     else:
         assert not (any(data["time_end"].is_duplicated())), (
-            "Duplicated dates are found in data and prediction."
+            "Duplicated dates are found in data."
         )
 
 

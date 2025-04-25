@@ -78,9 +78,9 @@ def eval_all_forecasts(
                         for date in config["scores"]["difference_by_date"]
                     }
 
-                score_funcs[config["scores"]["others"]] = getattr(
-                    eval, config["scores"]["others"]
-                )
+                if config["scores"]["others"] is not None:
+                    for score_fun_name in config["scores"]["others"]:
+                        score_funcs[score_fun_name] = getattr(eval, score_fun_name)
 
                 scores = eval.summarize_score(
                     test, summary_pred, config["data"]["groups"], score_funcs
