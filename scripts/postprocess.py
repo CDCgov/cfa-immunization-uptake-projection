@@ -263,6 +263,7 @@ if __name__ == "__main__":
         config["data"]["groups"],
         config["forecast_plots"]["interval"]["lower"],
         config["forecast_plots"]["interval"]["upper"],
+        config["scores"]["group_to_plot"],
     ).save(args.summary_output)
 
-    plot_score(scores, config["score"]["group_to_plot"]).save(args.score_output)
+    plot_score(scores, config["scores"]["group_to_plot"]).save(args.score_output)
