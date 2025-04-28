@@ -138,7 +138,7 @@ def plot_summary(
     plot_obs = obs.join(models_forecasts, how="cross").filter(
         pl.col("season").is_in(pred["season"].unique())
     )
-    
+
     plot_pred = pred.with_columns(
         lower=pl.col("estimate")
         .quantile(lci)
