@@ -47,9 +47,9 @@ models:
 # score metrics
 # score metrics
 scores:
-  quantiles: [0.025,0.5,0.975] # Must specify at least one
+  quantiles: [0.025,0.5,0.975] # Must specify at least one fraction
   difference_by_date: [2024-03-31] # if blank, abs_diff will not be used
-  others: mspe
+  others: [mspe]
   group_to_plot: [season]
 
 # Spacing between multiple forecasts, for evaluation
