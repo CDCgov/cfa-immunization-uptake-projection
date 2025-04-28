@@ -10,7 +10,10 @@ alt.data_transformers.disable_max_rows()
 
 
 def plot_individual_projections(
-    obs: pl.DataFrame, pred: pl.DataFrame, n_trajectories: int
+    obs: pl.DataFrame,
+    pred: pl.DataFrame,
+    n_trajectories: int,
+    group_to_plot: List[str,],
 ):
     """
     Save a multiple-grid graph with the comparison between the observed uptake and the individual prediction projections,
@@ -25,6 +28,8 @@ def plot_individual_projections(
         `forecast_start` and `estimate`.
     n_trajectories: int
         The number of prediction trajectories to plot.
+    group_to_plot: List
+        The grouping factors to plot. Must contain only 1 element.
 
     Return:
     -------------
@@ -78,8 +83,14 @@ def plot_individual_projections(
         )
     )
 
+    if group_to_plot is not None:
+        assert len(group_to_plot) == 1
+        ("Only one grouping factor is allowed for score plot.")
+        group = group_to_plot[0]
+
     return alt.layer(pred_chart, obs_chart, data=pred).facet(
-        column="model", row="forecast_start"
+        row=alt.Row("forecast_start:T", title="Forecast start date"),
+        column=alt.Column(group, type="nominal"),
     )
 
 
@@ -120,12 +131,13 @@ def plot_summary(
     if "time_end" not in obs.columns or "estimate" not in obs.columns:
         ValueError("'time_end' or 'estimate' is missing from obs.")
 
+    assert len(pred["model"].unique()) == 1, "Only 1 model is allowed. "
+
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
 
     plot_obs = obs.join(models_forecasts, how="cross").filter(
         pl.col("season").is_in(pred["season"].unique())
     )
-
     plot_pred = pred.with_columns(
         lower=pl.col("estimate")
         .quantile(lci)
@@ -142,6 +154,7 @@ def plot_summary(
             alt.X(
                 "time_end:T",
                 axis=alt.Axis(format="%Y-%m", tickCount="month"),
+                title="Date",
             ),
             alt.Y("estimate:Q"),
         )
@@ -175,10 +188,11 @@ def plot_summary(
     if group_to_plot is not None:
         assert len(group_to_plot) == 1
         ("Only one grouping factor is allowed for score plot.")
-        group_to_plot = group_to_plot[0]
+        group = group_to_plot[0]
 
     return alt.layer(interval_chart, pred_chart, obs_chart, data=plot_pred).facet(
-        column=alt.Column(group_to_plot, type="nominal"), row="forecast_start"
+        column=alt.Column(group, type="nominal"),
+        row=alt.Row("forecast_start:T", title="Forecast start date"),
     )
 
 
@@ -224,12 +238,11 @@ def plot_score(scores: pl.DataFrame, group_to_plot: List[str,]):
         )
         .mark_point()
         .encode(
-            alt.X("forecast_start:N", title="Forecast start"),
+            alt.X("forecast_start:T", title="Forecast start date"),
             alt.Y("score_value:Q", title="Score value"),
             alt.Shape("quantile:N", title="Quantile"),
-            alt.Color("model:N", title="Model"),
-            alt.Column("score_name:N", header=alt.Header(labelFontSize=10), title=None),
-            alt.Row(group, type="nominal", title=group),
+            alt.Row("score_name:N", header=alt.Header(labelFontSize=10), title=None),
+            alt.Column(group, type="nominal", title=group),
         )
         .resolve_scale(y="independent")
     )
@@ -253,8 +266,12 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
+    pred = pred.filter(pl.col("model") == pl.lit("HillModel"))
     plot_individual_projections(
-        data, pred, config["forecast_plots"]["n_trajectories"]
+        data,
+        pred,
+        config["forecast_plots"]["n_trajectories"],
+        config["scores"]["group_to_plot"],
     ).save(args.proj_output)
 
     plot_summary(
