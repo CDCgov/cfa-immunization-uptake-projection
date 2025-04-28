@@ -1,12 +1,15 @@
-from typing import Callable
+import datetime as dt
+from typing import Callable, Dict, List
 
 import polars as pl
 
-from iup import IncidentUptakeData, PointForecast
+from iup import CumulativeUptakeData, QuantileForecast
 
 
 ###### evaluation metrics #####
-def check_date_match(data: IncidentUptakeData, pred: PointForecast):
+def check_date_match(
+    data: CumulativeUptakeData, pred: QuantileForecast, groups: List[str] | None
+):
     """
     Check the dates between data and pred.
     Dates must be 1-on-1 equal and no duplicate.
@@ -14,31 +17,61 @@ def check_date_match(data: IncidentUptakeData, pred: PointForecast):
 
     Parameters
     data:
-        The observed data used for modeling. Should be IncidentUptakeData
+        The observed data used for modeling. Should be CumulativeUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
+        The forecast made by model. Can be QuantileForecast or PointForecast
+    groups:
+        A list of grouping factors
 
     Return
     Error if conditions fail to meet.
 
     """
     # sort data and pred by date #
-    data = IncidentUptakeData(data.sort("time_end"))
-    pred = PointForecast(pred.sort("time_end"))
+    groups_and_time = ["time_end"] + groups if groups is not None else ["time_end"]
 
-    # 1. Dates must be 1-on-1 equal
-    (data["time_end"] == pred["time_end"]).all()
+    data = CumulativeUptakeData(data.sort(groups_and_time))
+    pred = QuantileForecast(pred.sort(groups_and_time))
 
-    # 2. There should not be any duplicated date in either data or prediction.
-    assert not (any(data["time_end"].is_duplicated())), (
-        "Duplicated dates are found in data and prediction."
-    )
+    if groups is not None:
+        assert [
+            (
+                data.filter(pl.col(group) == group_unique)["time_end"]
+                == pred.filter(pl.col(group) == group_unique)["time_end"]
+            ).all()
+            for group in groups
+            for group_unique in data[group].unique()
+        ]
+    else:
+        assert (data["time_end"] == pred["time_end"]).all(), (
+            "The forecast and the data should have the same forecast dates"
+        )
+
+    if groups is not None:
+        assert not (
+            any(
+                [
+                    any(
+                        data.filter(pl.col(group) == group_unique)
+                        .select("time_end")
+                        .is_duplicated()
+                    )
+                    for group in groups
+                    for group_unique in data[group].unique()
+                ]
+            )
+        )
+    else:
+        assert not (any(data["time_end"].is_duplicated())), (
+            "Duplicated dates are found in data."
+        )
 
 
-def score(
-    data: IncidentUptakeData,
-    pred: PointForecast,
-    score_fun: Callable[[pl.Expr, pl.Expr], pl.Expr],
+def summarize_score(
+    data: CumulativeUptakeData,
+    pred: QuantileForecast,
+    groups: List[str] | None,
+    score_funs: Dict[str, Callable],
 ) -> pl.DataFrame:
     """
     Calculate score between observed data and forecast.
@@ -46,53 +79,102 @@ def score(
 
     Parameters
     data:
-        The observed data used for modeling. Should be IncidentUptakeData
+        The observed data used for modeling. Should be CumulativeUptakeData
     pred:
-        The forecast made by model. Should be PointForecast
-    score_fun:
-        Scoring function. Takes observed and true values.
+        The forecast made by model. Can be QuantileForecast or PointForecast
+    groups:
+        A list of grouping factors, specified in config file.
+    score_funs:
+        A dictionary of scoring functions. The key is the name of the score, and the value
+        is the scoring function.
 
     Return
-    pl.DataFrame with one row: forecast start date, forecast end date, and score
+    A pl.DataFrame of scores with information including score name and score values, grouped by quantile, forecast
 
     """
-    # validate inputs
-    assert isinstance(data, IncidentUptakeData)
-    assert isinstance(pred, PointForecast)
-    check_date_match(data, pred)
 
-    return (
-        data.join(pred, on="time_end", how="inner", validate="1:1")
-        .rename({"estimate": "data", "estimate_right": "pred"})
-        .select(
-            forecast_start=pl.col("time_end").min(),
-            forecast_end=pl.col("time_end").max(),
-            score=score_fun(pl.col("data"), pl.col("pred")),
-        )
+    check_date_match(data, pred, groups)
+    assert isinstance(data, CumulativeUptakeData)
+    assert isinstance(pred, QuantileForecast)
+
+    assert len(pred["quantile"].unique()) == 1, (
+        "The prediction should only have one quantile."
     )
+
+    if groups is None:
+        columns_to_join = ["time_end"]
+    else:
+        columns_to_join = ["time_end"] + groups
+
+    joined_df = data.join(pred, on=columns_to_join, how="inner", validate="1:1").rename(
+        {"estimate": "data", "estimate_right": "pred"}
+    )
+
+    all_scores = pl.DataFrame()
+    for score_name in score_funs:
+        score = joined_df.group_by(groups).agg(
+            score_name=pl.lit(score_name),
+            score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
+        )
+
+        if isinstance(score["score_value"][0], pl.Series):
+            score = score.with_columns(
+                pl.col("score_value").list.drop_nulls().explode()
+            )
+
+        score = score.with_columns(
+            quantile=joined_df["quantile"].first(),
+            forecast_start=joined_df["time_end"].min(),
+            forecast_end=joined_df["time_end"].max(),
+        )
+
+        all_scores = pl.concat([all_scores, score])
+
+    return all_scores
 
 
 def mspe(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+    """
+    Calculate Mean Squared Prediction Error with polars column expression
+    ---------------------
+    Arguments:
+    x: either observed data or predictions
+    y: either observed data or predictions
+    Return:
+        Mean Squared Prediction Error as a polars column expression
+
+    """
     return ((x - y) ** 2).mean()
 
 
-def mean_bias(pred: pl.Expr, data: pl.Expr) -> pl.Expr:
+def abs_diff(
+    selected_date: dt.date, date_col: pl.Expr
+) -> Callable[[pl.Expr, pl.Expr], pl.Expr]:
     """
-    Note the bias here is not the classical bias calculated from the posterior distribution.
-    The bias here is defined as: at time t,
-    bias = -1 if pred_t < data_t; bias = 0 if pred_t == data_t; bias = 1 if pred_t > bias_t
+    Generate a function that calculates the absolute difference between
+    observed data and prediction on a certain date.
+    ----------------------
+    Arguments:
+    selected_date: a datetime date object to specify which date to do the calculation
+    date_col: a polars column expression used to select the date
 
-    mean_bias = sum of the bias across time/length of data
+    Return:
+        A function that takes two polars column expressions to do the calculation.
     """
 
-    return (pred - data).sign().mean()
+    lit_date = pl.lit(selected_date)
 
+    def f(x: pl.Expr, y: pl.Expr) -> pl.Expr:
+        """
+        Calculate the absolute difference between two polars column expressions
+        -----------------------
+        Arguments:
+        x: either observed data or predictions
+        y: either observed data or predictions
 
-def eos_abe(data: pl.Expr, pred: pl.Expr) -> pl.Expr:
-    """
-    Calculate the absolute error of the total uptake at the end of season between data and prediction
-    relative to data.
-    """
-    cum_data = data.cum_sum().tail(1)
-    cum_pred = pred.cum_sum().tail(1)
-    return abs(cum_data - cum_pred) / cum_data
+        Return:
+        A polars column expression that returns the absolute difference at the certain date, otherwise None
+        """
+        return pl.when(date_col == lit_date).then((x - y).abs()).otherwise(None)
+
+    return f
