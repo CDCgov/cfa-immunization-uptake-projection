@@ -1,37 +1,8 @@
 import datetime as dt
 
 import polars as pl
-import pytest
 
 import iup.models
-
-
-@pytest.fixture
-def frame() -> iup.UptakeData:
-    """
-    Make a mock data frame to uptake data manipulations.
-    """
-    frame = pl.DataFrame(
-        {
-            "geography": ["USA", "PA", "USA", "PA", "USA", "PA", "USA", "PA"],
-            "time_end": [
-                "2019-12-30",
-                "2019-12-30",
-                "2020-01-07",
-                "2020-01-07",
-                "2020-01-14",
-                "2020-01-14",
-                "2020-01-21",
-                "2020-01-21",
-            ],
-            "estimate": [0.0, 0.0, 0.01, 0.001, 0.03, 0.003, 0.04, 0.004],
-            "season": ["2019/2020"] * 8,
-        }
-    )
-
-    frame = frame.with_columns(time_end=pl.col("time_end").str.to_date("%Y-%m-%d"))
-
-    return iup.UptakeData(frame)
 
 
 def test_extract_group_combos_handles_groups(frame):
