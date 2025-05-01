@@ -7,7 +7,6 @@ import yaml
 
 import iup
 import iup.models
-from iup.utils import parse_name_and_date
 
 
 def run_all_forecasts(
@@ -34,9 +33,8 @@ def run_all_forecasts(
     all_forecasts = pl.DataFrame()
 
     for model_details, fitted_model in fitted_models.items():
-        model_details = parse_name_and_date(model_details)
-        model_name = model_details["model_name"]
-        forecast_date = model_details["forecast_date"]
+        model_name = model_details[0]
+        forecast_date = model_details[1]
 
         assert hasattr(iup.models, model_name), (
             f"{model_name} is not a valid model type!"
