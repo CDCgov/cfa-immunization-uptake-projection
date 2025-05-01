@@ -6,7 +6,6 @@ RAW_DATA = data/nis_raw.parquet
 MODEL_FITS = output/model_fits.pkl
 DIAGNOSTICS = output/
 FORECASTS = data/forecasts.parquet
-POSTERIORS = data/posteriors.parquet
 SCORES = data/scores.parquet
 PROJ_PLOTS = output/projections.png
 SUMMARY_PLOTS = output/summary.png
@@ -14,7 +13,7 @@ SCORE_PLOTS = output/scores.png
 
 .PHONY: cache
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(POSTERIORS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
