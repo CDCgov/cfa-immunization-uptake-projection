@@ -55,7 +55,7 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
                 forecast_start=forecast_date,
             )
 
-            label = f"{model_name}_forecast_starts_{forecast_date}"
+            label = (model_name, forecast_date)
             all_models[label] = fitted_model
 
     return all_models

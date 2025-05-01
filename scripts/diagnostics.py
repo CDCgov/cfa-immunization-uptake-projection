@@ -9,7 +9,6 @@ import yaml
 import iup
 import iup.diagnostics
 import iup.models
-from iup.utils import parse_name_and_date
 
 
 def diagnostic_plot(
@@ -29,7 +28,9 @@ def diagnostic_plot(
             plot_func = getattr(iup.diagnostics, plot_name)
             axes = plot_func(idata)
             fig = axes.ravel()[0].figure
-            fig.savefig(f"{output_dir}/{key}_{plot_name}.png")
+            fig.savefig(
+                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{plot_name}.png"
+            )
 
 
 def diagnostic_table(
@@ -52,7 +53,9 @@ def diagnostic_table(
             else:
                 output = table_func(idata)
 
-            output.write_parquet(f"{output_dir}/{key}_{table_name}.parquet")
+            output.write_parquet(
+                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{table_name}.parquet"
+            )
 
 
 def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) -> dict:
@@ -82,8 +85,8 @@ def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) 
     sel_keys = [
         key
         for key in models.keys()
-        if parse_name_and_date(key)["model_name"] in config["diagnostics"]["model"]
-        if parse_name_and_date(key)["forecast_date"] in forecast_dates
+        if key[0] in config["diagnostics"]["model"]
+        if key[1] in forecast_dates
     ]
 
     return {key: models[key] for key in sel_keys}
