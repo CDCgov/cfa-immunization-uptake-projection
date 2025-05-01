@@ -40,8 +40,6 @@ def diagnostic_table(
     diagnose_table_names = config["diagnostics"]["table"]
 
     for key, model in sel_model_dict.items():
-        # idata = az.from_numpyro(model.mcmc)
-
         for table_name in diagnose_table_names:
             table_func = getattr(iup.diagnostics, table_name)
             output = table_func(model)
