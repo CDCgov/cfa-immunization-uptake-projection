@@ -1,5 +1,3 @@
-import datetime as dt
-import re
 from typing import List
 
 import numpy as np
@@ -161,21 +159,3 @@ def count_unique_values(array: np.ndarray) -> List[int,]:
         Number of unique values in each column of the array
     """
     return [len(np.unique(array[:, i])) for i in range(array.shape[1])]
-
-
-def parse_name_and_date(str) -> dict[str, dt.date]:
-    """
-    Parse a string to get the model name and forecast date
-
-    Args:
-        str: A string that has a pattern of "'Model name'_forecast_starts_'Forecast date'"
-
-    Return:
-        A dictionary of model name and forecast date.
-    """
-    pattern = re.compile("(.+)_forecast_starts_(.+)")
-    result = pattern.fullmatch(str).groups()
-    model_name = result[0]
-    date = dt.datetime.strptime(result[1], "%Y-%m-%d").date()
-
-    return {"model_name": model_name, "forecast_date": date}
