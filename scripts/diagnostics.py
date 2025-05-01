@@ -2,7 +2,6 @@ import argparse
 import pickle
 from typing import Any, Dict
 
-import arviz as az
 import polars as pl
 import yaml
 
@@ -22,11 +21,9 @@ def diagnostic_plot(
     diagnose_plot_names = config["diagnostics"]["plot"]
 
     for key, model in sel_model_dict.items():
-        idata = az.from_numpyro(model.mcmc)
-
         for plot_name in diagnose_plot_names:
             plot_func = getattr(iup.diagnostics, plot_name)
-            axes = plot_func(idata)
+            axes = plot_func(model)
             fig = axes.ravel()[0].figure
             fig.savefig(
                 f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{plot_name}.png"
@@ -44,14 +41,9 @@ def diagnostic_table(
     diagnose_table_names = config["diagnostics"]["table"]
 
     for key, model in sel_model_dict.items():
-        idata = az.from_numpyro(model.mcmc)
-
         for table_name in diagnose_table_names:
             table_func = getattr(iup.diagnostics, table_name)
-            if table_name == "print_posterior_dist":
-                output = table_func(model, idata)
-            else:
-                output = table_func(idata)
+            output = table_func(model)
 
             output.write_parquet(
                 f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{table_name}.parquet"

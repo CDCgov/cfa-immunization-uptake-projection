@@ -76,6 +76,9 @@ class UptakeModel(abc.ABC):
         """
         pass
 
+    # save for future models #
+    mcmc = None
+
 
 class LPLModel(UptakeModel):
     """
