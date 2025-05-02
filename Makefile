@@ -11,9 +11,11 @@ PROJ_PLOTS = output/projections.png
 SUMMARY_PLOTS = output/summary.png
 SCORE_PLOTS = output/scores.png
 
-.PHONY: cache
+.PHONY: cache viz
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
+
+viz: streamlit run scripts/viz.py
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
