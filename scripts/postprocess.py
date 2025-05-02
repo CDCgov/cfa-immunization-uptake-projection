@@ -206,22 +206,22 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--pred", help="forecast data")
     p.add_argument("--obs", help="observed data")
-    p.add_argument("--score", help="evaluation scores")
-    p.add_argument("--proj_output", help="png file of projection plot")
-    p.add_argument("--score_output", help="png file of score plot")
     p.add_argument("--config", help="config file")
-    p.add_argument("--summary_output", help="png file of mean and 95% CI plot")
+    p.add_argument("--eval", help="evaluation data")
+    p.add_argument("--output", help="png file of forecast plots")
+    p.add_argument("--scores", help="png file evaluation score plots")
     args = p.parse_args()
 
     pred = pl.read_parquet(args.pred)
     data = pl.read_parquet(args.obs)
+    eval = pl.read_parquet(args.eval)
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
     plot_individual_projections(
         data, pred, config["forecast_plots"]["n_trajectories"]
-    ).save(args.proj_output)
+    ).save(f"{args.output}trajectories.png")
 
     plot_summary(
         data,
@@ -229,4 +229,6 @@ if __name__ == "__main__":
         config["data"]["groups"],
         config["forecast_plots"]["interval"]["lower"],
         config["forecast_plots"]["interval"]["upper"],
-    ).save(args.summary_output)
+    ).save(f"{args.output}intervals.png")
+
+    plot_score(eval).save(args.score)

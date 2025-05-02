@@ -26,7 +26,7 @@ def diagnostic_plot(
             axes = plot_func(model)
             fig = axes.ravel()[0].figure
             fig.savefig(
-                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{plot_name}.png"
+                f"{output_dir}/plots/{key[0]}_forecast_start_{str(key[1])}_{plot_name}.png"
             )
 
 
@@ -46,7 +46,7 @@ def diagnostic_table(
             output = table_func(model)
 
             output.write_parquet(
-                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{table_name}.parquet"
+                f"{output_dir}/tables/{key[0]}_forecast_start_{str(key[1])}_{table_name}.parquet"
             )
 
 

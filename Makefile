@@ -1,24 +1,23 @@
 NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
-CONFIG = scripts/config.yaml
-RAW_DATA = data/nis_raw.parquet
-MODEL_FITS = output/model_fits.pkl
-DIAGNOSTICS = output/
-FORECASTS = data/forecasts.parquet
-SCORES = data/scores.parquet
-PROJ_PLOTS = output/projections.png
-SUMMARY_PLOTS = output/summary.png
-SCORE_PLOTS = output/scores.png
+CONFIG = scripts/config_flu.yaml
+RAW_DATA = output/data/nis_raw_flu.parquet
+MODEL_FITS = output/fits/model_fits.pkl
+DIAGNOSTICS = output/diagnostics/
+FORECASTS = output/forecasts/tables/forecasts.parquet
+FORECAST_PLOTS = output/forecasts/plots/
+SCORES = output/scores/tables/scores.parquet
+SCORE_PLOTS = output/scores/plots/scores.png
 
 .PHONY: cache
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
 
-$(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
+$(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
-		--proj_output=$(PROJ_PLOTS) --summary_output=$(SUMMARY_PLOTS)
+		--eval=$(SCORES) --output=$(FORECAST_PLOTS) --scores=$(SCORE_PLOTS)
 
 $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 	python $< \
