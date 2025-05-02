@@ -27,6 +27,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
     - score_funs: specify the evaluation metrics. Can be a list including "mspe", "mean_bias" and "eos_abe".
 6. `make all` to get cleaned data "data/nis_raw.parquet", forecasts "data/forecasts.parquet", evaluation scores "data/scores.parquet", forecast plot "output/projections.png", and evaluation score plot "output/scores.png".
+7. `make viz` to run an interactive web app to visualize results
 
 #### Evaluation scores
 - Mean squared prediction error on incident projections ("mspe")

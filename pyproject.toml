@@ -22,6 +22,7 @@ typing-extensions = "^4.12.2"
 arviz = "^0.21.0"
 ipympl = "^0.9.7"
 pandas = "^2.2.3"
+streamlit = "^1.45.0"
 
 [tool.poetry.group.dev.dependencies]
 detect-secrets = "^1.5.0"
