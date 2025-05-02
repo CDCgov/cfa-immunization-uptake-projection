@@ -214,7 +214,6 @@ if __name__ == "__main__":
 
     pred = pl.read_parquet(args.pred)
     data = pl.read_parquet(args.obs)
-    eval = pl.read_parquet(args.eval)
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
@@ -231,4 +230,6 @@ if __name__ == "__main__":
         config["forecast_plots"]["interval"]["upper"],
     ).save(f"{args.output}intervals.png")
 
-    plot_score(eval).save(args.score)
+    if config["evaluation_timeframe"]["interval"] is not None:
+        eval = pl.read_parquet(args.eval)
+        plot_score(eval).save(args.score)
