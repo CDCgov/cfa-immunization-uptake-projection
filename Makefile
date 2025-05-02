@@ -15,7 +15,8 @@ SCORE_PLOTS = output/scores.png
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
 
-viz: streamlit run scripts/viz.py
+viz:
+	streamlit run scripts/viz.py
 
 $(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
