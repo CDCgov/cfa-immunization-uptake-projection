@@ -4,7 +4,8 @@ TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config_flu.yaml
 RAW_DATA = output/data/nis_raw_flu.parquet
 MODEL_FITS = output/fits/model_fits.pkl
-DIAGNOSTICS = output/diagnostics/
+DIAGNOSTICS = output/diagnostics/tables/
+DIAGNOSTIC_PLOTS = output/diagnostics/plots/
 FORECASTS = output/forecasts/tables/forecasts.parquet
 FORECAST_PLOTS = output/forecasts/plots/
 SCORES = output/scores/tables/scores.parquet
@@ -12,7 +13,7 @@ SCORE_PLOTS = output/scores/plots/scores.png
 
 .PHONY: cache
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
 
 $(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
@@ -22,13 +23,14 @@ $(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
-		--output=$(SCORES)
+		--output=$@
 
 $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) --output=$@
 
-$(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
-	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_dir=$@
+$(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
+	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$(DIAGNOSTICS) \
+	--output_plot=$(DIAGNOSTIC_PLOTS)
 
 $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
