@@ -28,7 +28,7 @@ $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) --output=$@
 
-$(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
+$(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$(DIAGNOSTICS) \
 	--output_plot=$(DIAGNOSTIC_PLOTS)
 
