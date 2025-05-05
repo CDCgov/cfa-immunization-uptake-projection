@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 from typing import List
 
 import altair as alt
@@ -220,7 +221,8 @@ if __name__ == "__main__":
 
     plot_individual_projections(
         data, pred, config["forecast_plots"]["n_trajectories"]
-    ).save(f"{args.output}trajectories.png")
+    ).save(Path(args.output, "trajectories.png"))
+    # ).save(f"{args.output}trajectories.png")
 
     plot_summary(
         data,
@@ -228,7 +230,8 @@ if __name__ == "__main__":
         config["data"]["groups"],
         config["forecast_plots"]["interval"]["lower"],
         config["forecast_plots"]["interval"]["upper"],
-    ).save(f"{args.output}intervals.png")
+    ).save(Path(args.output, "intervals.png"))
+    # ).save(f"{args.output}intervals.png")
 
     if config["evaluation_timeframe"]["interval"] is not None:
         eval = pl.read_parquet(args.eval)
