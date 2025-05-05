@@ -11,8 +11,6 @@ FORECAST_PLOTS = output/forecasts/plots/
 SCORES = output/scores/tables/scores.parquet
 SCORE_PLOTS = output/scores/plots/scores.png
 
-.PHONY: cache
-
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
 
 $(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
@@ -37,8 +35,6 @@ $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 
 $(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
 	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
-
-cache: $(NIS_CACHE)/status.txt
 
 $(NIS_CACHE)/status.txt $(TOKEN_PATH):
 	python -c "import nisapi; nisapi.cache_all_datasets('$(NIS_CACHE)', '$(TOKEN)')"
