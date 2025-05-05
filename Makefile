@@ -1,35 +1,36 @@
 NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
-CONFIG = scripts/config.yaml
-RAW_DATA = data/nis_raw.parquet
-MODEL_FITS = output/model_fits.pkl
-DIAGNOSTICS = output/
-FORECASTS = data/forecasts.parquet
-SCORES = data/scores.parquet
-PROJ_PLOTS = output/projections.png
-SUMMARY_PLOTS = output/summary.png
-SCORE_PLOTS = output/scores.png
+CONFIG = scripts/config_flu.yaml
+RAW_DATA = output/data/nis_raw_flu.parquet
+MODEL_FITS = output/fits/model_fits.pkl
+DIAGNOSTICS = output/diagnostics/tables/
+DIAGNOSTIC_PLOTS = output/diagnostics/plots/
+FORECASTS = output/forecasts/tables/forecasts.parquet
+FORECAST_PLOTS = output/forecasts/plots/
+SCORES = output/scores/tables/scores.parquet
+SCORE_PLOTS = output/scores/plots/scores.png
 
 .PHONY: cache
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PROJ_PLOTS) $(SUMMARY_PLOTS) $(SCORE_PLOTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
 
-$(PROJ_PLOTS) $(SUMMARY_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
+$(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
-		--proj_output=$(PROJ_PLOTS) --summary_output=$(SUMMARY_PLOTS)
+		--eval=$(SCORES) --output=$(FORECAST_PLOTS) --scores=$(SCORE_PLOTS)
 
 $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 	python $< \
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
-		--output=$(SCORES)
+		--output=$@
 
 $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) --output=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
-	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_dir=$@
+	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$(DIAGNOSTICS) \
+	--output_plot=$(DIAGNOSTIC_PLOTS)
 
 $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@

@@ -1,5 +1,6 @@
 import argparse
 import pickle
+from pathlib import Path
 from typing import Any, Dict
 
 import polars as pl
@@ -26,7 +27,10 @@ def diagnostic_plot(
             axes = plot_func(model)
             fig = axes.ravel()[0].figure
             fig.savefig(
-                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{plot_name}.png"
+                Path(
+                    output_dir,
+                    f"model={key[0]}_forecast_start={str(key[1])}_{plot_name}.png",
+                )
             )
 
 
@@ -46,7 +50,10 @@ def diagnostic_table(
             output = table_func(model)
 
             output.write_parquet(
-                f"{output_dir}/{key[0]}_forecast_start_{str(key[1])}_{table_name}.parquet"
+                Path(
+                    output_dir,
+                    f"model={key[0]}_forecast_start={str(key[1])}_{table_name}.parquet",
+                )
             )
 
 
@@ -88,7 +95,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
     p.add_argument("--input", help="fitted models")
-    p.add_argument("--output_dir", help="path of output plots and tables")
+    p.add_argument("--output_table", help="path of output tables")
+    p.add_argument("--output_plot", help="path of output plots")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
@@ -97,5 +105,5 @@ if __name__ == "__main__":
     with open(args.input, "rb") as f:
         models = pickle.load(f)
 
-    diagnostic_plot(models, config, args.output_dir)
-    diagnostic_table(models, config, args.output_dir)
+    diagnostic_plot(models, config, args.output_plot)
+    diagnostic_table(models, config, args.output_table)
