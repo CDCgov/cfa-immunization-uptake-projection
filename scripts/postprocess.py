@@ -267,7 +267,6 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    pred = pred.filter(pl.col("model") == pl.lit("HillModel"))
     plot_individual_projections(
         data,
         pred,
