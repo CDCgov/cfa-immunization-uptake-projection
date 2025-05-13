@@ -23,11 +23,16 @@ covid = (
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
     .drop("start")
 )
-alt.Chart(covid).mark_line().encode(
-    x=alt.X("elapsed:Q", title="Days since July 1"),
-    y=alt.Y("estimate:Q", title="Observed Uptake"),
-    color="season:N",
+plot = (
+    alt.Chart(covid)
+    .mark_line()
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("estimate:Q", title="Observed Uptake"),
+        color="season:N",
+    )
 )
+plot.display()
 
 # %% Plot national scale flu immunization
 natl = (
@@ -39,11 +44,16 @@ natl = (
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
     .drop("start")
 )
-alt.Chart(natl).mark_line().encode(
-    x=alt.X("elapsed:Q", title="Days since July 1"),
-    y=alt.Y("estimate:Q", title="Observed Uptake"),
-    color="season:N",
+plot = (
+    alt.Chart(natl)
+    .mark_line()
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("estimate:Q", title="Observed Uptake"),
+        color="season:N",
+    )
 )
+plot.display()
 
 # %% Plot state scale flu immunization
 state = (
@@ -56,20 +66,26 @@ state = (
     .drop("start")
 )
 alt.data_transformers.disable_max_rows()
-alt.Chart(state).mark_line().encode(
-    x=alt.X(
-        "elapsed:Q",
-        title="Days since July 1",
-        axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-    ),
-    y=alt.Y(
-        "estimate:Q",
-        title="Observed Uptake",
-        axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-    ),
-    color="season:N",
-    facet=alt.Facet("geography", columns=9, header=alt.Header(labelFontSize=40)),
+plot = (
+    alt.Chart(state)
+    .mark_line()
+    .encode(
+        x=alt.X(
+            "elapsed:Q",
+            title="Days since July 1",
+            axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+        ),
+        y=alt.Y(
+            "estimate:Q",
+            title="Observed Uptake",
+            axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+        ),
+        color="season:N",
+        facet=alt.Facet("geography", columns=9, header=alt.Header(labelFontSize=40)),
+    )
 )
+plot.display()
+
 # %% Plot uptake for one state, with uncertainty
 one_state = state.filter(
     (pl.col("geography") == "Kansas") & (pl.col("season") == "2023/2024")
@@ -77,7 +93,7 @@ one_state = state.filter(
     estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
     estimate_lo=pl.col("estimate") - 2 * pl.col("sem"),
 )
-alt.Chart(one_state).mark_errorbar(color="black").encode(
+plot = alt.Chart(one_state).mark_errorbar(color="black").encode(
     x=alt.X("elapsed:Q", title="Days since July 1"),
     y=alt.Y("estimate_lo", title="Observed Uptake"),
     y2="estimate_hi",
@@ -85,6 +101,7 @@ alt.Chart(one_state).mark_errorbar(color="black").encode(
     x=alt.X("elapsed:Q", title="Days since July 1"),
     y=alt.Y("estimate:Q", title="Observed Uptake"),
 )
+plot.display()
 
 # %% Load forecasts for flu by state in 2023/2024, and summarize
 pred = pl.read_parquet(
@@ -107,7 +124,7 @@ pred_summ = (
 
 # %% Plot prediction vs. data for 2023/2024
 pred_one_state = pred_summ.filter((pl.col("geography") == "Kansas"))
-(
+plot = (
     alt.Chart(one_state)
     .mark_errorbar(color="black")
     .encode(
@@ -135,3 +152,4 @@ pred_one_state = pred_summ.filter((pl.col("geography") == "Kansas"))
         y=alt.Y("estimate:Q", title="Uptake"),
     )
 )
+plot.display()
