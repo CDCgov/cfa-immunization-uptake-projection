@@ -1,6 +1,6 @@
 import argparse
 import pickle
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import polars as pl
 import yaml
@@ -13,7 +13,7 @@ def run_all_forecasts(
     data: iup.UptakeData,
     fitted_models: Dict[str, iup.models.UptakeModel],
     config: dict[str, Any],
-) -> pl.DataFrame:
+) -> Tuple[pl.DataFrame, pl.DataFrame]:
     """Run all forecasts for all the fitted models across model name and forecast start.
 
     Args:
@@ -31,6 +31,7 @@ def run_all_forecasts(
         forecast start and end, at least grouped by model name, forecast start, and forecast end.
     """
     all_forecasts = pl.DataFrame()
+    all_postchecks = pl.DataFrame()
 
     for model_details, fitted_model in fitted_models.items():
         model_name = model_details[0]
@@ -47,11 +48,32 @@ def run_all_forecasts(
             config["data"]["season_start_day"],
         )
 
-        _, test_data = iup.UptakeData.split_train_test(augmented_data, forecast_date)
+        train_data, test_data = iup.UptakeData.split_train_test(
+            augmented_data, forecast_date
+        )
+        train_dates = train_data.select(["time_end", "season"])
         if test_data.height == 0:
             test_dates = None
         else:
             test_dates = test_data.select(["time_end", "season"])
+
+        postcheck = fitted_model.predict(
+            start_date=train_data["time_end"].min(),
+            end_date=train_data["time_end"].max(),
+            interval=config["forecast_timeframe"]["interval"],
+            test_dates=train_dates,
+            groups=config["data"]["groups"],
+            season_start_month=config["data"]["season_start_month"],
+            season_start_day=config["data"]["season_start_day"],
+        )
+
+        postcheck = postcheck.with_columns(
+            forecast_start=forecast_date,
+            forecast_end=config["forecast_timeframe"]["end"],
+            model=pl.lit(model_name),
+        )
+
+        all_postchecks = pl.concat([all_postchecks, postcheck])
 
         forecast = fitted_model.predict(
             start_date=forecast_date,
@@ -71,7 +93,7 @@ def run_all_forecasts(
 
         all_forecasts = pl.concat([all_forecasts, forecast])
 
-    return all_forecasts
+    return (all_postchecks, all_forecasts)
 
 
 if __name__ == "__main__":
@@ -79,7 +101,8 @@ if __name__ == "__main__":
     p.add_argument("--config", help="config file")
     p.add_argument("--input", help="input data")
     p.add_argument("--models", help="fitted models")
-    p.add_argument("--output", help="output parquet file")
+    p.add_argument("--output_postchecks", help="output parquet file for postchecks")
+    p.add_argument("--output_forecasts", help="output parquet file for forecasts")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
@@ -90,4 +113,6 @@ if __name__ == "__main__":
     with open(args.models, "rb") as f:
         models = pickle.load(f)
 
-    run_all_forecasts(input_data, models, config).write_parquet(args.output)
+    output = run_all_forecasts(input_data, models, config)
+    output[0].write_parquet(args.output_postchecks)
+    output[1].write_parquet(args.output_forecasts)
