@@ -7,21 +7,15 @@ MODEL_FITS = output/fits/model_fits.pkl
 DIAGNOSTICS = output/diagnostics/tables/
 DIAGNOSTIC_PLOTS = output/diagnostics/plots/
 FORECASTS = output/forecasts/tables/forecasts.parquet
-FORECAST_PLOTS = output/forecasts/plots/
 SCORES = output/scores/tables/scores.parquet
-SCORE_PLOTS = output/scores/plots/scores.png
+
 
 .PHONY: cache viz
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES)
 
 viz:
 	streamlit run scripts/viz.py
-
-$(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
-	python $< \
-		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
-		--eval=$(SCORES) --output=$(FORECAST_PLOTS) --scores=$(SCORE_PLOTS)
 
 $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 	python $< \
