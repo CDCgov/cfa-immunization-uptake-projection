@@ -1,4 +1,5 @@
 import altair as alt
+import numpy as np
 import polars as pl
 import streamlit as st
 
@@ -12,83 +13,109 @@ def app():
     obs = data["observed"]
     pred = data["forecasts"]
 
-    # clean data
-    forecast_data = (
-        data["forecasts"]
-        .with_columns(
-            pl.col("forecast_start").dt.truncate("1d"),
-            pl.col("sample_id").cast(pl.Int32),
-        )
-        .drop("forecast_end")
-    )
-
-    # get all forecast start dates and cross them with the observed data, as
-    # if the observed data were a model
-    forecast_starts = forecast_data.select(["season", "forecast_start"]).unique()
-
-    obs_data = (
-        data["observed"]
-        .with_columns(sample_id=0, model=pl.lit("observed"))
-        .join(forecast_starts, on=["season"], how="inner")
-        .select(forecast_data.columns)
-    )
-
-    data = pl.concat([forecast_data, obs_data], how="vertical")
-    data = data.filter(pl.col("geography").is_in(["Alabama", "Alaska"]))
-
     # multiple tabs
     tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])
 
     with tab1:
-        plot_trajectories(data)
+        plot_trajectories(obs, pred)
 
     with tab2:
         plot_summary(obs=obs, pred=pred)
+
     with tab3:
         plot_evaluation(load_scores())
 
 
-def plot_trajectories(data):
+def plot_trajectories(obs, pred):
     # set up plot encodings
-    encodings = [
-        alt.X("time_end:T", title="Observation date"),
-        alt.Y("estimate:Q", title="Cumulative uptake estimate"),
-        alt.Detail("sample_id", title="Trajectory"),
-    ]
+    encodings = {
+        "x": alt.X("time_end:T", title="Observation date"),
+        "y": alt.Y("estimate:Q", title="Cumulative uptake estimate"),
+    }
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
     dimensions = ["season", "model", "forecast_start", "geography"]
-    default_channels = [
-        ("Color", "model"),
-        ("Column", "forecast_start"),
-        ("Row", "season"),
-    ]
+    default_channels = {
+        "column": ("Column", "forecast_start"),
+        "row": ("Row", "season"),
+    }
 
-    for channel, default_dim in default_channels:
+    for idx, item in enumerate(default_channels.items()):
+        key, value = item
+        channel, default_dim = value
         options = ["None"] + dimensions
         index = options.index(default_dim)
-        dim = st.selectbox(f"{channel} by", options=options, index=index)
+        dim = st.selectbox(
+            f"{channel} by",
+            options=options,
+            index=index,
+            key=f"{channel}_{idx}_trajectories",
+        )
 
         if dim != "None":
             dimensions.remove(dim)
-            encodings.append(getattr(alt, channel)(dim))
+            encodings[key] = getattr(alt, channel)(dim)
 
     # filter for specific values of the remaining dimensions
     st.header("Data filters")
 
     for dim in dimensions:
-        filter_val = st.selectbox(dim, options=data[dim].unique().sort().to_list())
-        data = data.filter(pl.col(dim) == pl.lit(filter_val))
+        filter_val = st.selectbox(dim, options=pred[dim].unique().sort().to_list())
+        pred = pred.filter(pl.col(dim) == pl.lit(filter_val))
 
+    print(pred)
     # how many trajectories to show?
     n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
-    data = data.filter(
-        pl.col("sample_id").cast(pl.Int32) <= n_samples,
+
+    # draw indices of trajectories randomly #
+    rng = np.random.default_rng(seed=123)
+
+    selected_ids = rng.integers(
+        low=pred["sample_id"].cast(pl.Int64).min(),
+        high=pred["sample_id"].cast(pl.Int64).max() + 1,
+        size=n_samples,
     )
 
-    chart = alt.Chart(data).mark_line().encode(*encodings)
+    pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
+
+    # get every model/forecast date combo
+    models_forecasts = pred.select(["model", "forecast_start"]).unique()
+
+    # for every model and forecast date, merge in the observed value
+    plot_obs = obs.join(models_forecasts, how="cross").filter(
+        pl.col("season").is_in(pred["season"].unique()),
+        pl.col("geography").is_in(pred["geography"].unique()),
+    )
+
+    print(plot_obs)
+    obs_chart = (
+        alt.Chart(plot_obs)
+        .mark_point(filled=True, color="black")
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month", title="Date"),
+            ),
+            alt.Y("estimate:Q"),
+        )
+    )
+
+    pred_chart = (
+        alt.Chart(pred)
+        .mark_line(opacity=0.3)
+        .encode(
+            alt.X(
+                "time_end:T",
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
+            ),
+            alt.Y("estimate:Q", axis=alt.Axis(title="Cumulative Uptake Estimate")),
+            alt.Color("sample_id:N", title="Sample ID"),
+        )
+    )
+    chart_lists = [pred_chart, obs_chart]
+    chart = layer_with_facets(pred, *chart_lists, **encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -128,7 +155,10 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
         options = ["None"] + dimensions
         index = options.index(default_dim)
         dim = st.selectbox(
-            f"{channel} by", options=options, index=index, key=f"{channel}_{idx}"
+            f"{channel} by",
+            options=options,
+            index=index,
+            key=f"{channel}_{idx}_summary",
         )
 
         if dim != "None":
@@ -140,7 +170,9 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
 
     for idx, dim in enumerate(dimensions):
         filter_val = st.selectbox(
-            dim, options=plot_pred[dim].unique().sort().to_list(), key=f"{dim}_{idx}"
+            dim,
+            options=plot_pred[dim].unique().sort().to_list(),
+            key=f"{dim}_{idx}_summary",
         )
         plot_pred = plot_pred.filter(pl.col(dim) == pl.lit(filter_val))
 
@@ -202,9 +234,6 @@ def plot_evaluation(scores: pl.DataFrame):
     # every score name should have a label for the plot
     assert set(score_names).issubset(score_dict.keys())
 
-    # only plot the median quantile #
-    plot_score = scores.filter(pl.col("quantile") == 0.5)
-
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
@@ -221,7 +250,7 @@ def plot_evaluation(scores: pl.DataFrame):
         options = ["None"] + dimensions
         index = options.index(default_dim)
         dim = st.selectbox(
-            f"{channel} by", options=options, index=index, key=f"{channel}_{idx}"
+            f"{channel} by", options=options, index=index, key=f"{channel}_{idx}_eval"
         )
 
         if dim != "None":
@@ -233,9 +262,9 @@ def plot_evaluation(scores: pl.DataFrame):
 
     for idx, dim in enumerate(dimensions):
         filter_val = st.selectbox(
-            dim, options=plot_score[dim].unique().sort().to_list(), key=f"{dim}_{idx}"
+            dim, options=scores[dim].unique().sort().to_list(), key=f"{dim}_{idx}_eval"
         )
-        plot_score = plot_score.filter(pl.col(dim) == pl.lit(filter_val))
+        plot_score = scores.filter(pl.col(dim) == pl.lit(filter_val))
 
     plot_score = plot_score.with_columns(
         pl.col("score_name").replace_strict(score_dict)
