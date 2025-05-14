@@ -65,7 +65,6 @@ def plot_trajectories(obs, pred):
         filter_val = st.selectbox(dim, options=pred[dim].unique().sort().to_list())
         pred = pred.filter(pl.col(dim) == pl.lit(filter_val))
 
-    print(pred)
     # how many trajectories to show?
     n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
 
@@ -89,7 +88,6 @@ def plot_trajectories(obs, pred):
         pl.col("geography").is_in(pred["geography"].unique()),
     )
 
-    print(plot_obs)
     obs_chart = (
         alt.Chart(plot_obs)
         .mark_point(filled=True, color="black")
@@ -175,10 +173,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
             key=f"{dim}_{idx}_summary",
         )
         plot_pred = plot_pred.filter(pl.col(dim) == pl.lit(filter_val))
+        plot_obs = plot_obs.filter(pl.col(dim) == pl.lit(filter_val))
 
     obs_chart = (
         alt.Chart(plot_obs)
-        .mark_point()
+        .mark_point(color="black", filled=True)
         .encode(
             alt.X("time_end:T", title="Observation date"),
             alt.Y("estimate:Q", title="Cumulative uptake estimate"),
