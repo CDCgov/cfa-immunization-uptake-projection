@@ -86,9 +86,9 @@ plot = (
 )
 plot.display()
 
-# %% Plot uptake for one state, with uncertainty
+# %% Plot uptake for one state, with empirical uncertainty
 one_state = state.filter(
-    (pl.col("geography") == "Kansas") & (pl.col("season") == "2023/2024")
+    (pl.col("geography") == "Kansas") & (pl.col("season") == "2020/2021")
 ).with_columns(
     estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
     estimate_lo=pl.col("estimate") - 2 * pl.col("sem"),
@@ -100,6 +100,59 @@ plot = alt.Chart(one_state).mark_errorbar(color="black").encode(
 ) + alt.Chart(one_state).mark_point(color="black").encode(
     x=alt.X("elapsed:Q", title="Days since July 1"),
     y=alt.Y("estimate:Q", title="Observed Uptake"),
+)
+plot.display()
+
+# %% Posterior predictive checks
+pred = pl.read_parquet(
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/postchecks.parquet"
+).drop(["forecast_start", "forecast_end", "model"])
+pred_summ = (
+    pred.group_by(["time_end", "geography", "season"])
+    .agg(
+        estimate=pl.col("estimate").mean(),
+        upper=pl.col("estimate").quantile(0.975),
+        lower=pl.col("estimate").quantile(0.025),
+    )
+    .join(
+        state.select(["time_end", "geography", "season", "estimate", "elapsed"]),
+        on=["time_end", "geography", "season"],
+        how="left",
+    )
+    .rename({"estimate_right": "obs"})
+)
+
+# %% Plot prediction vs. data for Kansas 2020/2021
+pred_one_state = pred_summ.filter(
+    (pl.col("geography") == "Kansas") & (pl.col("season") == "2020/2021")
+)
+plot = (
+    alt.Chart(one_state)
+    .mark_errorbar(color="black")
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("estimate_lo", title="Uptake"),
+        y2="estimate_hi",
+    )
+    + alt.Chart(one_state)
+    .mark_point(color="black")
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("estimate:Q", title="Uptake"),
+    )
+    + alt.Chart(pred_one_state)
+    .mark_area(color="green", opacity=0.3)
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("lower", title="Uptake"),
+        y2="upper",
+    )
+    + alt.Chart(pred_one_state)
+    .mark_line(color="green")
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("estimate:Q", title="Uptake"),
+    )
 )
 plot.display()
 
