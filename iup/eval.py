@@ -34,7 +34,7 @@ def check_date_match(
     pred = QuantileForecast(pred.sort(groups_and_time))
 
     if groups is not None:
-        assert [
+        results = [
             (
                 data.filter(pl.col(group) == group_unique)["time_end"]
                 == pred.filter(pl.col(group) == group_unique)["time_end"]
@@ -42,25 +42,19 @@ def check_date_match(
             for group in groups
             for group_unique in data[group].unique()
         ]
+
+        assert all(results), (
+            "The forecast and the data should have the same forecast dates for each group."
+        )
     else:
         assert (data["time_end"] == pred["time_end"]).all(), (
             "The forecast and the data should have the same forecast dates"
         )
 
     if groups is not None:
-        assert not (
-            any(
-                [
-                    any(
-                        data.filter(pl.col(group) == group_unique)
-                        .select("time_end")
-                        .is_duplicated()
-                    )
-                    for group in groups
-                    for group_unique in data[group].unique()
-                ]
-            )
-        )
+        # check across all the combinations of groups #
+        check = data.with_columns(dup=pl.col("time_end").is_duplicated().over(groups))
+        assert not (check["dup"].any()), "Duplicated dates are found in data"
     else:
         assert not (any(data["time_end"].is_duplicated())), (
             "Duplicated dates are found in data."
