@@ -111,10 +111,13 @@ def summarize_score(
             score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
         )
 
-        if isinstance(score["score_value"][0], pl.Series):
-            score = score.with_columns(
-                pl.col("score_value").list.drop_nulls().explode()
-            )
+        if not score.is_empty():
+            if isinstance(score["score_value"][0], pl.Series):
+                score = score.with_columns(
+                    pl.col("score_value").list.drop_nulls().explode()
+                )
+        else:
+            score = score.with_columns(score_value=None)
 
         score = score.with_columns(
             quantile=joined_df["quantile"].first(),
