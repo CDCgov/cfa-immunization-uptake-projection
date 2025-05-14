@@ -1,8 +1,8 @@
 NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
-CONFIG = scripts/config_flu.yaml
-RAW_DATA = output/data/nis_raw_flu.parquet
+CONFIG = scripts/config.yaml
+RAW_DATA = data/nis_raw_flu.parquet
 MODEL_FITS = output/fits/model_fits.pkl
 DIAGNOSTICS = output/diagnostics/tables/
 DIAGNOSTIC_PLOTS = output/diagnostics/plots/
@@ -11,7 +11,12 @@ FORECAST_PLOTS = output/forecasts/plots/
 SCORES = output/scores/tables/scores.parquet
 SCORE_PLOTS = output/scores/plots/scores.png
 
+.PHONY: cache viz
+
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES) $(FORECAST_PLOTS) $(SCORE_PLOTS)
+
+viz: 
+	streamlit run scripts/viz.py
 
 $(FORECAST_PLOTS): scripts/postprocess.py $(FORECASTS) $(RAW_DATA)
 	python $< \
