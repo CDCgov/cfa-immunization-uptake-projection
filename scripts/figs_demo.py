@@ -15,7 +15,7 @@ flu_natl = (
         obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
     )
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
-    .drop("start")
+    .drop(["start", "sem", "N_vax", "N_tot"])
     .rename({"estimate": "obs"})
 )
 flu_state = (
@@ -30,7 +30,7 @@ flu_state = (
         obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
     )
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
-    .drop("start")
+    .drop(["start", "sem", "N_vax", "N_tot"])
     .rename({"estimate": "obs"})
 )
 cov_natl = (
@@ -45,7 +45,7 @@ cov_natl = (
         obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
     )
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
-    .drop("start")
+    .drop(["start", "sem", "N_vax", "N_tot"])
     .rename({"estimate": "obs"})
 )
 
@@ -55,7 +55,7 @@ cov_natl = (
     .mark_line()
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Observed Uptake"),
+        y=alt.Y("obs:Q", title="Observed Uptake"),
         color="season:N",
     )
 ).display()
@@ -66,7 +66,7 @@ cov_natl = (
     .mark_line()
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Observed Uptake"),
+        y=alt.Y("obs:Q", title="Observed Uptake"),
         color="season:N",
     )
 ).display()
@@ -83,7 +83,7 @@ alt.data_transformers.disable_max_rows()
             axis=alt.Axis(labelFontSize=20, titleFontSize=30),
         ),
         y=alt.Y(
-            "estimate:Q",
+            "obs:Q",
             title="Observed Uptake",
             axis=alt.Axis(labelFontSize=20, titleFontSize=30),
         ),
@@ -92,83 +92,84 @@ alt.data_transformers.disable_max_rows()
     )
 ).display()
 
-# %% Plot uptake for one state, with empirical uncertainty
-one_state = flu_state.filter(
+# %% Plot uptake for one state in one season, with empirical uncertainty
+flu_state_sub = flu_state.filter(
     (pl.col("geography") == "California") & (pl.col("season") == "2023/2024")
-).with_columns(
-    estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
-    estimate_lo=pl.col("estimate") - 2 * pl.col("sem"),
 )
-plot = alt.Chart(one_state).mark_errorbar(color="black").encode(
-    x=alt.X("elapsed:Q", title="Days since July 1"),
-    y=alt.Y("estimate_lo", title="Observed Uptake"),
-    y2="estimate_hi",
-) + alt.Chart(one_state).mark_point(color="black").encode(
-    x=alt.X("elapsed:Q", title="Days since July 1"),
-    y=alt.Y("estimate:Q", title="Observed Uptake"),
-)
-plot.display()
-
-# %% Posterior predictive checks
-pred = pl.read_parquet(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/postchecks.parquet"
-).drop(["forecast_start", "forecast_end", "model"])
-pred_summ = (
-    pred.group_by(["time_end", "geography", "season"])
-    .agg(
-        estimate=pl.col("estimate").mean(),
-        upper=pl.col("estimate").quantile(0.975),
-        lower=pl.col("estimate").quantile(0.025),
-    )
-    .join(
-        flu_state.select(["time_end", "geography", "season", "estimate", "elapsed"]),
-        on=["time_end", "geography", "season"],
-        how="left",
-    )
-    .rename({"estimate_right": "obs"})
-)
-
-# %% Plot posterior prediction vs. data for one state
-pred_one_state = pred_summ.filter(
-    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
-)
-plot = (
-    alt.Chart(one_state)
+(
+    alt.Chart(flu_state_sub)
     .mark_errorbar(color="black")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate_lo", title="Uptake"),
-        y2="estimate_hi",
+        y=alt.Y("obs_lower", title="Observed Uptake"),
+        y2="obs_upper",
     )
-    + alt.Chart(one_state)
+    + alt.Chart(flu_state_sub)
     .mark_point(color="black")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Uptake"),
+        y=alt.Y("obs:Q", title="Observed Uptake"),
     )
-    + alt.Chart(pred_one_state)
+).display()
+
+# %% Posterior predictive checks
+post_check = pl.read_parquet(
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/postchecks.parquet"
+).drop(["forecast_start", "forecast_end", "model"])
+post_check_summ = (
+    post_check.group_by(["time_end", "geography", "season"])
+    .agg(
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
+    )
+    .join(
+        flu_state,
+        on=["time_end", "geography", "season"],
+        how="left",
+    )
+)
+
+# %% Plot posterior prediction vs. data for one state
+post_check_summ_sub = post_check_summ.filter(
+    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
+)
+(
+    alt.Chart(post_check_summ_sub)
+    .mark_errorbar(color="black")
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("obs_lower", title="Uptake"),
+        y2="obs_upper",
+    )
+    + alt.Chart(post_check_summ_sub)
+    .mark_point(color="black")
+    .encode(
+        x=alt.X("elapsed:Q", title="Days since July 1"),
+        y=alt.Y("obs:Q", title="Uptake"),
+    )
+    + alt.Chart(post_check_summ_sub)
     .mark_area(color="green", opacity=0.3)
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("lower", title="Uptake"),
-        y2="upper",
+        y=alt.Y("est_lower", title="Uptake"),
+        y2="est_upper",
     )
-    + alt.Chart(pred_one_state)
+    + alt.Chart(post_check_summ_sub)
     .mark_line(color="green")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Uptake"),
+        y=alt.Y("est:Q", title="Uptake"),
     )
-)
-plot.display()
+).display()
 
 # %% Plot posterior predictions for all states in one season
-pred_summ_one_season = pred_summ.filter(pl.col("season") == "2009/2010")
+post_check_summ_sub = post_check.filter(pl.col("season") == "2009/2010")
 alt.data_transformers.disable_max_rows()
-plot = (
+(
     (
         (
-            alt.Chart(pred_summ_one_season)
+            alt.Chart(post_check_summ_sub)
             .mark_point(color="black")
             .encode(
                 x=alt.X(
@@ -184,7 +185,24 @@ plot = (
             )
         )
         + (
-            alt.Chart(pred_summ_one_season)
+            alt.Chart(post_check_summ_sub)
+            .mark_errorbar(color="black")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "obs_upper:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y2="obs_lower:Q",
+            )
+        )
+        + (
+            alt.Chart(post_check_summ_sub)
             .mark_line(color="green")
             .encode(
                 x=alt.X(
@@ -193,14 +211,14 @@ plot = (
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
                 y=alt.Y(
-                    "estimate:Q",
+                    "est:Q",
                     title="Uptake",
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
             )
         )
         + (
-            alt.Chart(pred_summ_one_season)
+            alt.Chart(post_check_summ_sub)
             .mark_area(color="green", opacity=0.3)
             .encode(
                 x=alt.X(
@@ -209,18 +227,17 @@ plot = (
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
                 y=alt.Y(
-                    "upper:Q",
+                    "est_upper:Q",
                     title="Uptake",
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
-                y2="lower:Q",
+                y2="est_lower:Q",
             )
         )
     )
     .facet("geography", columns=9)
     .configure_header(labelFontSize=40)
-)
-plot.display()
+).display()
 
 # %% Load forecasts for flu by state in 2023/2024, and summarize
 pred = pl.read_parquet(
@@ -229,53 +246,51 @@ pred = pl.read_parquet(
 pred_summ = (
     pred.group_by(["time_end", "geography"])
     .agg(
-        estimate=pl.col("estimate").mean(),
-        upper=pl.col("estimate").quantile(0.975),
-        lower=pl.col("estimate").quantile(0.025),
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
     )
     .join(
-        flu_state.select(["time_end", "geography", "estimate", "elapsed"]),
-        on=["time_end", "geography"],
+        flu_state,
+        on=["time_end", "geography", "season"],
         how="left",
     )
-    .rename({"estimate_right": "obs"})
 )
 
 # %% Plot prediction vs. data for 2023/2024 for one state
-pred_one_state = pred_summ.filter((pl.col("geography") == "California"))
-plot = (
-    alt.Chart(one_state)
+pred_summ_sub = pred_summ.filter((pl.col("geography") == "California"))
+(
+    alt.Chart(pred_summ_sub)
     .mark_errorbar(color="black")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate_lo", title="Uptake"),
-        y2="estimate_hi",
+        y=alt.Y("obs_lower", title="Uptake"),
+        y2="obs_upper",
     )
-    + alt.Chart(one_state)
+    + alt.Chart(pred_summ_sub)
     .mark_point(color="black")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Uptake"),
+        y=alt.Y("obs:Q", title="Uptake"),
     )
-    + alt.Chart(pred_one_state)
+    + alt.Chart(pred_summ_sub)
     .mark_area(color="tomato", opacity=0.3)
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("lower", title="Uptake"),
-        y2="upper",
+        y=alt.Y("est_lower", title="Uptake"),
+        y2="est_upper",
     )
-    + alt.Chart(pred_one_state)
+    + alt.Chart(pred_summ_sub)
     .mark_line(color="tomato")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
-        y=alt.Y("estimate:Q", title="Uptake"),
+        y=alt.Y("est:Q", title="Uptake"),
     )
-)
-plot.display()
+).display()
 
 # %% Plot retrospective forecasts for all states
 alt.data_transformers.disable_max_rows()
-plot = (
+(
     (
         (
             alt.Chart(pred_summ)
@@ -291,6 +306,23 @@ plot = (
                     title="Uptake",
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
+            )
+        )
+        + (
+            alt.Chart(pred_summ)
+            .mark_errorbar(color="black")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "obs_lower:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y2="obs_upper:Q",
             )
         )
         + (
@@ -303,7 +335,7 @@ plot = (
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
                 y=alt.Y(
-                    "estimate:Q",
+                    "est:Q",
                     title="Uptake",
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
@@ -319,15 +351,14 @@ plot = (
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
                 y=alt.Y(
-                    "upper:Q",
+                    "est_upper:Q",
                     title="Uptake",
                     axis=alt.Axis(labelFontSize=20, titleFontSize=30),
                 ),
-                y2="lower:Q",
+                y2="est_lower:Q",
             )
         )
     )
     .facet("geography", columns=9)
     .configure_header(labelFontSize=40)
-)
-plot.display()
+).display()
