@@ -88,7 +88,7 @@ plot.display()
 
 # %% Plot uptake for one state, with empirical uncertainty
 one_state = state.filter(
-    (pl.col("geography") == "Kansas") & (pl.col("season") == "2020/2021")
+    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
 ).with_columns(
     estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
     estimate_lo=pl.col("estimate") - 2 * pl.col("sem"),
@@ -122,9 +122,9 @@ pred_summ = (
     .rename({"estimate_right": "obs"})
 )
 
-# %% Plot prediction vs. data for Kansas 2020/2021
+# %% Plot posterior prediction vs. data for one state
 pred_one_state = pred_summ.filter(
-    (pl.col("geography") == "Kansas") & (pl.col("season") == "2020/2021")
+    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
 )
 plot = (
     alt.Chart(one_state)
@@ -152,6 +152,71 @@ plot = (
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
         y=alt.Y("estimate:Q", title="Uptake"),
+    )
+)
+plot.display()
+
+# %% Plot posterior predictions for all states in one season
+state_one_season = state.filter(pl.col("season") == "2017/2018")
+pred_summ_one_season = pred_summ.filter(pl.col("season") == "2017/2018")
+alt.data_transformers.disable_max_rows()
+plot = (
+    (
+        alt.Chart(state_one_season)
+        .mark_line()
+        .encode(
+            x=alt.X(
+                "elapsed:Q",
+                title="Days since July 1",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            y=alt.Y(
+                "estimate:Q",
+                title="Uptake",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            facet=alt.Facet(
+                "geography", columns=9, header=alt.Header(labelFontSize=40)
+            ),
+        )
+    )
+    + (
+        alt.Chart(pred_summ_one_season)
+        .mark_line()
+        .encode(
+            x=alt.X(
+                "elapsed:Q",
+                title="Days since July 1",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            y=alt.Y(
+                "estimate:Q",
+                title="Uptake",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            facet=alt.Facet(
+                "geography", columns=9, header=alt.Header(labelFontSize=40)
+            ),
+        )
+    )
+    + (
+        alt.Chart(pred_summ_one_season)
+        .mark_line()
+        .encode(
+            x=alt.X(
+                "elapsed:Q",
+                title="Days since July 1",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            y=alt.Y(
+                "estimate:Q",
+                title="Uptake",
+                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+            ),
+            facet=alt.Facet(
+                "geography", columns=9, header=alt.Header(labelFontSize=40)
+            ),
+        )
     )
 )
 plot.display()
