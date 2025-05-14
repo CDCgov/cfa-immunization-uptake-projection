@@ -88,7 +88,7 @@ plot.display()
 
 # %% Plot uptake for one state, with empirical uncertainty
 one_state = state.filter(
-    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
+    (pl.col("geography") == "California") & (pl.col("season") == "2023/2024")
 ).with_columns(
     estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
     estimate_lo=pl.col("estimate") - 2 * pl.col("sem"),
@@ -235,8 +235,8 @@ pred_summ = (
     .rename({"estimate_right": "obs"})
 )
 
-# %% Plot prediction vs. data for 2023/2024
-pred_one_state = pred_summ.filter((pl.col("geography") == "Kansas"))
+# %% Plot prediction vs. data for 2023/2024 for one state
+pred_one_state = pred_summ.filter((pl.col("geography") == "California"))
 plot = (
     alt.Chart(one_state)
     .mark_errorbar(color="black")
@@ -252,17 +252,76 @@ plot = (
         y=alt.Y("estimate:Q", title="Uptake"),
     )
     + alt.Chart(pred_one_state)
-    .mark_area(color="green", opacity=0.3)
+    .mark_area(color="tomato", opacity=0.3)
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
         y=alt.Y("lower", title="Uptake"),
         y2="upper",
     )
     + alt.Chart(pred_one_state)
-    .mark_line(color="green")
+    .mark_line(color="tomato")
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
         y=alt.Y("estimate:Q", title="Uptake"),
     )
+)
+plot.display()
+
+# %% Plot retrospective forecasts for all states
+alt.data_transformers.disable_max_rows()
+plot = (
+    (
+        (
+            alt.Chart(pred_summ)
+            .mark_point(color="black")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "obs:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+            )
+        )
+        + (
+            alt.Chart(pred_summ)
+            .mark_line(color="tomato")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "estimate:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+            )
+        )
+        + (
+            alt.Chart(pred_summ)
+            .mark_area(color="tomato", opacity=0.3)
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "upper:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y2="lower:Q",
+            )
+        )
+    )
+    .facet("geography", columns=9)
+    .configure_header(labelFontSize=40)
 )
 plot.display()
