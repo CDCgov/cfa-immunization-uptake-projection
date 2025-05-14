@@ -3,7 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
-from iup import SampleForecast, QuantileForecast, CumulativeUptakeData, eval
+from iup import CumulativeUptakeData, QuantileForecast, SampleForecast, eval
 
 
 def eval_all_forecasts(
