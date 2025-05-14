@@ -2,72 +2,79 @@
 import altair as alt
 import polars as pl
 
-# %% Load data
-natl = pl.read_parquet(
-    "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_natl_flu.parquet"
-)
-state = pl.read_parquet(
-    "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_flu.parquet"
-)
-covid = pl.read_parquet(
-    "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw.parquet"
-)
-
-# %% Plot national scale covid immunization
-covid = (
-    covid.with_columns(
+# %% Load data and add days-elapsed-within-season to each.
+flu_natl = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_flu_natl.parquet"
+    )
+    .with_columns(
         start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
             pl.Date, "%Y-%m-%d"
-        )
+        ),
+        obs_upper=pl.col("estimate") + 1.96 * pl.col("sem"),
+        obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
     )
     .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
     .drop("start")
+    .rename({"estimate": "obs"})
 )
-plot = (
-    alt.Chart(covid)
+flu_state = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_flu_state.parquet"
+    )
+    .with_columns(
+        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
+            pl.Date, "%Y-%m-%d"
+        ),
+        obs_upper=pl.col("estimate") + 1.96 * pl.col("sem"),
+        obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
+    )
+    .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
+    .drop("start")
+    .rename({"estimate": "obs"})
+)
+cov_natl = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_cov_natl.parquet"
+    )
+    .with_columns(
+        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
+            pl.Date, "%Y-%m-%d"
+        ),
+        obs_upper=pl.col("estimate") + 1.96 * pl.col("sem"),
+        obs_lower=pl.col("estimate") - 1.96 * pl.col("sem"),
+    )
+    .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
+    .drop("start")
+    .rename({"estimate": "obs"})
+)
+
+# %% Plot national scale covid vax across seasons
+(
+    alt.Chart(cov_natl)
     .mark_line()
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
         y=alt.Y("estimate:Q", title="Observed Uptake"),
         color="season:N",
     )
-)
-plot.display()
+).display()
 
-# %% Plot national scale flu immunization
-natl = (
-    natl.with_columns(
-        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
-            pl.Date, "%Y-%m-%d"
-        )
-    )
-    .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
-    .drop("start")
-)
-plot = (
-    alt.Chart(natl)
+# %% Plot national scale flu vax across seasons
+(
+    alt.Chart(flu_natl)
     .mark_line()
     .encode(
         x=alt.X("elapsed:Q", title="Days since July 1"),
         y=alt.Y("estimate:Q", title="Observed Uptake"),
         color="season:N",
     )
-)
-plot.display()
+).display()
 
-# %% Plot state scale flu immunization
-state = (
-    state.with_columns(
-        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
-            pl.Date, "%Y-%m-%d"
-        )
-    )
-    .with_columns(elapsed=(pl.col("time_end") - pl.col("start")).dt.total_days())
-    .drop("start")
-)
+# %% Plot state scale flu vax across seasons
 alt.data_transformers.disable_max_rows()
-plot = (
-    alt.Chart(state)
+(
+    alt.Chart(flu_state)
     .mark_line()
     .encode(
         x=alt.X(
@@ -83,11 +90,10 @@ plot = (
         color="season:N",
         facet=alt.Facet("geography", columns=9, header=alt.Header(labelFontSize=40)),
     )
-)
-plot.display()
+).display()
 
 # %% Plot uptake for one state, with empirical uncertainty
-one_state = state.filter(
+one_state = flu_state.filter(
     (pl.col("geography") == "California") & (pl.col("season") == "2023/2024")
 ).with_columns(
     estimate_hi=pl.col("estimate") + 2 * pl.col("sem"),
@@ -115,7 +121,7 @@ pred_summ = (
         lower=pl.col("estimate").quantile(0.025),
     )
     .join(
-        state.select(["time_end", "geography", "season", "estimate", "elapsed"]),
+        flu_state.select(["time_end", "geography", "season", "estimate", "elapsed"]),
         on=["time_end", "geography", "season"],
         how="left",
     )
@@ -228,7 +234,7 @@ pred_summ = (
         lower=pl.col("estimate").quantile(0.025),
     )
     .join(
-        state.select(["time_end", "geography", "estimate", "elapsed"]),
+        flu_state.select(["time_end", "geography", "estimate", "elapsed"]),
         on=["time_end", "geography"],
         how="left",
     )
