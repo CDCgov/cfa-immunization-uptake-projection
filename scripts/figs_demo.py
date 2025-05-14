@@ -157,67 +157,62 @@ plot = (
 plot.display()
 
 # %% Plot posterior predictions for all states in one season
-state_one_season = state.filter(pl.col("season") == "2017/2018")
-pred_summ_one_season = pred_summ.filter(pl.col("season") == "2017/2018")
+pred_summ_one_season = pred_summ.filter(pl.col("season") == "2009/2010")
 alt.data_transformers.disable_max_rows()
 plot = (
     (
-        alt.Chart(state_one_season)
-        .mark_line()
-        .encode(
-            x=alt.X(
-                "elapsed:Q",
-                title="Days since July 1",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            y=alt.Y(
-                "estimate:Q",
-                title="Uptake",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            facet=alt.Facet(
-                "geography", columns=9, header=alt.Header(labelFontSize=40)
-            ),
+        (
+            alt.Chart(pred_summ_one_season)
+            .mark_point(color="black")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "obs:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+            )
+        )
+        + (
+            alt.Chart(pred_summ_one_season)
+            .mark_line(color="green")
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "estimate:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+            )
+        )
+        + (
+            alt.Chart(pred_summ_one_season)
+            .mark_area(color="green", opacity=0.3)
+            .encode(
+                x=alt.X(
+                    "elapsed:Q",
+                    title="Days since July 1",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y=alt.Y(
+                    "upper:Q",
+                    title="Uptake",
+                    axis=alt.Axis(labelFontSize=20, titleFontSize=30),
+                ),
+                y2="lower:Q",
+            )
         )
     )
-    + (
-        alt.Chart(pred_summ_one_season)
-        .mark_line()
-        .encode(
-            x=alt.X(
-                "elapsed:Q",
-                title="Days since July 1",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            y=alt.Y(
-                "estimate:Q",
-                title="Uptake",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            facet=alt.Facet(
-                "geography", columns=9, header=alt.Header(labelFontSize=40)
-            ),
-        )
-    )
-    + (
-        alt.Chart(pred_summ_one_season)
-        .mark_line()
-        .encode(
-            x=alt.X(
-                "elapsed:Q",
-                title="Days since July 1",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            y=alt.Y(
-                "estimate:Q",
-                title="Uptake",
-                axis=alt.Axis(labelFontSize=20, titleFontSize=30),
-            ),
-            facet=alt.Facet(
-                "geography", columns=9, header=alt.Header(labelFontSize=40)
-            ),
-        )
-    )
+    .facet("geography", columns=9)
+    .configure_header(labelFontSize=40)
 )
 plot.display()
 
