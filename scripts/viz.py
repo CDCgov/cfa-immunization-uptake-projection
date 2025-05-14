@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 import altair as alt
 import numpy as np
 import polars as pl
@@ -26,7 +28,20 @@ def app():
         plot_evaluation(load_scores())
 
 
-def plot_trajectories(obs, pred):
+def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
+    """
+    Plot the individual trajectories of the forecasts with data, with user options to select
+    the dimensions to group the data, including: column and row. Other grouping factors that
+    haven't been selected will be used to filter the data.
+    ----------------------
+    Arguments
+    obs: pl.DataFrame
+        The observed data.
+    pred: pl.DataFrame
+        The forecast made by model.
+
+    """
+
     # set up plot encodings
     encodings = {
         "x": alt.X("time_end:T", title="Observation date"),
@@ -94,7 +109,7 @@ def plot_trajectories(obs, pred):
         .encode(
             alt.X(
                 "time_end:T",
-                axis=alt.Axis(format="%Y-%m", tickCount="month", title="Date"),
+                axis=alt.Axis(format="%Y-%m", tickCount="month"),
             ),
             alt.Y("estimate:Q"),
         )
@@ -108,7 +123,7 @@ def plot_trajectories(obs, pred):
                 "time_end:T",
                 axis=alt.Axis(format="%Y-%m", tickCount="month"),
             ),
-            alt.Y("estimate:Q", axis=alt.Axis(title="Cumulative Uptake Estimate")),
+            alt.Y("estimate:Q"),
             alt.Color("sample_id:N", title="Sample ID"),
         )
     )
@@ -119,6 +134,16 @@ def plot_trajectories(obs, pred):
 
 
 def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
+    """
+    Plot the 95% PI with mean estimate of forecasts with data, with user options to select
+    the dimensions to group the data, including: row, column, and color. Other grouping
+    factors that haven't been selected will be used to filter the data.
+    ----------------------
+    Arguments
+    obs: pl.DataFrame
+        The observed data.
+    pred: pl.DataFrame
+        The forecast made by model."""
     encodings = {}
 
     # reformat the observed data to be ready to join with pred data #
@@ -215,6 +240,16 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
 
 
 def plot_evaluation(scores: pl.DataFrame):
+    """
+    Plot the evaluation scores over forecast start. User can select
+    the dimensions to group the data, including: row, column, and color. Other grouping
+    factors that haven't been selected will be used to filter the data.
+    ----------------------
+    Arguments
+    scores: pl.DataFrame
+        The evaluation scores of the forecasts.
+    """
+
     encodings = {
         "x": alt.X("forecast_start:T", title="Forecast start date"),
         "y": alt.Y("score_value:Q", title="Score value"),
@@ -239,7 +274,7 @@ def plot_evaluation(scores: pl.DataFrame):
     dimensions = ["season", "model", "geography", "score_name"]
     default_channels = {
         "color": ("Color", "model"),
-        "column": ("Column", "geography"),
+        "column": ("Column", "score_name"),
         "row": ("Row", "season"),
     }
 
@@ -280,9 +315,18 @@ def plot_evaluation(scores: pl.DataFrame):
 
 
 ## helper: feed correct argument to altair ##
-def layer_with_facets(data, *charts, **encodings):
-    """Because alt.layer.facet() only takes row and column and .encode() only takes color,
+def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
+    """
+    Because alt.layer.facet() only takes row and column and .encode() only takes color,
     this function makes sure correct arguments fall into correct command.
+    ----------------------
+    Arguments
+    data: pl.DataFrame
+        The data to be plotted.
+    charts: list of alt.Chart
+        The charts to be layered.
+    encodings: dict
+        The encodings to be applied to the charts, including row, column, and other encodings.
     """
 
     row_enc = encodings["row"]
