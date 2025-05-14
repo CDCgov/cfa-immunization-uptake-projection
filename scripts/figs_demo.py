@@ -45,7 +45,7 @@ def plot_uptake(data, color="green"):
             .mark_line()
             .encode(
                 x=alt.X("elapsed:Q", title="Days since July 1"),
-                y=alt.Y("obs:Q", title="Observed Uptake"),
+                y=alt.Y("obs:Q", title="Uptake"),
                 color="season:N",
             )
         )
@@ -56,14 +56,14 @@ def plot_uptake(data, color="green"):
                 .mark_errorbar(color="black")
                 .encode(
                     x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("obs_lower", title="Observed Uptake"),
+                    y=alt.Y("obs_lower", title="Uptake"),
                     y2="obs_upper",
                 )
                 + alt.Chart(data)
                 .mark_point(color="black")
                 .encode(
                     x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("obs:Q", title="Observed Uptake"),
+                    y=alt.Y("obs:Q", title="Uptake"),
                 )
             )
         if "est" in data.columns:
