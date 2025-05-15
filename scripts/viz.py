@@ -1,9 +1,11 @@
-from typing import Dict, List
+import datetime as dt
+from typing import Any, Dict, List
 
 import altair as alt
 import numpy as np
 import polars as pl
 import streamlit as st
+import yaml
 
 
 def app():
@@ -15,20 +17,23 @@ def app():
     obs = data["observed"]
     pred = data["forecasts"]
 
+    # load config
+    config = load_config()
+
     # multiple tabs
     tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])
 
     with tab1:
-        plot_trajectories(obs, pred)
+        plot_trajectories(obs, pred, config)
 
     with tab2:
-        plot_summary(obs=obs, pred=pred)
+        plot_summary(obs=obs, pred=pred, config=config)
 
     with tab3:
-        plot_evaluation(load_scores())
+        plot_evaluation(load_scores(), config)
 
 
-def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
+def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     """
     Plot the individual trajectories of the forecasts with data, with user options to select
     the dimensions to group the data, including: column and row. Other grouping factors that
@@ -39,6 +44,8 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
         The observed data.
     pred: pl.DataFrame
         The forecast made by model.
+    config: Dict[str, Any]
+        The configuration yaml file.
 
     """
 
@@ -51,10 +58,10 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["season", "model", "forecast_start", "geography"]
+    dimensions = ["model", "forecast_start"] + config["data"]["groups"]
     default_channels = {
         "column": ("Column", "forecast_start"),
-        "row": ("Row", "season"),
+        "row": ("Row", "model"),
     }
 
     for idx, item in enumerate(default_channels.items()):
@@ -84,7 +91,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
     n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
 
     # draw indices of trajectories randomly #
-    rng = np.random.default_rng(seed=123)
+    rng = np.random.default_rng(seed=int(dt.datetime.now().timestamp()))
 
     selected_ids = rng.integers(
         low=pred["sample_id"].cast(pl.Int64).min(),
@@ -133,7 +140,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame):
     st.altair_chart(chart, use_container_width=True)
 
 
-def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
+def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     """
     Plot the 95% PI with mean estimate of forecasts with data, with user options to select
     the dimensions to group the data, including: row, column, and color. Other grouping
@@ -143,7 +150,10 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
     obs: pl.DataFrame
         The observed data.
     pred: pl.DataFrame
-        The forecast made by model."""
+        The forecast made by model.
+    config: Dict[str, Any]
+        The configuration yaml file.
+    """
     encodings = {}
 
     # reformat the observed data to be ready to join with pred data #
@@ -152,8 +162,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
         pl.col("season").is_in(pred["season"].unique())
     )
 
+    groups_to_include = ["model", "forecast_start", "time_end"] + config["data"][
+        "groups"
+    ]
     plot_pred = (
-        pred.group_by(["model", "forecast_start", "time_end", "season", "geography"])
+        pred.group_by(groups_to_include)
         .agg(
             lower=pl.col("estimate").quantile(0.025),
             upper=pl.col("estimate").quantile(0.975),
@@ -165,12 +178,20 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["season", "model", "forecast_start", "geography"]
-    default_channels = {
-        "color": ("Color", "model"),
-        "column": ("Column", "forecast_start"),
-        "row": ("Row", "season"),
-    }
+    dimensions = ["model", "forecast_start"] + config["data"]["groups"]
+
+    if "season" in dimensions:
+        default_channels = {
+            "color": ("Color", "model"),
+            "column": ("Column", "forecast_start"),
+            "row": ("Row", "season"),
+        }
+    else:
+        default_channels = {
+            "color": ("Color", "model"),
+            "column": ("Column", "forecast_start"),
+            "row": ("Row", "None"),
+        }
 
     for idx, item in enumerate(default_channels.items()):
         key, value = item
@@ -239,7 +260,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame):
     st.altair_chart(chart, use_container_width=True)
 
 
-def plot_evaluation(scores: pl.DataFrame):
+def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     """
     Plot the evaluation scores over forecast start. User can select
     the dimensions to group the data, including: row, column, and color. Other grouping
@@ -248,6 +269,8 @@ def plot_evaluation(scores: pl.DataFrame):
     Arguments
     scores: pl.DataFrame
         The evaluation scores of the forecasts.
+    config: Dict[str, Any]
+        The configuration yaml file.
     """
 
     encodings = {
@@ -271,12 +294,19 @@ def plot_evaluation(scores: pl.DataFrame):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["season", "model", "geography", "score_name"]
-    default_channels = {
-        "color": ("Color", "model"),
-        "column": ("Column", "score_name"),
-        "row": ("Row", "season"),
-    }
+    dimensions = ["model", "score_name"] + config["data"]["groups"]
+    if "season" in dimensions:
+        default_channels = {
+            "color": ("Color", "model"),
+            "column": ("Column", "score_name"),
+            "row": ("Row", "season"),
+        }
+    else:
+        default_channels = {
+            "color": ("Color", "model"),
+            "column": ("Column", "score_name"),
+            "row": ("Row", "None"),
+        }
 
     for idx, item in enumerate(default_channels.items()):
         key, value = item
@@ -344,13 +374,17 @@ def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
 def load_data():
     return {
         "forecasts": pl.read_parquet("output/forecasts/tables/forecasts.parquet"),
-        "observed": pl.read_parquet("data/nis_raw_flu.parquet"),
+        "observed": pl.read_parquet("output/data/nis_raw_flu.parquet"),
     }
 
 
 @st.cache_data
 def load_scores():
     return pl.read_parquet("output/scores/tables/scores.parquet")
+
+
+def load_config():
+    return yaml.safe_load(open("scripts/config.yaml"))
 
 
 if __name__ == "__main__":
