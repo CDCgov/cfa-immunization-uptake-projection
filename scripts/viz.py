@@ -168,8 +168,12 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     plot_pred = (
         pred.group_by(groups_to_include)
         .agg(
-            lower=pl.col("estimate").quantile(0.025),
-            upper=pl.col("estimate").quantile(0.975),
+            lower=pl.col("estimate").quantile(
+                config["forecast_plots"]["interval"]["lower"]
+            ),
+            upper=pl.col("estimate").quantile(
+                config["forecast_plots"]["interval"]["upper"]
+            ),
             mean=pl.col("estimate").mean(),
         )
         .sort("time_end")
@@ -280,13 +284,16 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
 
     score_names = scores["score_name"].unique()
 
-    score_dict = {
-        "mspe": "Mean Squared Prediction Error",
-    }
+    if "mspe" in score_names:
+        score_dict = {
+            "mspe": "Mean Squared Prediction Error",
+        }
+    else:
+        score_dict = {}
 
     for name in score_names:
         if name.startswith("abs_diff_"):
-            score_dict[name] = "Absolute differenece at " + name[len("abs_diff_") :]
+            score_dict[name] = "Absolute difference at " + name[len("abs_diff_") :]
 
     # every score name should have a label for the plot
     assert set(score_names).issubset(score_dict.keys())
