@@ -52,16 +52,16 @@ mcmc:
 
 # score metrics
 scores:
-  quantiles: [0.025,0.5,0.975] # Must specify at least one fraction
+  quantiles: [0.5] # Must specify at least one fraction
   difference_by_date: [2024-03-31] # if blank, abs_diff will not be used
   others: [mspe]
 
 
 # Prediction credible interval plot
 forecast_plots:
-  interval: # need to be a percentile #
-    lower: 2.5
-    upper: 97.5
+  interval: # need to be a fraction #
+    lower: 0.025
+    upper: 0.975
   n_trajectories: 20
 
 diagnostics:
