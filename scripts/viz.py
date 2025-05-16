@@ -106,8 +106,8 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     # for every model and forecast date, merge in the observed value
     plot_obs = obs.join(models_forecasts, how="cross").filter(
-        pl.col("season").is_in(pred["season"].unique()),
-        pl.col("geography").is_in(pred["geography"].unique()),
+        pl.col(factor).is_in(pred[factor].unique())
+        for factor in config["data"]["groups"]
     )
 
     obs_chart = (
@@ -159,7 +159,8 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     # reformat the observed data to be ready to join with pred data #
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
     plot_obs = obs.join(models_forecasts, how="cross").filter(
-        pl.col("season").is_in(pred["season"].unique())
+        pl.col(factor).is_in(pred[factor].unique())
+        for factor in config["data"]["groups"]
     )
 
     groups_to_include = ["model", "forecast_start", "time_end"] + config["data"][
