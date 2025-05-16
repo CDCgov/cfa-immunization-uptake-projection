@@ -40,21 +40,34 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 flowchart TB
 
 nis_data(nis_raw.parquet)
+fits(model_fits.pkl)
+diagnostic_table(diagnostic_tables.parquet)
+diagnostic_plot(diagnostic_plots.png)
 forecast(forecasts.parquet)
 scores(scores.parquet)
 config{{config.yaml}}
-proj_plot[projections.png]
-score_plot[scores.png]
+proj_plot[forecast_trajectories]
+pred_summary[prediction intervals]
+score_plot[evaluation score]
 
 subgraph raw data
 NIS
 end
 
-subgraph clean data with seasons
+subgraph clean data with groups
 nis_data
 end
 
-subgraph prediction by seasons
+subgraph model fits
+fits
+end
+
+subgraph diagnostics
+diagnostic_table
+diagnostic_plot
+end
+
+subgraph forecasts with groups
 forecast
 end
 
@@ -62,36 +75,43 @@ subgraph evaluation scores
 scores
 end
 
-subgraph prediction plots
-proj_plot
-end
-
-subgraph score plots
-score_plot
+subgraph streamlit
+direction LR
+proj_plot~~~pred_summary~~~score_plot
 end
 
 NIS -->preprocess.py --> nis_data
+nis_data --> fit.py --> fits
+fits --> diagnostics.py
+diagnostics.py --> diagnostic_table
+diagnostics.py --> diagnostic_plot
 nis_data --> forecast.py --> forecast
 forecast --> eval.py --> scores
-scores --> postprocess.py --> score_plot
-nis_data --> postprocess.py --> proj_plot
-forecast --> postprocess.py
+forecast --> streamlit
+scores --> streamlit
+nis_data --> streamlit
 
 config --> preprocess.py
+config --> fit.py
+config --> diagnostics.py
 config --> forecast.py
 config --> eval.py
 
 
-style nis_data fill:#7f00ff
-style forecast fill:#7f00ff
-style scores fill:#7f00ff
-style config fill:#f58742
-style preprocess.py fill:#0080ff
-style forecast.py fill:#0080ff
-style eval.py fill:#0080ff
-style postprocess.py fill:#0080ff
-style proj_plot fill:#ff6666
-style score_plot fill: #ff6666
+style nis_data fill: #8451b5
+style forecast fill: #8451b5
+style scores fill: #8451b5
+style diagnostic_table fill: #8451b5
+style config fill: #da661e
+style preprocess.py fill: #4c7eaf
+style forecast.py fill: #4c7eaf
+style eval.py fill: #4c7eaf
+style fit.py fill: #4c7eaf
+style diagnostics.py fill: #4c7eaf
+style diagnostic_plot fill: #b46060
+style proj_plot fill: #b46060
+style pred_summary fill: #b46060
+style score_plot fill: #b46060
 
 
 ```
