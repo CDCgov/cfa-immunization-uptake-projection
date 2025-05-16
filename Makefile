@@ -10,7 +10,7 @@ FORECASTS = output/forecasts/tables/forecasts.parquet
 SCORES = output/scores/tables/scores.parquet
 
 
-.PHONY: cache viz
+.PHONY: viz
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES)
 
