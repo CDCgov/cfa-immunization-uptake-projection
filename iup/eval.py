@@ -34,33 +34,27 @@ def check_date_match(
     pred = QuantileForecast(pred.sort(groups_and_time))
 
     if groups is not None:
-        assert [
-            (
-                data.filter(pl.col(group) == group_unique)["time_end"]
-                == pred.filter(pl.col(group) == group_unique)["time_end"]
-            ).all()
-            for group in groups
-            for group_unique in data[group].unique()
-        ]
+        # check if the forecast and the data have the same forecast dates for each level in each group #
+        for group in groups:
+            for group_value in data[group].unique().to_list():
+                data_times = data.filter(pl.col(group) == group_value)[
+                    "time_end"
+                ].to_list()
+                pred_times = pred.filter(pl.col(group) == group_value)[
+                    "time_end"
+                ].to_list()
+                assert set(data_times) == set(pred_times), (
+                    "The forecast and the data should have the same forecast dates for each group."
+                )
     else:
         assert (data["time_end"] == pred["time_end"]).all(), (
             "The forecast and the data should have the same forecast dates"
         )
 
     if groups is not None:
-        assert not (
-            any(
-                [
-                    any(
-                        data.filter(pl.col(group) == group_unique)
-                        .select("time_end")
-                        .is_duplicated()
-                    )
-                    for group in groups
-                    for group_unique in data[group].unique()
-                ]
-            )
-        )
+        # check across all the combinations of groups #
+        check = data.with_columns(dup=pl.col("time_end").is_duplicated().over(groups))
+        assert not (check["dup"].any()), "Duplicated dates are found in data"
     else:
         assert not (any(data["time_end"].is_duplicated())), (
             "Duplicated dates are found in data."
@@ -117,10 +111,13 @@ def summarize_score(
             score_value=score_funs[score_name](pl.col("data"), pl.col("pred")),
         )
 
-        if isinstance(score["score_value"][0], pl.Series):
-            score = score.with_columns(
-                pl.col("score_value").list.drop_nulls().explode()
-            )
+        if not score.is_empty():
+            if isinstance(score["score_value"][0], pl.Series):
+                score = score.with_columns(
+                    pl.col("score_value").list.drop_nulls().explode()
+                )
+        else:
+            score = score.with_columns(score_value=None)
 
         score = score.with_columns(
             quantile=joined_df["quantile"].first(),

@@ -3,14 +3,13 @@ import argparse
 import polars as pl
 import yaml
 
-import iup
-from iup import SampleForecast, eval
+from iup import CumulativeUptakeData, QuantileForecast, SampleForecast, eval
 
 
 def eval_all_forecasts(
-    data: pl.DataFrame, pred: SampleForecast, config: dict
+    data: pl.DataFrame, pred: pl.DataFrame, config: dict
 ) -> pl.DataFrame:
-    """ "
+    """
     Calculates the evaluation metrics selected by config, by model and forecast start date.
     -----------------------
     Arguments:
@@ -18,7 +17,6 @@ def eval_all_forecasts(
         observed data with at least "time_end" and "estimate" columns
     pred:
         forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_start" and "estimate",
-        should be a SampleForecast object
     config:
         config file to specify the expected quantile from the sample distribution and evaluation metrics to calculate
 
@@ -38,8 +36,8 @@ def eval_all_forecasts(
 
     for model in model_names:
         for forecast_start in forecast_starts:
-            pred_by_start = iup.SampleForecast(
-                iup.CumulativeUptakeData(
+            pred_by_start = SampleForecast(
+                CumulativeUptakeData(
                     pred.filter(
                         pl.col("model") == model,
                         pl.col("forecast_start") == forecast_start,
@@ -47,7 +45,7 @@ def eval_all_forecasts(
                 )
             )
 
-            test = iup.CumulativeUptakeData(
+            test = CumulativeUptakeData(
                 data.filter(
                     pl.col("time_end") >= forecast_start,
                     pl.col("time_end") <= config["forecast_timeframe"]["end"],
@@ -60,7 +58,7 @@ def eval_all_forecasts(
             )
 
             for quantile in config["scores"]["quantiles"]:
-                summary_pred = iup.QuantileForecast(
+                summary_pred = QuantileForecast(
                     (
                         pred_by_start.group_by(groups)
                         .agg(pl.col("estimate").quantile(quantile))
