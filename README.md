@@ -25,9 +25,9 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
     - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
     - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
-    - scores: specify the evaluation metrics. Specify the quantile of forecasts to calculate scores. Two scores are available: absolute difference on a certain date (need to specify), and mean squared prediction error (as mspe). 
-    - forecast_plots: specify the quantile of prediction interval to show in streamlit app, need to be a fraction.  
-    - diagnostics: specify the model in iup.models to diagnose, the range of forecast dates to diagnose (by having a list of start and end date), the diagnostic plots and the diagnostic tables (refer to iup.diagnostics). 
+    - scores: specify the evaluation metrics. Specify the quantile of forecasts to calculate scores. Two scores are available: absolute difference on a certain date (need to specify), and mean squared prediction error (as mspe).
+    - forecast_plots: specify the quantile of prediction interval to show in streamlit app, need to be a fraction.
+    - diagnostics: specify the model in iup.models to diagnose, the range of forecast dates to diagnose (by having a list of start and end date), the diagnostic plots and the diagnostic tables (refer to iup.diagnostics).
 6. `make all` to get cleaned data "output/data/nis_raw.parquet", model fits "output/fits.model_fits.pkl", forecasts "output/forecasts/table/forecasts.parquet", evaluation scores "output/scores/tables/scores.parquet".
 7. `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, prediction interval, and evaluation scores, with options of dimensions and filters to customize the visualization.
 
