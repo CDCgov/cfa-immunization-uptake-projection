@@ -1,4 +1,3 @@
-import datetime as dt
 from typing import Any, Dict, List
 
 import altair as alt
@@ -91,7 +90,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
 
     # draw indices of trajectories randomly #
-    rng = np.random.default_rng(seed=int(dt.datetime.now().timestamp()))
+    rng = np.random.default_rng()
 
     selected_ids = rng.integers(
         low=pred["sample_id"].cast(pl.Int64).min(),
@@ -391,6 +390,7 @@ def load_scores():
     return pl.read_parquet("output/scores/tables/scores.parquet")
 
 
+@st.cache_data
 def load_config():
     return yaml.safe_load(open("scripts/config.yaml"))
 
