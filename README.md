@@ -25,13 +25,11 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
     - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
     - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
     - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
-    - score_funs: specify the evaluation metrics. Can be a list including "mspe", "mean_bias" and "eos_abe".
-6. `make all` to get cleaned data "data/nis_raw.parquet", forecasts "data/forecasts.parquet", evaluation scores "data/scores.parquet", forecast plot "output/projections.png", and evaluation score plot "output/scores.png".
-
-#### Evaluation scores
-- Mean squared prediction error on incident projections ("mspe")
-- Mean bias on incident projections ("mean_bias")
-- Absolute error of end-of-season uptake on incident projections ("eos_abe")
+    - scores: specify the evaluation metrics. Specify the quantile of forecasts to calculate scores. Two scores are available: absolute difference on a certain date (need to specify), and mean squared prediction error (as mspe).
+    - forecast_plots: specify the quantile of prediction interval to show in streamlit app, need to be a fraction.
+    - diagnostics: specify the model in iup.models to diagnose, the range of forecast dates to diagnose (by having a list of start and end date), the diagnostic plots and the diagnostic tables (refer to iup.diagnostics).
+6. `make all` to get cleaned data "output/data/nis_raw.parquet", model fits "output/fits.model_fits.pkl", forecasts "output/forecasts/table/forecasts.parquet", evaluation scores "output/scores/tables/scores.parquet".
+7. `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, prediction interval, and evaluation scores, with options of dimensions and filters to customize the visualization.
 
 #### Package workflow:
 
@@ -40,21 +38,34 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 flowchart TB
 
 nis_data(nis_raw.parquet)
+fits(model_fits.pkl)
+diagnostic_table(diagnostic_tables.parquet)
+diagnostic_plot(diagnostic_plots.png)
 forecast(forecasts.parquet)
 scores(scores.parquet)
 config{{config.yaml}}
-proj_plot[projections.png]
-score_plot[scores.png]
+proj_plot[forecast_trajectories]
+pred_summary[prediction intervals]
+score_plot[evaluation score]
 
 subgraph raw data
 NIS
 end
 
-subgraph clean data with seasons
+subgraph clean data with groups
 nis_data
 end
 
-subgraph prediction by seasons
+subgraph model fits
+fits
+end
+
+subgraph diagnostics
+diagnostic_table
+diagnostic_plot
+end
+
+subgraph forecasts with groups
 forecast
 end
 
@@ -62,36 +73,44 @@ subgraph evaluation scores
 scores
 end
 
-subgraph prediction plots
-proj_plot
-end
-
-subgraph score plots
-score_plot
+subgraph streamlit
+direction LR
+proj_plot~~~pred_summary~~~score_plot
 end
 
 NIS -->preprocess.py --> nis_data
+nis_data --> fit.py --> fits
+fits --> forecast.py
+fits --> diagnostics.py
+diagnostics.py --> diagnostic_table
+diagnostics.py --> diagnostic_plot
 nis_data --> forecast.py --> forecast
+forecast --> streamlit
 forecast --> eval.py --> scores
-scores --> postprocess.py --> score_plot
-nis_data --> postprocess.py --> proj_plot
-forecast --> postprocess.py
+scores --> streamlit
+nis_data --> streamlit
 
 config --> preprocess.py
+config --> fit.py
+config --> diagnostics.py
 config --> forecast.py
 config --> eval.py
 
 
-style nis_data fill:#7f00ff
-style forecast fill:#7f00ff
-style scores fill:#7f00ff
-style config fill:#f58742
-style preprocess.py fill:#0080ff
-style forecast.py fill:#0080ff
-style eval.py fill:#0080ff
-style postprocess.py fill:#0080ff
-style proj_plot fill:#ff6666
-style score_plot fill: #ff6666
+style nis_data fill: #8451b5
+style forecast fill: #8451b5
+style scores fill: #8451b5
+style diagnostic_table fill: #8451b5
+style config fill: #da661e
+style preprocess.py fill: #4c7eaf
+style forecast.py fill: #4c7eaf
+style eval.py fill: #4c7eaf
+style fit.py fill: #4c7eaf
+style diagnostics.py fill: #4c7eaf
+style diagnostic_plot fill: #b46060
+style proj_plot fill: #b46060
+style pred_summary fill: #b46060
+style score_plot fill: #b46060
 
 
 ```
