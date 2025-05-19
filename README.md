@@ -80,12 +80,13 @@ end
 
 NIS -->preprocess.py --> nis_data
 nis_data --> fit.py --> fits
+fits --> forecast.py
 fits --> diagnostics.py
 diagnostics.py --> diagnostic_table
 diagnostics.py --> diagnostic_plot
 nis_data --> forecast.py --> forecast
-forecast --> eval.py --> scores
 forecast --> streamlit
+forecast --> eval.py --> scores
 scores --> streamlit
 nis_data --> streamlit
 
