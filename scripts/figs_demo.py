@@ -194,11 +194,54 @@ forecast_last = (
     .group_by(["geography"])
     .agg(pl.col("*").first())
 )
-alt.Chart(forecast_last).mark_point(color="orange").encode(
+alt.Chart(forecast_last).mark_point(color="tomato").encode(
     x=alt.X("obs:Q"), y=alt.Y("est:Q")
 )
 x = forecast_last["obs"].to_numpy()
 y = forecast_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
+# %% Do mistakes in 2022/2023 prediction predict mistakes in 2023/2024 prediction?
+error_comparison = (
+    postcheck_last_sub.with_columns(postcheck_error=pl.col("est") - pl.col("obs"))
+    .select(["postcheck_error", "geography"])
+    .join(
+        forecast_last.with_columns(forecast_error=pl.col("est") - pl.col("obs")).select(
+            ["forecast_error", "geography"]
+        ),
+        on="geography",
+        how="left",
+    )
+)
+training_dates = (
+    postcheck.drop_nulls()
+    .filter(pl.col("season").is_in(["2023/2024"]))
+    .select(pl.col("geography").value_counts())
+    .unnest("geography")
+)
+error_comparison = (
+    error_comparison.join(training_dates, on="geography", how="left")
+    .fill_null(0)
+    .with_columns(count=pl.col("count") > 1)
+)
+alt.Chart(error_comparison).mark_point().encode(
+    x=alt.X("postcheck_error:Q"),
+    y=alt.Y("forecast_error:Q"),
+    color=alt.Color("count", title=">1 datum?"),
+)
+
+x = error_comparison["postcheck_error"].to_numpy()
+y = error_comparison["forecast_error"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %% Was 2023/2024 just a weird year?
+all_last = pl.concat(
+    [
+        postcheck_last,
+        forecast_last.with_columns(season=pl.lit("2023/2024")).select(
+            postcheck_last.columns
+        ),
+    ],
+    how="vertical",
+)
 # %%
