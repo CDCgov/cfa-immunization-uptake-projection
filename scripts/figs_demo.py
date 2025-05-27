@@ -1,5 +1,6 @@
 # %% Imports
 import altair as alt
+import numpy as np
 import polars as pl
 
 
@@ -135,7 +136,7 @@ postcheck_sub = postcheck.filter(
 plot_uptake(postcheck_sub)
 
 # %% Plot posterior predictions for all states in one season
-postcheck_sub = postcheck.filter(pl.col("season") == "2009/2010").drop("season")
+postcheck_sub = postcheck.filter(pl.col("season") == "2022/2023").drop("season")
 alt.data_transformers.disable_max_rows()
 plot_uptake(postcheck_sub)
 
@@ -146,3 +147,58 @@ plot_uptake(forecast_sub, "tomato")
 # %% Plot retrospective forecasts for all states
 alt.data_transformers.disable_max_rows()
 plot_uptake(forecast, "tomato")
+
+# %% SCRATCH WORK
+# How consistent are states from season to season?
+# How consistent are seasons from state to state?
+# Examine the last date of each season
+flu_state_last = (
+    flu_state.sort("elapsed", descending=True)
+    .group_by(["geography", "season"])
+    .agg(pl.col("*").first())
+)
+alt.Chart(flu_state_last).mark_boxplot().encode(
+    x=alt.X("geography:O"), y=alt.Y("obs:Q")
+)
+alt.Chart(flu_state_last).mark_boxplot().encode(x=alt.X("season:O"), y=alt.Y("obs:Q"))
+
+# %% How well do pred vs. obs final uptakes correlate in postchecks?
+postcheck_last = (
+    postcheck.drop_nulls()
+    .filter(~pl.col("season").is_in(["2023/2024"]))
+    .sort("elapsed", descending=True)
+    .group_by(["geography", "season"])
+    .agg(pl.col("*").first())
+)
+alt.Chart(postcheck_last).mark_point(color="green").encode(
+    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+)
+x = postcheck_last["obs"].to_numpy()
+y = postcheck_last["est"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+
+# %% How well do pred vs. obs final uptakes correlate in postchecks for 2022/23 only?
+postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2022/2023")
+alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
+    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+)
+x = postcheck_last_sub["obs"].to_numpy()
+y = postcheck_last_sub["est"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %% How well do pred vs. obs final uptakes correlate in forecasts for 2022/23 only?
+forecast_last = (
+    forecast.drop_nulls()
+    .sort("elapsed", descending=True)
+    .group_by(["geography"])
+    .agg(pl.col("*").first())
+)
+alt.Chart(forecast_last).mark_point(color="orange").encode(
+    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+)
+x = forecast_last["obs"].to_numpy()
+y = forecast_last["est"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %%
