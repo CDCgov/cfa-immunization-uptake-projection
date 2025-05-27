@@ -247,3 +247,58 @@ all_last = pl.concat(
 alt.Chart(all_last).mark_line(size=5).encode(x=alt.X("time_end"), y=alt.Y("obs")).facet(
     "geography", columns=9
 ).configure_header(labelFontSize=40)
+
+
+# %% How do season/state deviation parameters compare to observations?
+model_coefs = pl.read_parquet(
+    "/home/tec0/cfa-immunization-uptake-projection/output/diagnostics/tables/model=LPLModel_forecast_start=2023-09-01_print_posterior_dist.parquet"
+)
+coefs = (
+    model_coefs.mean()
+    .transpose(include_header=True)
+    .rename({"column": "coef", "column_0": "value"})
+)
+
+A = coefs.filter(pl.col("coef") == "A")["value"]
+A_sigs_season = coefs.filter(pl.col("coef") == "A_sigs_season")["value"]
+A_sigs_geography = coefs.filter(pl.col("coef") == "A_sigs_geography")["value"]
+M = coefs.filter(pl.col("coef") == "M")["value"]
+M_sigs_season = coefs.filter(pl.col("coef") == "M_sigs_season")["value"]
+M_sigs_geography = coefs.filter(pl.col("coef") == "M_sigs_geography")["value"]
+
+A_season_coefs = (
+    coefs.filter(pl.col("coef").str.contains("A_devs_2"))
+    .with_columns(
+        A_season=pl.col("value") * A_sigs_season,
+        season=pl.col("coef").str.replace("A_devs_", ""),
+    )
+    .drop("value", "coef")
+)
+A_geography_coefs = (
+    coefs.filter(
+        pl.col("coef").str.contains("A_devs_") & ~pl.col("coef").str.contains(r"\d")
+    )
+    .with_columns(
+        A_geography=pl.col("value") * A_sigs_geography,
+        geography=pl.col("coef").str.replace("A_devs_", ""),
+    )
+    .drop("value", "coef")
+)
+M_season_coefs = (
+    coefs.filter(pl.col("coef").str.contains("M_devs_2"))
+    .with_columns(
+        M_season=pl.col("value") * M_sigs_season,
+        season=pl.col("coef").str.replace("M_devs_", ""),
+    )
+    .drop("value", "coef")
+)
+M_geography_coefs = (
+    coefs.filter(
+        pl.col("coef").str.contains("M_devs_") & ~pl.col("coef").str.contains(r"\d")
+    )
+    .with_columns(
+        M_geography=pl.col("value") * M_sigs_geography,
+        geography=pl.col("coef").str.replace("M_devs_", ""),
+    )
+    .drop("value", "coef")
+)
