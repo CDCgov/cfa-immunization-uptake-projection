@@ -244,4 +244,6 @@ all_last = pl.concat(
     ],
     how="vertical",
 )
-# %%
+alt.Chart(all_last).mark_line(size=5).encode(x=alt.X("time_end"), y=alt.Y("obs")).facet(
+    "geography", columns=9
+).configure_header(labelFontSize=40)
