@@ -249,7 +249,7 @@ alt.Chart(all_last).mark_line(size=5).encode(x=alt.X("time_end"), y=alt.Y("obs")
 ).configure_header(labelFontSize=40)
 
 
-# %% How do season/state deviation parameters compare to observations?
+# %% Prepare model coefficients
 model_coefs = pl.read_parquet(
     "/home/tec0/cfa-immunization-uptake-projection/output/diagnostics/tables/model=LPLModel_forecast_start=2023-09-01_print_posterior_dist.parquet"
 )
@@ -280,7 +280,7 @@ A_geography_coefs = (
     )
     .with_columns(
         A_geography=pl.col("value") * A_sigs_geography,
-        geography=pl.col("coef").str.replace("A_devs_", ""),
+        geography=pl.col("coef").str.replace("A_devs_", "").str.replace_all("_", " "),
     )
     .drop("value", "coef")
 )
@@ -298,7 +298,100 @@ M_geography_coefs = (
     )
     .with_columns(
         M_geography=pl.col("value") * M_sigs_geography,
-        geography=pl.col("coef").str.replace("M_devs_", ""),
+        geography=pl.col("coef").str.replace("M_devs_", "").str.replace_all("_", " "),
     )
     .drop("value", "coef")
 )
+
+# %% How do A season deviations compare to avg seasonal final uptake
+A_by_season = (
+    (
+        all_last.select(["geography", "season", "obs"])
+        .group_by("season")
+        .agg(obs_mean=pl.col("obs").mean())
+    )
+    .join(A_season_coefs, on="season", how="left")
+    .with_columns(last_season=(pl.col("season") == "2023/2024"))
+)
+
+alt.Chart(A_by_season).mark_point().encode(
+    x=alt.X(
+        "obs_mean:Q",
+        scale=alt.Scale(zero=False),
+        title="Avg May 31 Uptake across Seasons",
+    ),
+    y=alt.Y("A_season:Q", title="Posterior Mean for Deviation from Avg A"),
+    color=alt.Color("last_season", title="2023/2024?"),
+)
+
+x = A_by_season["obs_mean"].to_numpy()
+y = A_by_season["A_season"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+
+# %% How do M season deviations compare to avg seasonal final uptake
+M_by_season = (
+    (
+        all_last.select(["geography", "season", "obs"])
+        .group_by("season")
+        .agg(obs_mean=pl.col("obs").mean())
+    )
+    .join(M_season_coefs, on="season", how="left")
+    .with_columns(last_season=(pl.col("season") == "2023/2024"))
+)
+
+alt.Chart(M_by_season).mark_point().encode(
+    x=alt.X(
+        "obs_mean:Q",
+        scale=alt.Scale(zero=False),
+        title="Avg May 31 Uptake across Seasons",
+    ),
+    y=alt.Y("M_season:Q", title="Posterior Mean for Deviation from Avg M"),
+    color=alt.Color("last_season", title="2023/2024?"),
+)
+
+x = M_by_season["obs_mean"].to_numpy()
+y = M_by_season["M_season"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+
+# %% How do A geographic deviations compare to avg seasonal final uptake
+A_by_geography = (
+    all_last.select(["geography", "season", "obs"])
+    .group_by("geography")
+    .agg(obs_mean=pl.col("obs").mean())
+).join(A_geography_coefs, on="geography", how="left")
+
+alt.Chart(A_by_geography).mark_point().encode(
+    x=alt.X(
+        "obs_mean:Q",
+        scale=alt.Scale(zero=False),
+        title="Avg May 31 Uptake across States",
+    ),
+    y=alt.Y("A_geography:Q", title="Posterior Mean for Deviation from Avg A"),
+)
+
+x = A_by_geography["obs_mean"].to_numpy()
+y = A_by_geography["A_geography"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+
+# %% How do M geographic deviations compare to avg seasonal final uptake
+M_by_geography = (
+    all_last.select(["geography", "season", "obs"])
+    .group_by("geography")
+    .agg(obs_mean=pl.col("obs").mean())
+).join(M_geography_coefs, on="geography", how="left")
+
+alt.Chart(M_by_geography).mark_point().encode(
+    x=alt.X(
+        "obs_mean:Q",
+        scale=alt.Scale(zero=False),
+        title="Avg May 31 Uptake across States",
+    ),
+    y=alt.Y("M_geography:Q", title="Posterior Mean for Deviation from Avg M"),
+)
+
+x = M_by_geography["obs_mean"].to_numpy()
+y = M_by_geography["M_geography"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
