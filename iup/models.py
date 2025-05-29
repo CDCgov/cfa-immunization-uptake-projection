@@ -447,7 +447,7 @@ def extract_group_combos(
     Parameters
     data: pl.DataFrame
         uptake data possibly containing grouping factors
-    group_cols: (str,) | None
+    groups: (str,) | None
         name(s) of the columns for the grouping factors
 
     Returns

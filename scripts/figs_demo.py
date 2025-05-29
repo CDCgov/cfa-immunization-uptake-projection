@@ -395,3 +395,21 @@ alt.Chart(M_by_geography).mark_point().encode(
 x = M_by_geography["obs_mean"].to_numpy()
 y = M_by_geography["M_geography"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %% Do states always rank the same on May 31?
+ranked_states = pl.DataFrame()
+for season in postcheck_last["season"].unique().sort():
+    new_column = postcheck_last.filter(
+        (pl.col("season") == season)
+        & (~pl.col("geography").is_in(["Puerto Rico", "Guam", "U.S. Virgin Islands"]))
+    ).sort(pl.col("est"))["geography"]
+
+    if new_column.len() == 51:
+        ranked_states = ranked_states.with_columns(new_column.alias(season))
+
+new_column = forecast_last.filter(
+    ~pl.col("geography").is_in(["Puerto Rico", "Guam", "U.S. Virgin Islands"])
+).sort(pl.col("est"))["geography"]
+ranked_states = ranked_states.with_columns(new_column.alias("2023/2024"))
+
+# %%
