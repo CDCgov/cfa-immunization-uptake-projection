@@ -136,7 +136,7 @@ postcheck_sub = postcheck.filter(
 plot_uptake(postcheck_sub)
 
 # %% Plot posterior predictions for all states in one season
-postcheck_sub = postcheck.filter(pl.col("season") == "2022/2023").drop("season")
+postcheck_sub = postcheck.filter(pl.col("season") == "2020/2021").drop("season")
 alt.data_transformers.disable_max_rows()
 plot_uptake(postcheck_sub)
 
@@ -187,7 +187,7 @@ x = postcheck_last_sub["obs"].to_numpy()
 y = postcheck_last_sub["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-# %% How well do pred vs. obs final uptakes correlate in forecasts for 2022/23 only?
+# %% How well do pred vs. obs final uptakes correlate in forecasts for 2023/24 only?
 forecast_last = (
     forecast.drop_nulls()
     .sort("elapsed", descending=True)
@@ -411,5 +411,3 @@ new_column = forecast_last.filter(
     ~pl.col("geography").is_in(["Puerto Rico", "Guam", "U.S. Virgin Islands"])
 ).sort(pl.col("est"))["geography"]
 ranked_states = ranked_states.with_columns(new_column.alias("2023/2024"))
-
-# %%
