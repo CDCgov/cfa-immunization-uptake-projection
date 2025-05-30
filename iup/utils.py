@@ -107,7 +107,9 @@ def map_value_to_index(groups: pl.DataFrame) -> dict:
     return mapping
 
 
-def value_to_index(groups: pl.DataFrame, mapping: dict, unique=True) -> np.ndarray:
+def value_to_index(
+    groups: pl.DataFrame, mapping: dict, num_group_levels: List[int,]
+) -> np.ndarray:
     """
     Replace each level of each grouping factor in a data frame, using a pre-determined mapping.
 
@@ -116,16 +118,15 @@ def value_to_index(groups: pl.DataFrame, mapping: dict, unique=True) -> np.ndarr
         levels of grouping factors (cols) for multiple data points (rows)
     mapping: dict
         mapping of each level of each grouping factor to a numeric code
-    unique: bool
-        whether numeric codes should be unique across grouping factors
+    num_group_levels: bool
+        total number of levels for each grouping factor
 
     Returns
     np.ndarray
         array of group levels but with numeric codes instead of level names
 
     Details
-    If unique is False, numeric codes will be reused across grouping factors.
-    If unique is True (default), numeric codes will be used only once across grouping factors.
+    Numeric codes will be used only once across grouping factors.
     The keys of mapping must match the column names of groups.
     """
     assert set(mapping.keys()) == set(groups.columns), (
@@ -138,24 +139,23 @@ def value_to_index(groups: pl.DataFrame, mapping: dict, unique=True) -> np.ndarr
             pl.col(col_name).replace(mapping[col_name]).cast(pl.UInt8).alias(col_name)
         )
 
-    array = groups.to_numpy()
-
-    if unique:
-        unique_counts = count_unique_values(array)
-        array = array + np.cumsum(np.array([0] + unique_counts[:-1]))
+    array = groups.to_numpy() + np.cumsum([0] + num_group_levels[:-1])
 
     return array
 
 
-def count_unique_values(array: np.ndarray) -> List[int,]:
+def count_unique_values(df: pl.DataFrame | None) -> List[int,]:
     """
-    Count unique values in each column of an array
+    Count unique values in each column of a data frame
 
     Parameters
-    array: np.ndarray
+    df: pl.DataFrame
 
     Returns
     List[int,]
-        Number of unique values in each column of the array
+        Number of unique values in each column of the data frame
     """
-    return [len(np.unique(array[:, i])) for i in range(array.shape[1])]
+    if df is None:
+        return [0]
+    else:
+        return [df.n_unique(subset=col) for col in df.columns]
