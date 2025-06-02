@@ -250,11 +250,11 @@ class LPLModel(UptakeModel):
         # Tranform the levels of the grouping factors into numeric codes
         if groups is not None:
             self.num_group_factors = len(groups)
+            self.num_group_levels = iup.utils.count_unique_values(self.group_combos)
             self.value_to_index = iup.utils.map_value_to_index(data.select(groups))
             group_codes = iup.utils.value_to_index(
-                data.select(groups), self.value_to_index
+                data.select(groups), self.value_to_index, self.num_group_levels
             )
-            self.num_group_levels = iup.utils.count_unique_values(group_codes)
         else:
             group_codes = None
             self.num_group_factors = 0
@@ -392,7 +392,7 @@ class LPLModel(UptakeModel):
             # Make a numpy array of numeric codes for grouping factor levels
             # that matches the same codes used when fitting the model
             group_codes = iup.utils.value_to_index(
-                scaffold.select(groups), self.value_to_index
+                scaffold.select(groups), self.value_to_index, self.num_group_levels
             )
 
             # Make a prediction-machine from the fit model
@@ -447,7 +447,7 @@ def extract_group_combos(
     Parameters
     data: pl.DataFrame
         uptake data possibly containing grouping factors
-    group_cols: (str,) | None
+    groups: (str,) | None
         name(s) of the columns for the grouping factors
 
     Returns

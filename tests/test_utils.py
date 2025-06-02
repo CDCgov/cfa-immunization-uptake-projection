@@ -1,5 +1,4 @@
 import polars as pl
-import pytest
 
 import iup
 import iup.utils
@@ -51,11 +50,3 @@ def test_date_to_elapsed_handles_season_start(frame):
     )
 
     assert (output["elapsed"] == expected).all()
-
-
-@pytest.fixture
-def test_str():
-    """
-    Provides a test string for test_parse_name_and_date().
-    """
-    return "HillModel_forecast_starts_2023-10-01"
