@@ -97,7 +97,9 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
+    input_data = iup.CumulativeUptakeData(
+        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
+    )
 
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
 

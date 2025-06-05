@@ -108,9 +108,11 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
+    input_data = iup.CumulativeUptakeData(
+        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
+    )
 
-    with open(args.models, "rb") as f:
+    with open(Path(args.models, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
 
     output = run_all_forecasts(input_data, models, config)

@@ -18,7 +18,7 @@ viz:
 
 $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 	python $< \
-		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
+		--pred=$(PREDICTIONS) --obs=$(RAW_DATA) --config=$(CONFIG) \
 		--output=$@
 
 $(PREDICTIONS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)

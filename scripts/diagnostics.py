@@ -101,7 +101,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    with open(args.input, "rb") as f:
+    with open(Path(args.input, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
 
     diagnostic_plot(models, config, args.output)
