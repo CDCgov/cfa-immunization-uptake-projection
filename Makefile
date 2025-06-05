@@ -4,8 +4,7 @@ TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config_template.yaml
 RAW_DATA = output/data/$(NICKNAME)_nis.parquet
 MODEL_FITS = output/fits/$(NICKNAME)_model_fits.pkl
-DIAGNOSTICS = output/diagnostics/tables/
-DIAGNOSTIC_PLOTS = output/diagnostics/plots/
+DIAGNOSTICS = output/diagnostics/$(NICKNAME)/
 POSTCHECKS = output/forecasts/tables/$(NICKNAME)_postchecks.parquet
 FORECASTS = output/forecasts/tables/$(NICKNAME)_forecasts.parquet
 SCORES = output/scores/tables/$(NICKNAME)_scores.parquet
@@ -28,8 +27,7 @@ $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	--output_postchecks=$(POSTCHECKS) --output_forecasts=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
-	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$@ \
-	--output_plot=$(DIAGNOSTIC_PLOTS)
+	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output=$@
 
 $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
