@@ -9,7 +9,7 @@ PREDICTIONS = output/forecasts/$(NICKNAME)/
 SCORES = output/scores/tables/$(NICKNAME)/
 
 
-.PHONY: nis clean viz
+.PHONY: clean nis delete_nis viz
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
@@ -40,3 +40,7 @@ clean:
 nis:
 	python -c "import nisapi"
 	python -m nisapi cache --app-token=$(TOKEN)
+
+delete_nis:
+	python -c "import nisapi"
+	pyton -m nisapi delete
