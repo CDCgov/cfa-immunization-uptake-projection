@@ -63,7 +63,7 @@ def preprocess(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--output", help="output parquet file", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:

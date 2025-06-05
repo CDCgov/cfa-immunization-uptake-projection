@@ -95,7 +95,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
     p.add_argument("--input", help="fitted models")
-    p.add_argument("--output", help="path of output")
+    p.add_argument("--output", help="output directory")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
