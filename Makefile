@@ -6,7 +6,7 @@ RAW_DATA = output/data/$(NICKNAME)/
 MODEL_FITS = output/fits/$(NICKNAME)/
 DIAGNOSTICS = output/diagnostics/$(NICKNAME)/
 PREDICTIONS = output/forecasts/$(NICKNAME)/
-SCORES = output/scores/tables/$(NICKNAME)_scores.parquet
+SCORES = output/scores/tables/$(NICKNAME)/
 
 
 .PHONY: nis viz

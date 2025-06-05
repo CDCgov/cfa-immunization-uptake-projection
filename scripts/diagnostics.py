@@ -94,7 +94,7 @@ def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="fitted models")
+    p.add_argument("--input", help="fitted model directory")
     p.add_argument("--output", help="output directory")
     args = p.parse_args()
 

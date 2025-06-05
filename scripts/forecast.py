@@ -100,8 +100,8 @@ def run_all_forecasts(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data")
-    p.add_argument("--models", help="fitted models")
+    p.add_argument("--input", help="input data directory")
+    p.add_argument("--models", help="fitted model directory")
     p.add_argument("--output", help="output directory")
     args = p.parse_args()
 

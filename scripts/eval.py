@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 import polars as pl
 import yaml
@@ -96,16 +97,18 @@ def eval_all_forecasts(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--pred", help="forecast data")
-    p.add_argument("--obs", help="observed data")
-    p.add_argument("--output", help="output parquet file")
+    p.add_argument("--pred", help="forecast data directory")
+    p.add_argument("--obs", help="observed data directory")
+    p.add_argument("--output", help="output directory")
     args = p.parse_args()
 
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    pred = pl.read_parquet(args.pred)
-    data = pl.read_parquet(args.obs)
+    pred = pl.read_parquet(Path(args.pred, "forecasts.parquet"))
+    data = pl.read_parquet(Path(args.obs, "nis_data.parquet"))
 
     if config["evaluation_timeframe"]["interval"] is not None:
-        eval_all_forecasts(data, pred, config).write_parquet(args.output)
+        eval_all_forecasts(data, pred, config).write_parquet(
+            Path(args.output, "scores.parquet")
+        )
