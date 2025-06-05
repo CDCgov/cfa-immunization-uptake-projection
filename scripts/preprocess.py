@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 from typing import List
 
 import nisapi
@@ -79,4 +80,4 @@ if __name__ == "__main__":
         season_start_day=config["data"]["season_start_day"],
     )
 
-    clean_data.write_parquet(args.output)
+    clean_data.write_parquet(Path(args.output, "nis_data.parquet"))

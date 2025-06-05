@@ -1,6 +1,7 @@
 import argparse
 import datetime as dt
 import pickle as pkl
+from pathlib import Path
 from typing import Any, Dict, List, Type
 
 import numpyro
@@ -102,5 +103,5 @@ if __name__ == "__main__":
 
     all_models = fit_all_models(input_data, config)
 
-    with open(args.output, "wb") as f:
+    with open(Path(args.output, "model_fits.pkl"), "wb") as f:
         pkl.dump(all_models, f)

@@ -2,11 +2,10 @@ NICKNAME = test_run
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config_template.yaml
-RAW_DATA = output/data/$(NICKNAME)/nis.parquet
-MODEL_FITS = output/fits/$(NICKNAME)/model_fits.pkl
+RAW_DATA = output/data/$(NICKNAME)/
+MODEL_FITS = output/fits/$(NICKNAME)/
 DIAGNOSTICS = output/diagnostics/$(NICKNAME)/
-POSTCHECKS = output/forecasts/tables/$(NICKNAME)_postchecks.parquet
-FORECASTS = output/forecasts/tables/$(NICKNAME)_forecasts.parquet
+PREDICTIONS = output/forecasts/$(NICKNAME)/
 SCORES = output/scores/tables/$(NICKNAME)_scores.parquet
 
 
