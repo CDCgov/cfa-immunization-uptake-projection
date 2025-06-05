@@ -62,16 +62,13 @@ def preprocess(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument(
-        "--cache", help="NIS cache directory", default=".cache/nisapi/clean/"
-    )
     p.add_argument("--output", help="output parquet file", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    raw_data = nisapi.get_nis(path=args.cache)
+    raw_data = nisapi.get_nis()
 
     clean_data = preprocess(
         raw_data,

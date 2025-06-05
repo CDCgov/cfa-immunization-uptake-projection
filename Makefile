@@ -1,9 +1,8 @@
 NICKNAME = test_run
-NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
-RAW_DATA = output/data/$(NICKNAME)_nis_raw.parquet
+RAW_DATA = output/data/$(NICKNAME)_nis.parquet
 MODEL_FITS = output/fits/$(NICKNAME)_model_fits.pkl
 DIAGNOSTICS = output/diagnostics/tables/
 DIAGNOSTIC_PLOTS = output/diagnostics/plots/
@@ -35,8 +34,8 @@ $(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
 $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 	python $< --input=$(RAW_DATA) --config=$(CONFIG) --output=$@
 
-$(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
-	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
+$(RAW_DATA): scripts/preprocess.py $(CONFIG)
+	python $< --config=$(CONFIG) --output=$@
 
 nis:
 	python -c "import nisapi"
