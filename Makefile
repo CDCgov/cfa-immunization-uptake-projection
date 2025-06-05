@@ -13,7 +13,7 @@ SCORES = output/scores/tables/scores.parquet
 
 .PHONY: viz
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(DIAGNOSTIC_PLOTS) $(FORECASTS) $(SCORES)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES)
 
 viz:
 	streamlit run scripts/viz.py
@@ -25,10 +25,10 @@ $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 
 $(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) \
-	--output_postchecks=$(POSTCHECKS) --output_forecasts=$(FORECASTS)
+	--output_postchecks=$(POSTCHECKS) --output_forecasts=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
-	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$(DIAGNOSTICS) \
+	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output_table=$@ \
 	--output_plot=$(DIAGNOSTIC_PLOTS)
 
 $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
