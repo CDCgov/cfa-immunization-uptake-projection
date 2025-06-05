@@ -1,7 +1,7 @@
 NICKNAME = test_run
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
-CONFIG = scripts/config.yaml
+CONFIG = scripts/config_template.yaml
 RAW_DATA = output/data/$(NICKNAME)_nis.parquet
 MODEL_FITS = output/fits/$(NICKNAME)_model_fits.pkl
 DIAGNOSTICS = output/diagnostics/tables/
