@@ -105,6 +105,6 @@ if __name__ == "__main__":
 
     all_models = fit_all_models(input_data, config)
 
-    Path(args.output).mkdir(parents=False, exist_ok=True)
+    Path(args.output).mkdir(parents=True, exist_ok=True)
     with open(Path(args.output, "model_fits.pkl"), "wb") as f:
         pkl.dump(all_models, f)

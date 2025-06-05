@@ -104,6 +104,6 @@ if __name__ == "__main__":
     with open(Path(args.input, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
 
-    Path(args.output).mkdir(parents=False, exist_ok=True)
+    Path(args.output).mkdir(parents=True, exist_ok=True)
     diagnostic_plot(models, config, args.output)
     diagnostic_table(models, config, args.output)

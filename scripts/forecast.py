@@ -117,6 +117,6 @@ if __name__ == "__main__":
 
     output = run_all_forecasts(input_data, models, config)
 
-    Path(args.output).mkdir(parents=False, exist_ok=True)
+    Path(args.output).mkdir(parents=True, exist_ok=True)
     output[0].write_parquet(Path(args.output, "postchecks.parquet"))
     output[1].write_parquet(Path(args.output, "forecasts.parquet"))
