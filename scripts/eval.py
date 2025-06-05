@@ -109,6 +109,7 @@ if __name__ == "__main__":
     data = pl.read_parquet(Path(args.obs, "nis_data.parquet"))
 
     if config["evaluation_timeframe"]["interval"] is not None:
+        Path(args.output).mkdir(parents=False, exist_ok=True)
         eval_all_forecasts(data, pred, config).write_parquet(
             Path(args.output, "scores.parquet")
         )

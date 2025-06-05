@@ -80,4 +80,5 @@ if __name__ == "__main__":
         season_start_day=config["data"]["season_start_day"],
     )
 
+    Path(args.output).mkdir(parents=False, exist_ok=True)
     clean_data.write_parquet(Path(args.output, "nis_data.parquet"))
