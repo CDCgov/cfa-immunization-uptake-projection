@@ -9,7 +9,7 @@ PREDICTIONS = output/forecasts/$(NICKNAME)/
 SCORES = output/scores/tables/$(NICKNAME)/
 
 
-.PHONY: nis viz
+.PHONY: nis clean viz
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
@@ -33,6 +33,9 @@ $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 
 $(RAW_DATA): scripts/preprocess.py $(CONFIG)
 	python $< --config=$(CONFIG) --output=$@
+
+clean:
+	rm -r $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
 nis:
 	python -c "import nisapi"
