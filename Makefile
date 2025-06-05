@@ -12,7 +12,7 @@ FORECASTS = output/forecasts/tables/$(NICKNAME)_forecasts.parquet
 SCORES = output/scores/tables/$(NICKNAME)_scores.parquet
 
 
-.PHONY: viz
+.PHONY: nis viz
 
 all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES)
 
@@ -38,6 +38,6 @@ $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 $(RAW_DATA): scripts/preprocess.py $(NIS_CACHE) $(CONFIG)
 	python $< --cache=$(NIS_CACHE)/clean --config=$(CONFIG) --output=$@
 
-$(NIS_CACHE)/status.txt $(TOKEN_PATH):
-	python -c "import nisapi; nisapi.cache_all_datasets('$(NIS_CACHE)', '$(TOKEN)')"
-	find $(NIS_CACHE)/clean -type f | xargs sha1sum > $@
+nis:
+	python -c "import nisapi"
+	python -m nisapi cache --app-token=$(TOKEN)
