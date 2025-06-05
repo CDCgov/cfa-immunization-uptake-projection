@@ -11,7 +11,7 @@ SCORES = output/scores/tables/$(NICKNAME)/
 
 .PHONY: nis viz
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES)
+all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
 viz:
 	streamlit run scripts/viz.py
