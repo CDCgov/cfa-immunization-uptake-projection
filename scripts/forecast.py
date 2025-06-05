@@ -1,5 +1,6 @@
 import argparse
 import pickle
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import polars as pl
@@ -101,8 +102,7 @@ if __name__ == "__main__":
     p.add_argument("--config", help="config file")
     p.add_argument("--input", help="input data")
     p.add_argument("--models", help="fitted models")
-    p.add_argument("--output_postchecks", help="output parquet file for postchecks")
-    p.add_argument("--output_forecasts", help="output parquet file for forecasts")
+    p.add_argument("--output", help="output folder")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
@@ -114,5 +114,5 @@ if __name__ == "__main__":
         models = pickle.load(f)
 
     output = run_all_forecasts(input_data, models, config)
-    output[0].write_parquet(args.output_postchecks)
-    output[1].write_parquet(args.output_forecasts)
+    output[0].write_parquet(Path(args.output, "postchecks.parquet"))
+    output[1].write_parquet(Path(args.output, "forecasts.parquet"))

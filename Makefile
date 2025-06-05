@@ -21,9 +21,9 @@ $(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
 		--pred=$(FORECASTS) --obs=$(RAW_DATA) --config=$(CONFIG) \
 		--output=$@
 
-$(FORECASTS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
+$(PREDICTIONS): scripts/forecast.py $(RAW_DATA) $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(RAW_DATA) --models=$(MODEL_FITS) --config=$(CONFIG) \
-	--output_postchecks=$(POSTCHECKS) --output_forecasts=$@
+	--output=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(MODEL_FITS) $(CONFIG)
 	python $< --input=$(MODEL_FITS) --config=$(CONFIG) --output=$@
