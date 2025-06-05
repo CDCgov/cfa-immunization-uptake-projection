@@ -16,7 +16,7 @@ all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES)
 viz:
 	streamlit run scripts/viz.py
 
-$(SCORES): scripts/eval.py $(FORECASTS) $(RAW_DATA)
+$(SCORES): scripts/eval.py $(PREDICTIONS) $(RAW_DATA)
 	python $< \
 		--pred=$(PREDICTIONS) --obs=$(RAW_DATA) --config=$(CONFIG) \
 		--output=$@
