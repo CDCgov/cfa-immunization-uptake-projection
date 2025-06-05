@@ -1,14 +1,15 @@
+NICKNAME = test_run
 NIS_CACHE = .cache/nisapi
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config.yaml
-RAW_DATA = output/data/nis_raw_flu.parquet
-MODEL_FITS = output/fits/model_fits.pkl
+RAW_DATA = output/data/$(NICKNAME)_nis_raw.parquet
+MODEL_FITS = output/fits/$(NICKNAME)_model_fits.pkl
 DIAGNOSTICS = output/diagnostics/tables/
 DIAGNOSTIC_PLOTS = output/diagnostics/plots/
-POSTCHECKS = output/forecasts/tables/postchecks.parquet
-FORECASTS = output/forecasts/tables/forecasts.parquet
-SCORES = output/scores/tables/scores.parquet
+POSTCHECKS = output/forecasts/tables/$(NICKNAME)_postchecks.parquet
+FORECASTS = output/forecasts/tables/$(NICKNAME)_forecasts.parquet
+SCORES = output/scores/tables/$(NICKNAME)_scores.parquet
 
 
 .PHONY: viz
