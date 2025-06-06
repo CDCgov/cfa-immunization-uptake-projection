@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 from typing import List
 
 import nisapi
@@ -62,16 +63,13 @@ def preprocess(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument(
-        "--cache", help="NIS cache directory", default=".cache/nisapi/clean/"
-    )
-    p.add_argument("--output", help="output parquet file", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    raw_data = nisapi.get_nis(path=args.cache)
+    raw_data = nisapi.get_nis()
 
     clean_data = preprocess(
         raw_data,
@@ -82,4 +80,5 @@ if __name__ == "__main__":
         season_start_day=config["data"]["season_start_day"],
     )
 
-    clean_data.write_parquet(args.output)
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    clean_data.write_parquet(Path(args.output, "nis_data.parquet"))

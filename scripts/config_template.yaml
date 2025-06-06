@@ -24,7 +24,7 @@ forecast_timeframe:
 
 # Spacing between multiple forecasts, for evaluation
 evaluation_timeframe:
-  interval: 3mo # Leave this blank if you don't want evaluation
+  interval:  # e.g. 3mo, otherwise leave this blank if you don't want evaluation
 
 # Details of the models to fit
 models:
@@ -55,7 +55,6 @@ scores:
   quantiles: [0.5] # Must specify at least one fraction
   difference_by_date: [2024-03-31] # if blank, abs_diff will not be used
   others: [mspe]
-
 
 # Prediction credible interval plot
 forecast_plots:
