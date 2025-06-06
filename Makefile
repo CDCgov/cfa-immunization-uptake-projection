@@ -43,4 +43,4 @@ nis:
 
 delete_nis:
 	python -c "import nisapi"
-	pyton -m nisapi delete
+	python -m nisapi delete
