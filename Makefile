@@ -7,12 +7,12 @@ RAW_DATA = output/data/$(RUN_ID)/
 MODEL_FITS = output/fits/$(RUN_ID)/
 DIAGNOSTICS = output/diagnostics/$(RUN_ID)/
 PREDICTIONS = output/forecasts/$(RUN_ID)/
-SCORES = output/scores/tables/$(RUN_ID)/
+SCORES = output/scores/$(RUN_ID)/
 
 
 .PHONY: clean nis delete_nis viz
 
-all: $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
+all: $(SETTINGS) $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
 viz:
 	streamlit run scripts/viz.py
@@ -36,6 +36,7 @@ $(RAW_DATA): scripts/preprocess.py $(CONFIG)
 	python $< --config=$(CONFIG) --output=$@
 
 $(SETTINGS): $(CONFIG)
+	mkdir $(SETTINGS)
 	cp $(CONFIG) $(SETTINGS)
 
 clean:
