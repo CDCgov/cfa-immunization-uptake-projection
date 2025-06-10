@@ -36,7 +36,7 @@ $(RAW_DATA): scripts/preprocess.py $(CONFIG)
 	python $< --config=$(CONFIG) --output=$@
 
 $(SETTINGS): $(CONFIG)
-	mkdir $(SETTINGS)
+	mkdir -p $(SETTINGS)
 	cp $(CONFIG) $(SETTINGS)
 
 clean:
