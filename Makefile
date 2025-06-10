@@ -1,12 +1,13 @@
-NICKNAME = test_run
+RUN_ID = test
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
 CONFIG = scripts/config_template.yaml
-RAW_DATA = output/data/$(NICKNAME)/
-MODEL_FITS = output/fits/$(NICKNAME)/
-DIAGNOSTICS = output/diagnostics/$(NICKNAME)/
-PREDICTIONS = output/forecasts/$(NICKNAME)/
-SCORES = output/scores/tables/$(NICKNAME)/
+SETTINGS = output/settings/$(RUN_ID)/
+RAW_DATA = output/data/$(RUN_ID)/
+MODEL_FITS = output/fits/$(RUN_ID)/
+DIAGNOSTICS = output/diagnostics/$(RUN_ID)/
+PREDICTIONS = output/forecasts/$(RUN_ID)/
+SCORES = output/scores/tables/$(RUN_ID)/
 
 
 .PHONY: clean nis delete_nis viz
@@ -34,8 +35,11 @@ $(MODEL_FITS): scripts/fit.py $(RAW_DATA) $(CONFIG)
 $(RAW_DATA): scripts/preprocess.py $(CONFIG)
 	python $< --config=$(CONFIG) --output=$@
 
+$(SETTINGS): $(CONFIG)
+	cp $(CONFIG) $(SETTINGS)
+
 clean:
-	rm -r $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
+	rm -r $(SETTINGS) $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
 nis:
 	python -c "import nisapi"
