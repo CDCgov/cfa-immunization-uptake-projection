@@ -8,7 +8,7 @@ This repo contains statistical tools to predict the uptake of immunizations (pri
 
 All three steps are currently under development.
 
-This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh on the immunization rollout date, and individuals' transitions across age groups are not relevant.
+This approach is applicable to seasonal adult immunizations. Each year, the uptake process starts afresh, and individuals' transitions across age groups are not relevant.
 
 ## Data sources
 
@@ -16,20 +16,28 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 ## Getting started
 
-1. Set up a virtual environment with `poetry shell`
-2. Installed the required dependencies with `poetry install`
-3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`
-4. Cache NIS data with `make cache`
-5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields
-    - data: specify the type of vaccine data in terms of: rollout dates, grouping factors including geography, demography (`domain_type` and `domain`), and metric (`indicator_type`, `indicator`).
-    - forecast_timeframe: specify the start and the end of forecast dates, and interval between forecast dates (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
-    - evaluation_timeframe: specify the interval of the forecast dates for evaluation. If blank, no evaluation score will be returned.
-    - models: specify the name of the model (refer to iup.models), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run
-    - scores: specify the evaluation metrics. Specify the quantile of forecasts to calculate scores. Two scores are available: absolute difference on a certain date (need to specify), and mean squared prediction error (as mspe).
-    - forecast_plots: specify the quantile of prediction interval to show in streamlit app, need to be a fraction.
-    - diagnostics: specify the model in iup.models to diagnose, the range of forecast dates to diagnose (by having a list of start and end date), the diagnostic plots and the diagnostic tables (refer to iup.diagnostics).
-6. `make all` to get cleaned data "output/data/nis_raw.parquet", model fits "output/fits.model_fits.pkl", forecasts "output/forecasts/table/forecasts.parquet", evaluation scores "output/scores/tables/scores.parquet".
-7. `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, prediction interval, and evaluation scores, with options of dimensions and filters to customize the visualization.
+1. Set up a virtual environment with `poetry shell`.
+2. Installed the required dependencies with `poetry install`.
+3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`.
+4. Cache NIS data with `make nis`.
+5. Copy the config template in `scripts/config_template.yaml` (e.g., to `scripts/config.yaml`) and fill in the necessary fields.
+    - data: specify the vaccination uptake data to use, including a de facto annual start of the disease season, filters for rows and columns to keep, and grouping factors by which to partition forecasts.
+    - forecast_timeframe: specify the start and the end of the forecast period and the interval between reference dates in the forecast (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
+    - evaluation_timeframe: specify the interval between forecast dates if multiple forecasts are desired (sharing the same end of the forecast period). This will create different forecast horizons, which can be compared with evaluation scores. If blank, no evaluation score will not be computed.
+    - models: specify the name of the model (refer to `iup.models`), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run.
+    - scores: specify the quantile of the posterior forecasts to use for evaluation, the date(s) on which to compute absolute difference, and any additional evaluation metrics (e.g. mean squared prediction error as `mspe`).
+    - forecast_plots: specify the credible interval (in fractional terms) and number of randomly chosen trajectories to show on forecast plots.
+    - diagnostics: specify the model (refer to `iup.models`) and the range of forecast dates (i.e. a list of earliest and latest) on which to perform diagnostics, as well as the types of plots and tables to create (refer to `iup.diagnostics`).
+6. Run `make all` to run the model fitting and forecasting pipeline. This will create six `output/` subfolders:
+    - `settings`: a copy of the config.
+    - `data`: the pre-processed data.
+    - `fits`: the fit model object(s).
+    - `diagnostics`: diagnostic plots and tables for the desired model(s) and forecast date(s).
+    - `forecasts`: posterior predictions and forecasts.
+    - `scores`: evaluation scores comparing model structures and/or forecast dates.
+    Each run of the pipeline is assigned a `RUN_ID`. When a new `RUN_ID` is given, a new subfolder will be created inside each of the above six folders to store the corresponding outputs. When an existing `RUN_ID` is given, the contents of that `RUN_ID`'s existing subfolders will be overwritten, assuming the pipeline inputs have changed since the last run. `RUN_ID` can be assigned in line 1 of the Makefile or directly in the command line `make all RUN_ID=name_of_run`.
+7. Run `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, credible intervals, and evaluation scores, with options of dimensions and filters to customize the visualization.
+8. Run `make clean` to remove all outputs for a particular `RUN_ID` and `make delete_nis` to delete the NIS data from the cache.
 
 #### Package workflow:
 

@@ -1,6 +1,7 @@
 import argparse
 import datetime as dt
 import pickle as pkl
+from pathlib import Path
 from typing import Any, Dict, List, Type
 
 import numpyro
@@ -89,18 +90,21 @@ def fit_model(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data")
-    p.add_argument("--output", help="output parquet file")
+    p.add_argument("--input", help="input data directory")
+    p.add_argument("--output", help="output directory")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
+    input_data = iup.CumulativeUptakeData(
+        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
+    )
 
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
 
     all_models = fit_all_models(input_data, config)
 
-    with open(args.output, "wb") as f:
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    with open(Path(args.output, "model_fits.pkl"), "wb") as f:
         pkl.dump(all_models, f)

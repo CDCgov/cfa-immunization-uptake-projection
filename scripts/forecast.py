@@ -1,5 +1,6 @@
 import argparse
 import pickle
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import polars as pl
@@ -99,20 +100,23 @@ def run_all_forecasts(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data")
-    p.add_argument("--models", help="fitted models")
-    p.add_argument("--output_postchecks", help="output parquet file for postchecks")
-    p.add_argument("--output_forecasts", help="output parquet file for forecasts")
+    p.add_argument("--input", help="input data directory")
+    p.add_argument("--models", help="fitted model directory")
+    p.add_argument("--output", help="output directory")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(pl.scan_parquet(args.input).collect())
+    input_data = iup.CumulativeUptakeData(
+        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
+    )
 
-    with open(args.models, "rb") as f:
+    with open(Path(args.models, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
 
     output = run_all_forecasts(input_data, models, config)
-    output[0].write_parquet(args.output_postchecks)
-    output[1].write_parquet(args.output_forecasts)
+
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    output[0].write_parquet(Path(args.output, "postchecks.parquet"))
+    output[1].write_parquet(Path(args.output, "forecasts.parquet"))

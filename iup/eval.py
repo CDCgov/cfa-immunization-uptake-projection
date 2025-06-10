@@ -100,8 +100,10 @@ def summarize_score(
     else:
         columns_to_join = ["time_end"] + groups
 
-    joined_df = data.join(pred, on=columns_to_join, how="inner", validate="1:1").rename(
-        {"estimate": "data", "estimate_right": "pred"}
+    joined_df = (
+        pl.DataFrame(data)
+        .join(pl.DataFrame(pred), on=columns_to_join, how="inner", validate="1:1")
+        .rename({"estimate": "data", "estimate_right": "pred"})
     )
 
     all_scores = pl.DataFrame()

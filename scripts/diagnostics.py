@@ -94,16 +94,16 @@ def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="fitted models")
-    p.add_argument("--output_table", help="path of output tables")
-    p.add_argument("--output_plot", help="path of output plots")
+    p.add_argument("--input", help="fitted model directory")
+    p.add_argument("--output", help="output directory")
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    with open(args.input, "rb") as f:
+    with open(Path(args.input, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
 
-    diagnostic_plot(models, config, args.output_plot)
-    diagnostic_table(models, config, args.output_table)
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    diagnostic_plot(models, config, args.output)
+    diagnostic_table(models, config, args.output)
