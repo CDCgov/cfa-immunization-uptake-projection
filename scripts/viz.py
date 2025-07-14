@@ -16,6 +16,9 @@ def app():
     obs = data["observed"]
     pred = data["forecasts"]
 
+    states = ["Alabama", "California", "Virginia"]
+    obs = obs.filter(pl.col("geography").is_in(states))
+    pred = pred.filter(pl.col("geography").is_in(states))
     # load config
     config = load_config()
 
@@ -48,10 +51,13 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     """
 
+    obs = obs.with_columns(model=pl.lit("observed"))
+
     # set up plot encodings
     encodings = {
         "x": alt.X("time_end:T", title="Observation date"),
         "y": alt.Y("estimate:Q", title="Cumulative uptake estimate"),
+        "color": alt.Color("sample_id:N", title="Trajectories"),
     }
 
     # select which data dimension to put into which plot channel
@@ -99,6 +105,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     )
 
     pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
+    print(pred)
 
     # get every model/forecast date combo
     models_forecasts = pred.select(["model", "forecast_start"]).unique()
@@ -108,6 +115,13 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
         pl.col(factor).is_in(pred[factor].unique())
         for factor in config["data"]["groups"]
     )
+    pl.Config.set_tbl_cols(-1)
+    print(obs)
+    print(plot_obs)
+
+    data = pl.concat([pred, plot_obs], how="vertical")
+
+    chart = alt.Chart(data).mark_line().encode(*encodings)
 
     obs_chart = (
         alt.Chart(plot_obs)
