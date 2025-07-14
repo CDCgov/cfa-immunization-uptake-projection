@@ -169,7 +169,6 @@ x = postcheck_last["obs"].to_numpy()
 y = postcheck_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-
 # %% Plot final uptake correlation for postchecks in just one year
 postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2018/2019")
 alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
@@ -236,6 +235,36 @@ forecast = (
 # %% Plot national forecasts for 2023/2024 across forecast dates
 plot_uptake(forecast, color="tomato")
 
+# %% Load scores for national forecasts of 2023/2024
+scores = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/scores/usa/scores.parquet"
+    )
+    .with_columns(
+        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
+            pl.Date, "%Y-%m-%d"
+        )
+    )
+    .with_columns(elapsed=(pl.col("forecast_start") - pl.col("start")).dt.total_days())
+    .drop(["model", "start"])
+)
+
+# %% Plot MSPE by forecast date for national forecast
+alt.Chart(scores.filter(pl.col("score_name") == "mspe")).mark_point(
+    color="black"
+).encode(
+    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    y=alt.Y("score_value:Q", title="Mean Squared Prediction Error"),
+)
+
+# %% Plot Abs Diff by forecast date for national forecast
+alt.Chart(scores.filter(pl.col("score_name") == "abs_diff_2024-05-31")).mark_point(
+    color="black"
+).encode(
+    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    y=alt.Y("score_value:Q", title="Absolute Error on May 31"),
+)
+
 # %% SCRATCH WORK
 # How consistent are states from season to season?
 # How consistent are seasons from state to state?
@@ -248,7 +277,10 @@ flu_state_last = (
 alt.Chart(flu_state_last).mark_boxplot().encode(
     x=alt.X("geography:O"), y=alt.Y("obs:Q")
 )
-alt.Chart(flu_state_last).mark_boxplot().encode(x=alt.X("season:O"), y=alt.Y("obs:Q"))
+alt.Chart(flu_state_last).mark_boxplot().encode(
+    x=alt.X("season:O", title="Season"),
+    y=alt.Y("obs:Q", title="Observed May 31 Uptake"),
+)
 
 # %% Do mistakes in 2022/2023 prediction predict mistakes in 2023/2024 prediction?
 error_comparison = (
