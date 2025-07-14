@@ -87,7 +87,7 @@ def plot_uptake(data, color="green"):
     if "geography" in data.columns:
         alt.layer(*plot_list).facet("geography", columns=9).configure_header(
             labelFontSize=40
-        ).configure_axis(labelFontSize=20, titleFontSize=20).display()
+        ).configure_axis(labelFontSize=30, titleFontSize=30).display()
     else:
         alt.layer(*plot_list).display()
 
@@ -150,21 +150,7 @@ plot_uptake(forecast_sub, "tomato")
 alt.data_transformers.disable_max_rows()
 plot_uptake(forecast, "tomato")
 
-# %% SCRATCH WORK
-# How consistent are states from season to season?
-# How consistent are seasons from state to state?
-# Examine the last date of each season
-flu_state_last = (
-    flu_state.sort("elapsed", descending=True)
-    .group_by(["geography", "season"])
-    .agg(pl.col("*").first())
-)
-alt.Chart(flu_state_last).mark_boxplot().encode(
-    x=alt.X("geography:O"), y=alt.Y("obs:Q")
-)
-alt.Chart(flu_state_last).mark_boxplot().encode(x=alt.X("season:O"), y=alt.Y("obs:Q"))
-
-# %% How well do pred vs. obs final uptakes correlate in postchecks?
+# %% Plot final uptake correlation across all postchecks
 postcheck_last = (
     postcheck.drop_nulls()
     .filter(~pl.col("season").is_in(["2023/2024"]))
@@ -180,16 +166,17 @@ y = postcheck_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
 
-# %% How well do pred vs. obs final uptakes correlate in postchecks for 2022/23 only?
-postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2022/2023")
+# %% Plot final uptake correlation for postchecks in just one year
+postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2018/2019")
 alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
-    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+    x=alt.X("obs:Q", title="Observed May 31 Uptake"),
+    y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
 x = postcheck_last_sub["obs"].to_numpy()
 y = postcheck_last_sub["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-# %% How well do pred vs. obs final uptakes correlate in forecasts for 2023/24 only?
+# %% Plot final uptake correlation for forecasts
 forecast_last = (
     forecast.drop_nulls()
     .sort("elapsed", descending=True)
@@ -197,11 +184,26 @@ forecast_last = (
     .agg(pl.col("*").first())
 )
 alt.Chart(forecast_last).mark_point(color="tomato").encode(
-    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+    x=alt.X("obs:Q", title="Observed May 31 Uptake"),
+    y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
 x = forecast_last["obs"].to_numpy()
 y = forecast_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %% SCRATCH WORK
+# How consistent are states from season to season?
+# How consistent are seasons from state to state?
+# Examine the last date of each season
+flu_state_last = (
+    flu_state.sort("elapsed", descending=True)
+    .group_by(["geography", "season"])
+    .agg(pl.col("*").first())
+)
+alt.Chart(flu_state_last).mark_boxplot().encode(
+    x=alt.X("geography:O"), y=alt.Y("obs:Q")
+)
+alt.Chart(flu_state_last).mark_boxplot().encode(x=alt.X("season:O"), y=alt.Y("obs:Q"))
 
 # %% Do mistakes in 2022/2023 prediction predict mistakes in 2023/2024 prediction?
 error_comparison = (
