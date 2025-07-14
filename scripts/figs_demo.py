@@ -88,6 +88,10 @@ def plot_uptake(data, color="green"):
         alt.layer(*plot_list).facet("geography", columns=9).configure_header(
             labelFontSize=40
         ).configure_axis(labelFontSize=30, titleFontSize=30).display()
+    elif "forecast_start" in data.columns:
+        alt.layer(*plot_list).facet("forecast_start", columns=4).configure_header(
+            labelFontSize=40
+        ).configure_axis(labelFontSize=30, titleFontSize=30).display()
     else:
         alt.layer(*plot_list).display()
 
@@ -190,6 +194,47 @@ alt.Chart(forecast_last).mark_point(color="tomato").encode(
 x = forecast_last["obs"].to_numpy()
 y = forecast_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
+
+
+# %% Load posterior checks and forecasts for flu nationally
+postcheck = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/usa/postchecks.parquet",
+    )
+    .drop("model")
+    .group_by(["time_end", "season", "forecast_start"])
+    .agg(
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
+    )
+    .join(
+        flu_natl,
+        on=["time_end", "season"],
+        how="left",
+    )
+)
+
+forecast = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/usa/forecasts.parquet",
+    )
+    .drop("model")
+    .group_by(["time_end", "season", "forecast_start"])
+    .agg(
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
+    )
+    .join(
+        flu_natl,
+        on=["time_end", "season"],
+        how="left",
+    )
+).drop("season")
+
+# %% Plot national forecasts for 2023/2024 across forecast dates
+plot_uptake(forecast, color="tomato")
 
 # %% SCRATCH WORK
 # How consistent are states from season to season?
