@@ -87,7 +87,7 @@ def plot_uptake(data, color="green"):
     if "geography" in data.columns:
         alt.layer(*plot_list).facet("geography", columns=9).configure_header(
             labelFontSize=40
-        ).display()
+        ).configure_axis(labelFontSize=20, titleFontSize=20).display()
     else:
         alt.layer(*plot_list).display()
 
@@ -141,7 +141,9 @@ alt.data_transformers.disable_max_rows()
 plot_uptake(postcheck_sub)
 
 # %% Plot prediction vs. data for 2023/2024 for one state
-forecast_sub = forecast.filter((pl.col("geography") == "Wyoming")).drop("geography")
+forecast_sub = forecast.filter((pl.col("geography") == "Pennsylvania")).drop(
+    "geography"
+)
 plot_uptake(forecast_sub, "tomato")
 
 # %% Plot retrospective forecasts for all states
