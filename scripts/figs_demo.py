@@ -121,11 +121,11 @@ plot_uptake(flu_state_sub)
 
 # %% Load posterior checks and forecasts
 postcheck = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/postchecks.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/postchecks.parquet",
     flu_state,
 )
 forecast = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/tables/forecasts.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/forecasts.parquet",
     flu_state,
 ).drop("season")
 
