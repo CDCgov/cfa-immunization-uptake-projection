@@ -16,9 +16,6 @@ def app():
     obs = data["observed"]
     pred = data["forecasts"]
 
-    states = ["Alabama", "California", "Virginia"]
-    obs = obs.filter(pl.col("geography").is_in(states))
-    pred = pred.filter(pl.col("geography").is_in(states))
     # load config
     config = load_config()
 
@@ -50,8 +47,6 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
         The configuration yaml file.
 
     """
-
-    obs = obs.with_columns(model=pl.lit("observed"))
 
     # set up plot encodings
     encodings = {
@@ -105,50 +100,27 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     )
 
     pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
-    print(pred)
 
     # get every model/forecast date combo
-    models_forecasts = pred.select(["model", "forecast_start"]).unique()
+    forecast_starts = pred.select(["model", "forecast_start"]).unique()
 
     # for every model and forecast date, merge in the observed value
-    plot_obs = obs.join(models_forecasts, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique())
-        for factor in config["data"]["groups"]
-    )
-    pl.Config.set_tbl_cols(-1)
-    print(obs)
-    print(plot_obs)
-
-    data = pl.concat([pred, plot_obs], how="vertical")
-
-    chart = alt.Chart(data).mark_line().encode(*encodings)
-
-    obs_chart = (
-        alt.Chart(plot_obs)
-        .mark_point(filled=True, color="black")
-        .encode(
-            alt.X(
-                "time_end:T",
-                axis=alt.Axis(format="%Y-%m", tickCount="month"),
-            ),
-            alt.Y("estimate:Q"),
+    plot_obs = (
+        obs.join(forecast_starts, how="cross")
+        .filter(
+            pl.col(factor).is_in(pred[factor].unique())
+            for factor in config["data"]["groups"]
         )
+        .with_columns(sample_id=pl.lit("observed"))
     )
 
-    pred_chart = (
-        alt.Chart(pred)
-        .mark_line(opacity=0.3)
-        .encode(
-            alt.X(
-                "time_end:T",
-                axis=alt.Axis(format="%Y-%m", tickCount="month"),
-            ),
-            alt.Y("estimate:Q"),
-            alt.Color("sample_id:N", title="Sample ID"),
-        )
+    common_cols = [col for col in plot_obs.columns if col in pred.columns]
+
+    data = pl.concat(
+        [pred.select(common_cols), plot_obs.select(common_cols)], how="vertical"
     )
-    chart_lists = [pred_chart, obs_chart]
-    chart = layer_with_facets(pred, *chart_lists, **encodings)
+
+    chart = alt.Chart(data).mark_line().encode(**encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -169,16 +141,18 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     """
     encodings = {}
 
-    # reformat the observed data to be ready to join with pred data #
-    models_forecasts = pred.select(["model", "forecast_start"]).unique()
-    plot_obs = obs.join(models_forecasts, how="cross").filter(
+    # data process: merge observed data with prediction by combinations of model and forecast start #
+    forecast_starts = pred.select(["model", "forecast_start"]).unique()
+    plot_obs = obs.join(forecast_starts, how="cross").filter(
         pl.col(factor).is_in(pred[factor].unique())
         for factor in config["data"]["groups"]
     )
 
+    # summarize sample predictions by grouping factors #
     groups_to_include = ["model", "forecast_start", "time_end"] + config["data"][
         "groups"
     ]
+
     plot_pred = (
         pred.group_by(groups_to_include)
         .agg(
@@ -192,6 +166,8 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         )
         .sort("time_end")
     )
+
+    data = plot_pred.join(plot_obs, on=groups_to_include)
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
@@ -236,11 +212,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
             options=plot_pred[dim].unique().sort().to_list(),
             key=f"{dim}_{idx}_summary",
         )
-        plot_pred = plot_pred.filter(pl.col(dim) == pl.lit(filter_val))
-        plot_obs = plot_obs.filter(pl.col(dim) == pl.lit(filter_val))
+
+        data = data.filter(pl.col(dim) == pl.lit(filter_val))
 
     obs_chart = (
-        alt.Chart(plot_obs)
+        alt.Chart(data)
         .mark_point(color="black", filled=True)
         .encode(
             alt.X("time_end:T", title="Observation date"),
@@ -249,7 +225,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     )
 
     pred_chart = (
-        alt.Chart()
+        alt.Chart(data)
         .mark_line(color="grey")
         .encode(
             alt.X("time_end:T", title="Observation date"),
@@ -258,7 +234,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     )
 
     interval_chart = (
-        alt.Chart()
+        alt.Chart(data)
         .mark_area(opacity=0.3)
         .encode(
             alt.X(
@@ -271,9 +247,8 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         )
     )
 
-    chart_lists = [interval_chart, pred_chart, obs_chart]
-
-    chart = layer_with_facets(plot_pred, *chart_lists, **encodings)
+    chart_list = [interval_chart, pred_chart, obs_chart]
+    chart = layer_with_facets(chart_list, encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -366,7 +341,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
 
 
 ## helper: feed correct argument to altair ##
-def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
+def layer_with_facets(charts: List, encodings: Dict):
     """
     Because alt.layer.facet() only takes row and column and .encode() only takes color,
     this function makes sure correct arguments fall into correct command.
@@ -383,8 +358,9 @@ def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
     row_enc = encodings["row"]
     col_enc = encodings["column"]
     other_encs = {k: v for k, v in encodings.items() if k not in ["row", "column"]}
+    print(other_encs)
 
-    layered = alt.layer(*charts, data=data)
+    layered = alt.layer(*charts)
 
     layered = layered.encode(**other_encs)
 
@@ -401,7 +377,7 @@ def load_data():
 
 @st.cache_data
 def load_scores():
-    return pl.read_parquet("output/scores/tables/scores.parquet")
+    return pl.read_parquet("output/scores/test/scores.parquet")
 
 
 @st.cache_data
