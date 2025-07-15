@@ -1,3 +1,5 @@
+import argparse
+from pathlib import Path
 from typing import Any, Dict, List
 
 import altair as alt
@@ -372,23 +374,27 @@ def layer_with_facets(charts: List, encodings: Dict):
     return layered.facet(row=row_enc, column=col_enc)
 
 
-@st.cache_data
-def load_data():
-    return {
-        "forecasts": pl.read_parquet("output/forecasts/tables/forecasts.parquet"),
-        "observed": pl.read_parquet("output/data/nis_raw_flu.parquet"),
-    }
-
-
-@st.cache_data
-def load_scores():
-    return pl.read_parquet("output/scores/test/scores.parquet")
-
-
-@st.cache_data
-def load_config():
-    return yaml.safe_load(open("scripts/config.yaml"))
-
-
 if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--obs", help="observed data")
+    p.add_argument("--pred", help="forecasts")
+    p.add_argument("--score", help="score metrics")
+    p.add_argument("--config", help="config yaml file")
+    args = p.parse_args()
+
+    @st.cache_data
+    def load_data():
+        return {
+            "observed": pl.read_parquet(Path(args.obs, "nis_data.parquet")),
+            "forecasts": pl.read_parquet(Path(args.pred, "forecasts.parquet")),
+        }
+
+    @st.cache_data
+    def load_scores():
+        return pl.read_parquet(Path(args.score, "scores.parquet"))
+
+    @st.cache_data
+    def load_config():
+        return yaml.safe_load(open(args.config, "r"))
+
     app()
