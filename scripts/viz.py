@@ -101,26 +101,22 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
 
-    # get every model/forecast date combo
-    forecast_starts = pred.select(["model", "forecast_start"]).unique()
-
-    # for every model and forecast date, merge in the observed value
-    plot_obs = (
-        obs.join(forecast_starts, how="cross")
-        .filter(
-            pl.col(factor).is_in(pred[factor].unique())
-            for factor in config["data"]["groups"]
-        )
-        .with_columns(sample_id=pl.lit("observed"))
+    # merge observed data with prediction by the combination of models and forecast starts
+    model_forecast_starts = pred.select(["model", "forecast_start"]).unique()
+    plot_obs = obs.join(model_forecast_starts, how="cross").filter(
+        pl.col(factor).is_in(pred[factor].unique())
+        for factor in config["data"]["groups"]
     )
 
-    common_cols = [col for col in plot_obs.columns if col in pred.columns]
+    groupings = ["model", "forecast_start", "time_end"] + config["data"]["groups"]
 
-    data = pl.concat(
-        [pred.select(common_cols), plot_obs.select(common_cols)], how="vertical"
-    )
+    data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
 
-    chart = alt.Chart(data).mark_line().encode(**encodings)
+    obs_chart = alt.Chart(data).mark_point().encode(x="time_end:T", y="observed:Q")
+
+    pred_chart = alt.Chart(data).mark_line().encode(x="time_end:T", y="estimate:Q")
+
+    chart = layer_with_facets([obs_chart, pred_chart], encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
