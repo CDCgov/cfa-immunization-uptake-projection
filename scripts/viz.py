@@ -112,9 +112,21 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
 
-    obs_chart = alt.Chart(data).mark_point().encode(x="time_end:T", y="observed:Q")
+    obs_chart = (
+        alt.Chart(data)
+        .encode(x="time_end:T", y="observed:Q")
+        .transform_calculate(type="'observed'")
+        .mark_point()
+        .encode(shape=alt.Shape("type:N", title="Type"))
+    )
 
-    pred_chart = alt.Chart(data).mark_line().encode(x="time_end:T", y="estimate:Q")
+    pred_chart = (
+        alt.Chart(data)
+        .encode(x="time_end:T", y="estimate:Q")
+        .transform_calculate(type="'predicted'")
+        .mark_line()
+        .encode(strokeDash=alt.StrokeDash("type:N", title=None))
+    )
 
     chart = layer_with_facets([obs_chart, pred_chart], encodings)
 
@@ -213,20 +225,18 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
 
     obs_chart = (
         alt.Chart(data)
-        .mark_point(color="black", filled=True)
-        .encode(
-            alt.X("time_end:T", title="Observation date"),
-            alt.Y("estimate:Q", title="Cumulative uptake estimate"),
-        )
+        .encode(x="time_end:T", y="estimate:Q")
+        .transform_calculate(type="'observed'")
+        .mark_point()
+        .encode(shape=alt.Shape("type:N", title="Type"))
     )
 
     pred_chart = (
         alt.Chart(data)
-        .mark_line(color="grey")
-        .encode(
-            alt.X("time_end:T", title="Observation date"),
-            alt.Y("mean:Q", title="Cumulative uptake estimate"),
-        )
+        .encode(x="time_end:T", y="mean:Q")
+        .transform_calculate(type="'predicted mean'")
+        .mark_line()
+        .encode(strokeDash=alt.StrokeDash("type:N", title=None))
     )
 
     interval_chart = (
@@ -235,7 +245,6 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         .encode(
             alt.X(
                 "time_end:T",
-                title="Observation date",
                 axis=alt.Axis(format="%Y-%m", tickCount="month"),
             ),
             y="lower:Q",
@@ -243,7 +252,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         )
     )
 
-    chart_list = [interval_chart, pred_chart, obs_chart]
+    chart_list = [interval_chart, obs_chart, pred_chart]
     chart = layer_with_facets(chart_list, encodings)
 
     st.altair_chart(chart, use_container_width=True)
