@@ -116,7 +116,14 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     obs_chart = (
         alt.Chart(data)
-        .encode(x="time_end:T", y="observed:Q")
+        .encode(
+            x="time_end:T",
+            y="observed:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("observed", title="Observed uptake"),
+            ],
+        )
         .transform_calculate(type="'observed'")
         .mark_point()
         .encode(shape=alt.Shape("type:N", title="Type"))
@@ -124,7 +131,14 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     pred_chart = (
         alt.Chart(data)
-        .encode(x="time_end:T", y="estimate:Q")
+        .encode(
+            x="time_end:T",
+            y="estimate:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("estimate", title="Predicted uptake"),
+            ],
+        )
         .transform_calculate(type="'predicted'")
         .mark_line()
         .encode(strokeDash=alt.StrokeDash("type:N", title=None))
@@ -227,7 +241,14 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
 
     obs_chart = (
         alt.Chart(data)
-        .encode(x="time_end:T", y="estimate:Q")
+        .encode(
+            x="time_end:T",
+            y="estimate:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("estimate", title="Observed uptake"),
+            ],
+        )
         .transform_calculate(type="'observed'")
         .mark_point()
         .encode(shape=alt.Shape("type:N", title="Type"))
@@ -235,7 +256,14 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
 
     pred_chart = (
         alt.Chart(data)
-        .encode(x="time_end:T", y="mean:Q")
+        .encode(
+            x="time_end:T",
+            y="mean:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("mean", title="Predicted mean"),
+            ],
+        )
         .transform_calculate(type="'predicted mean'")
         .mark_line()
         .encode(strokeDash=alt.StrokeDash("type:N", title=None))
@@ -251,6 +279,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
             ),
             y="lower:Q",
             y2="upper:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("lower", title="Lower bound"),
+                alt.Tooltip("upper", title="Upper bound"),
+            ],
         )
     )
 
@@ -365,9 +398,8 @@ def layer_with_facets(charts: List, encodings: Dict):
     row_enc = encodings["row"]
     col_enc = encodings["column"]
     other_encs = {k: v for k, v in encodings.items() if k not in ["row", "column"]}
-    print(other_encs)
 
-    layered = alt.layer(*charts)
+    layered = alt.layer(*charts).interactive()
 
     layered = layered.encode(**other_encs)
 
