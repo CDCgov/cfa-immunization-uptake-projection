@@ -87,7 +87,11 @@ def plot_uptake(data, color="green"):
     if "geography" in data.columns:
         alt.layer(*plot_list).facet("geography", columns=9).configure_header(
             labelFontSize=40
-        ).display()
+        ).configure_axis(labelFontSize=30, titleFontSize=30).display()
+    elif "forecast_start" in data.columns:
+        alt.layer(*plot_list).facet("forecast_start", columns=4).configure_header(
+            labelFontSize=40
+        ).configure_axis(labelFontSize=30, titleFontSize=30).display()
     else:
         alt.layer(*plot_list).display()
 
@@ -121,11 +125,11 @@ plot_uptake(flu_state_sub)
 
 # %% Load posterior checks and forecasts
 postcheck = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/postchecks.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/postchecks.parquet",
     flu_state,
 )
 forecast = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/tables/forecasts.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/forecasts.parquet",
     flu_state,
 ).drop("season")
 
@@ -141,28 +145,16 @@ alt.data_transformers.disable_max_rows()
 plot_uptake(postcheck_sub)
 
 # %% Plot prediction vs. data for 2023/2024 for one state
-forecast_sub = forecast.filter((pl.col("geography") == "Wyoming")).drop("geography")
+forecast_sub = forecast.filter((pl.col("geography") == "Pennsylvania")).drop(
+    "geography"
+)
 plot_uptake(forecast_sub, "tomato")
 
 # %% Plot retrospective forecasts for all states
 alt.data_transformers.disable_max_rows()
 plot_uptake(forecast, "tomato")
 
-# %% SCRATCH WORK
-# How consistent are states from season to season?
-# How consistent are seasons from state to state?
-# Examine the last date of each season
-flu_state_last = (
-    flu_state.sort("elapsed", descending=True)
-    .group_by(["geography", "season"])
-    .agg(pl.col("*").first())
-)
-alt.Chart(flu_state_last).mark_boxplot().encode(
-    x=alt.X("geography:O"), y=alt.Y("obs:Q")
-)
-alt.Chart(flu_state_last).mark_boxplot().encode(x=alt.X("season:O"), y=alt.Y("obs:Q"))
-
-# %% How well do pred vs. obs final uptakes correlate in postchecks?
+# %% Plot final uptake correlation across all postchecks
 postcheck_last = (
     postcheck.drop_nulls()
     .filter(~pl.col("season").is_in(["2023/2024"]))
@@ -177,17 +169,17 @@ x = postcheck_last["obs"].to_numpy()
 y = postcheck_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-
-# %% How well do pred vs. obs final uptakes correlate in postchecks for 2022/23 only?
-postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2022/2023")
+# %% Plot final uptake correlation for postchecks in just one year
+postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2018/2019")
 alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
-    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+    x=alt.X("obs:Q", title="Observed May 31 Uptake"),
+    y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
 x = postcheck_last_sub["obs"].to_numpy()
 y = postcheck_last_sub["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-# %% How well do pred vs. obs final uptakes correlate in forecasts for 2023/24 only?
+# %% Plot final uptake correlation for forecasts
 forecast_last = (
     forecast.drop_nulls()
     .sort("elapsed", descending=True)
@@ -195,219 +187,80 @@ forecast_last = (
     .agg(pl.col("*").first())
 )
 alt.Chart(forecast_last).mark_point(color="tomato").encode(
-    x=alt.X("obs:Q"), y=alt.Y("est:Q")
+    x=alt.X("obs:Q", title="Observed May 31 Uptake"),
+    y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
 x = forecast_last["obs"].to_numpy()
 y = forecast_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
-# %% Do mistakes in 2022/2023 prediction predict mistakes in 2023/2024 prediction?
-error_comparison = (
-    postcheck_last_sub.with_columns(postcheck_error=pl.col("est") - pl.col("obs"))
-    .select(["postcheck_error", "geography"])
+
+# %% Load posterior checks and forecasts for flu nationally
+postcheck = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/usa/postchecks.parquet",
+    )
+    .drop("model")
+    .group_by(["time_end", "season", "forecast_start"])
+    .agg(
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
+    )
     .join(
-        forecast_last.with_columns(forecast_error=pl.col("est") - pl.col("obs")).select(
-            ["forecast_error", "geography"]
-        ),
-        on="geography",
+        flu_natl,
+        on=["time_end", "season"],
         how="left",
     )
 )
-training_dates = (
-    postcheck.drop_nulls()
-    .filter(pl.col("season").is_in(["2023/2024"]))
-    .select(pl.col("geography").value_counts())
-    .unnest("geography")
-)
-error_comparison = (
-    error_comparison.join(training_dates, on="geography", how="left")
-    .fill_null(0)
-    .with_columns(count=pl.col("count") > 1)
-)
-alt.Chart(error_comparison).mark_point().encode(
-    x=alt.X("postcheck_error:Q"),
-    y=alt.Y("forecast_error:Q"),
-    color=alt.Color("count", title=">1 datum?"),
-)
 
-x = error_comparison["postcheck_error"].to_numpy()
-y = error_comparison["forecast_error"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
-
-# %% Was 2023/2024 just a weird year?
-all_last = pl.concat(
-    [
-        postcheck_last,
-        forecast_last.with_columns(season=pl.lit("2023/2024")).select(
-            postcheck_last.columns
-        ),
-    ],
-    how="vertical",
-)
-alt.Chart(all_last).mark_line(size=5).encode(x=alt.X("time_end"), y=alt.Y("obs")).facet(
-    "geography", columns=9
-).configure_header(labelFontSize=40)
-
-
-# %% Prepare model coefficients
-model_coefs = pl.read_parquet(
-    "/home/tec0/cfa-immunization-uptake-projection/output/diagnostics/tables/model=LPLModel_forecast_start=2023-09-01_print_posterior_dist.parquet"
-)
-coefs = (
-    model_coefs.mean()
-    .transpose(include_header=True)
-    .rename({"column": "coef", "column_0": "value"})
-)
-
-A = coefs.filter(pl.col("coef") == "A")["value"]
-A_sigs_season = coefs.filter(pl.col("coef") == "A_sigs_season")["value"]
-A_sigs_geography = coefs.filter(pl.col("coef") == "A_sigs_geography")["value"]
-M = coefs.filter(pl.col("coef") == "M")["value"]
-M_sigs_season = coefs.filter(pl.col("coef") == "M_sigs_season")["value"]
-M_sigs_geography = coefs.filter(pl.col("coef") == "M_sigs_geography")["value"]
-
-A_season_coefs = (
-    coefs.filter(pl.col("coef").str.contains("A_devs_2"))
-    .with_columns(
-        A_season=pl.col("value") * A_sigs_season,
-        season=pl.col("coef").str.replace("A_devs_", ""),
+forecast = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/usa/forecasts.parquet",
     )
-    .drop("value", "coef")
-)
-A_geography_coefs = (
-    coefs.filter(
-        pl.col("coef").str.contains("A_devs_") & ~pl.col("coef").str.contains(r"\d")
+    .drop("model")
+    .group_by(["time_end", "season", "forecast_start"])
+    .agg(
+        est=pl.col("estimate").mean(),
+        est_upper=pl.col("estimate").quantile(0.975),
+        est_lower=pl.col("estimate").quantile(0.025),
+    )
+    .join(
+        flu_natl,
+        on=["time_end", "season"],
+        how="left",
+    )
+).drop("season")
+
+# %% Plot national forecasts for 2023/2024 across forecast dates
+plot_uptake(forecast, color="tomato")
+
+# %% Load scores for national forecasts of 2023/2024
+scores = (
+    pl.read_parquet(
+        "/home/tec0/cfa-immunization-uptake-projection/output/scores/usa/scores.parquet"
     )
     .with_columns(
-        A_geography=pl.col("value") * A_sigs_geography,
-        geography=pl.col("coef").str.replace("A_devs_", "").str.replace_all("_", " "),
+        start=(pl.col("season").str.slice(0, 4) + pl.lit("-07-01")).str.strptime(
+            pl.Date, "%Y-%m-%d"
+        )
     )
-    .drop("value", "coef")
-)
-M_season_coefs = (
-    coefs.filter(pl.col("coef").str.contains("M_devs_2"))
-    .with_columns(
-        M_season=pl.col("value") * M_sigs_season,
-        season=pl.col("coef").str.replace("M_devs_", ""),
-    )
-    .drop("value", "coef")
-)
-M_geography_coefs = (
-    coefs.filter(
-        pl.col("coef").str.contains("M_devs_") & ~pl.col("coef").str.contains(r"\d")
-    )
-    .with_columns(
-        M_geography=pl.col("value") * M_sigs_geography,
-        geography=pl.col("coef").str.replace("M_devs_", "").str.replace_all("_", " "),
-    )
-    .drop("value", "coef")
+    .with_columns(elapsed=(pl.col("forecast_start") - pl.col("start")).dt.total_days())
+    .drop(["model", "start"])
 )
 
-# %% How do A season deviations compare to avg seasonal final uptake
-A_by_season = (
-    (
-        all_last.select(["geography", "season", "obs"])
-        .group_by("season")
-        .agg(obs_mean=pl.col("obs").mean())
-    )
-    .join(A_season_coefs, on="season", how="left")
-    .with_columns(last_season=(pl.col("season") == "2023/2024"))
+# %% Plot MSPE by forecast date for national forecast
+alt.Chart(scores.filter(pl.col("score_name") == "mspe")).mark_point(
+    color="black"
+).encode(
+    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    y=alt.Y("score_value:Q", title="Mean Squared Prediction Error"),
 )
 
-alt.Chart(A_by_season).mark_point().encode(
-    x=alt.X(
-        "obs_mean:Q",
-        scale=alt.Scale(zero=False),
-        title="Avg May 31 Uptake across Seasons",
-    ),
-    y=alt.Y("A_season:Q", title="Posterior Mean for Deviation from Avg A"),
-    color=alt.Color("last_season", title="2023/2024?"),
+# %% Plot Abs Diff by forecast date for national forecast
+alt.Chart(scores.filter(pl.col("score_name") == "abs_diff_2024-05-31")).mark_point(
+    color="black"
+).encode(
+    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    y=alt.Y("score_value:Q", title="Absolute Error on May 31"),
 )
-
-x = A_by_season["obs_mean"].to_numpy()
-y = A_by_season["A_season"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
-
-
-# %% How do M season deviations compare to avg seasonal final uptake
-M_by_season = (
-    (
-        all_last.select(["geography", "season", "obs"])
-        .group_by("season")
-        .agg(obs_mean=pl.col("obs").mean())
-    )
-    .join(M_season_coefs, on="season", how="left")
-    .with_columns(last_season=(pl.col("season") == "2023/2024"))
-)
-
-alt.Chart(M_by_season).mark_point().encode(
-    x=alt.X(
-        "obs_mean:Q",
-        scale=alt.Scale(zero=False),
-        title="Avg May 31 Uptake across Seasons",
-    ),
-    y=alt.Y("M_season:Q", title="Posterior Mean for Deviation from Avg M"),
-    color=alt.Color("last_season", title="2023/2024?"),
-)
-
-x = M_by_season["obs_mean"].to_numpy()
-y = M_by_season["M_season"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
-
-
-# %% How do A geographic deviations compare to avg seasonal final uptake
-A_by_geography = (
-    all_last.select(["geography", "season", "obs"])
-    .group_by("geography")
-    .agg(obs_mean=pl.col("obs").mean())
-).join(A_geography_coefs, on="geography", how="left")
-
-alt.Chart(A_by_geography).mark_point().encode(
-    x=alt.X(
-        "obs_mean:Q",
-        scale=alt.Scale(zero=False),
-        title="Avg May 31 Uptake across States",
-    ),
-    y=alt.Y("A_geography:Q", title="Posterior Mean for Deviation from Avg A"),
-)
-
-x = A_by_geography["obs_mean"].to_numpy()
-y = A_by_geography["A_geography"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
-
-
-# %% How do M geographic deviations compare to avg seasonal final uptake
-M_by_geography = (
-    all_last.select(["geography", "season", "obs"])
-    .group_by("geography")
-    .agg(obs_mean=pl.col("obs").mean())
-).join(M_geography_coefs, on="geography", how="left")
-
-alt.Chart(M_by_geography).mark_point().encode(
-    x=alt.X(
-        "obs_mean:Q",
-        scale=alt.Scale(zero=False),
-        title="Avg May 31 Uptake across States",
-    ),
-    y=alt.Y("M_geography:Q", title="Posterior Mean for Deviation from Avg M"),
-)
-
-x = M_by_geography["obs_mean"].to_numpy()
-y = M_by_geography["M_geography"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
-
-# %% Do states always rank the same on May 31?
-ranked_states = pl.DataFrame()
-for season in postcheck_last["season"].unique().sort():
-    new_column = postcheck_last.filter(
-        (pl.col("season") == season)
-        & (~pl.col("geography").is_in(["Puerto Rico", "Guam", "U.S. Virgin Islands"]))
-    ).sort(pl.col("est"))["geography"]
-
-    if new_column.len() == 51:
-        ranked_states = ranked_states.with_columns(new_column.alias(season))
-
-new_column = forecast_last.filter(
-    ~pl.col("geography").is_in(["Puerto Rico", "Guam", "U.S. Virgin Islands"])
-).sort(pl.col("est"))["geography"]
-ranked_states = ranked_states.with_columns(new_column.alias("2023/2024"))
