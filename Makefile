@@ -15,7 +15,8 @@ SCORES = output/scores/$(RUN_ID)/
 all: $(SETTINGS) $(RAW_DATA) $(MODEL_FITS) $(DIAGNOSTICS) $(PREDICTIONS) $(SCORES)
 
 viz:
-	streamlit run scripts/viz.py
+	streamlit run scripts/viz.py -- \
+	--obs=$(RAW_DATA) --pred=$(PREDICTIONS) --score=$(SCORES) --config=$(CONFIG)
 
 $(SCORES): scripts/eval.py $(PREDICTIONS) $(RAW_DATA)
 	python $< \

@@ -1,3 +1,5 @@
+import argparse
+from pathlib import Path
 from typing import Any, Dict, List
 
 import altair as alt
@@ -52,6 +54,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     encodings = {
         "x": alt.X("time_end:T", title="Observation date"),
         "y": alt.Y("estimate:Q", title="Cumulative uptake estimate"),
+        "color": alt.Color("sample_id:N", title="Trajectories"),
     }
 
     # select which data dimension to put into which plot channel
@@ -100,41 +103,48 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
 
-    # get every model/forecast date combo
-    models_forecasts = pred.select(["model", "forecast_start"]).unique()
-
-    # for every model and forecast date, merge in the observed value
-    plot_obs = obs.join(models_forecasts, how="cross").filter(
+    # merge observed data with prediction by the combination of models and forecast starts
+    model_forecast_starts = pred.select(["model", "forecast_start"]).unique()
+    plot_obs = obs.join(model_forecast_starts, how="cross").filter(
         pl.col(factor).is_in(pred[factor].unique())
         for factor in config["data"]["groups"]
     )
 
+    groupings = ["model", "forecast_start", "time_end"] + config["data"]["groups"]
+
+    data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
+
     obs_chart = (
-        alt.Chart(plot_obs)
-        .mark_point(filled=True, color="black")
+        alt.Chart(data)
         .encode(
-            alt.X(
-                "time_end:T",
-                axis=alt.Axis(format="%Y-%m", tickCount="month"),
-            ),
-            alt.Y("estimate:Q"),
+            x="time_end:T",
+            y="observed:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("observed", title="Observed uptake"),
+            ],
         )
+        .transform_calculate(type="'observed'")
+        .mark_point()
+        .encode(shape=alt.Shape("type:N", title="Type"))
     )
 
     pred_chart = (
-        alt.Chart(pred)
-        .mark_line(opacity=0.3)
+        alt.Chart(data)
         .encode(
-            alt.X(
-                "time_end:T",
-                axis=alt.Axis(format="%Y-%m", tickCount="month"),
-            ),
-            alt.Y("estimate:Q"),
-            alt.Color("sample_id:N", title="Sample ID"),
+            x="time_end:T",
+            y="estimate:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("estimate", title="Predicted uptake"),
+            ],
         )
+        .transform_calculate(type="'predicted'")
+        .mark_line()
+        .encode(strokeDash=alt.StrokeDash("type:N", title=None))
     )
-    chart_lists = [pred_chart, obs_chart]
-    chart = layer_with_facets(pred, *chart_lists, **encodings)
+
+    chart = layer_with_facets([obs_chart, pred_chart], encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -155,16 +165,18 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     """
     encodings = {}
 
-    # reformat the observed data to be ready to join with pred data #
-    models_forecasts = pred.select(["model", "forecast_start"]).unique()
-    plot_obs = obs.join(models_forecasts, how="cross").filter(
+    # data process: merge observed data with prediction by combinations of model and forecast start #
+    forecast_starts = pred.select(["model", "forecast_start"]).unique()
+    plot_obs = obs.join(forecast_starts, how="cross").filter(
         pl.col(factor).is_in(pred[factor].unique())
         for factor in config["data"]["groups"]
     )
 
+    # summarize sample predictions by grouping factors #
     groups_to_include = ["model", "forecast_start", "time_end"] + config["data"][
         "groups"
     ]
+
     plot_pred = (
         pred.group_by(groups_to_include)
         .agg(
@@ -178,6 +190,8 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         )
         .sort("time_end")
     )
+
+    data = plot_pred.join(plot_obs, on=groups_to_include)
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
@@ -222,44 +236,59 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
             options=plot_pred[dim].unique().sort().to_list(),
             key=f"{dim}_{idx}_summary",
         )
-        plot_pred = plot_pred.filter(pl.col(dim) == pl.lit(filter_val))
-        plot_obs = plot_obs.filter(pl.col(dim) == pl.lit(filter_val))
+
+        data = data.filter(pl.col(dim) == pl.lit(filter_val))
 
     obs_chart = (
-        alt.Chart(plot_obs)
-        .mark_point(color="black", filled=True)
+        alt.Chart(data)
         .encode(
-            alt.X("time_end:T", title="Observation date"),
-            alt.Y("estimate:Q", title="Cumulative uptake estimate"),
+            x="time_end:T",
+            y="estimate:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("estimate", title="Observed uptake"),
+            ],
         )
+        .transform_calculate(type="'observed'")
+        .mark_point()
+        .encode(shape=alt.Shape("type:N", title="Type"))
     )
 
     pred_chart = (
-        alt.Chart()
-        .mark_line(color="grey")
+        alt.Chart(data)
         .encode(
-            alt.X("time_end:T", title="Observation date"),
-            alt.Y("mean:Q", title="Cumulative uptake estimate"),
+            x="time_end:T",
+            y="mean:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("mean", title="Predicted mean"),
+            ],
         )
+        .transform_calculate(type="'predicted mean'")
+        .mark_line()
+        .encode(strokeDash=alt.StrokeDash("type:N", title=None))
     )
 
     interval_chart = (
-        alt.Chart()
+        alt.Chart(data)
         .mark_area(opacity=0.3)
         .encode(
             alt.X(
                 "time_end:T",
-                title="Observation date",
                 axis=alt.Axis(format="%Y-%m", tickCount="month"),
             ),
             y="lower:Q",
             y2="upper:Q",
+            tooltip=[
+                alt.Tooltip("time_end", title="Observation date"),
+                alt.Tooltip("lower", title="Lower bound"),
+                alt.Tooltip("upper", title="Upper bound"),
+            ],
         )
     )
 
-    chart_lists = [interval_chart, pred_chart, obs_chart]
-
-    chart = layer_with_facets(plot_pred, *chart_lists, **encodings)
+    chart_list = [interval_chart, obs_chart, pred_chart]
+    chart = layer_with_facets(chart_list, encodings)
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -352,7 +381,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
 
 
 ## helper: feed correct argument to altair ##
-def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
+def layer_with_facets(charts: List, encodings: Dict):
     """
     Because alt.layer.facet() only takes row and column and .encode() only takes color,
     this function makes sure correct arguments fall into correct command.
@@ -370,30 +399,34 @@ def layer_with_facets(data: pl.DataFrame, *charts: List, **encodings: Dict):
     col_enc = encodings["column"]
     other_encs = {k: v for k, v in encodings.items() if k not in ["row", "column"]}
 
-    layered = alt.layer(*charts, data=data)
+    layered = alt.layer(*charts).interactive()
 
     layered = layered.encode(**other_encs)
 
     return layered.facet(row=row_enc, column=col_enc)
 
 
-@st.cache_data
-def load_data():
-    return {
-        "forecasts": pl.read_parquet("output/forecasts/tables/forecasts.parquet"),
-        "observed": pl.read_parquet("output/data/nis_raw_flu.parquet"),
-    }
-
-
-@st.cache_data
-def load_scores():
-    return pl.read_parquet("output/scores/tables/scores.parquet")
-
-
-@st.cache_data
-def load_config():
-    return yaml.safe_load(open("scripts/config.yaml"))
-
-
 if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--obs", help="observed data")
+    p.add_argument("--pred", help="forecasts")
+    p.add_argument("--score", help="score metrics")
+    p.add_argument("--config", help="config yaml file")
+    args = p.parse_args()
+
+    @st.cache_data
+    def load_data():
+        return {
+            "observed": pl.read_parquet(Path(args.obs, "nis_data.parquet")),
+            "forecasts": pl.read_parquet(Path(args.pred, "forecasts.parquet")),
+        }
+
+    @st.cache_data
+    def load_scores():
+        return pl.read_parquet(Path(args.score, "scores.parquet"))
+
+    @st.cache_data
+    def load_config():
+        return yaml.safe_load(open(args.config, "r"))
+
     app()
