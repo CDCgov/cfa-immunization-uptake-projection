@@ -38,14 +38,33 @@ def load_pred(path, data):
     )
 
 
-def plot_uptake(data, color="green"):
+def plot_uptake(data, color="green", season_start_month=7):
+    # Set the same year for every date so that seasons can be plotted
+    # overlapping instead of sequential.
+    # Oddly, the second 'with_columns' doesn't work because 1999-2-29
+    # is not a date, even though the conditional should prevent this
+    # date from ever being made, hence the hacky replacement of the 29th
+    # with the 28th whenever it appears.
+    data = data.with_columns(
+        time_end=pl.when(pl.col("time_end").dt.day() == 29)
+        .then(pl.col("time_end").dt.replace(day=28))
+        .otherwise(pl.col("time_end"))
+    ).with_columns(
+        time_end=pl.when(pl.col("time_end").dt.month() < season_start_month)
+        .then(pl.col("time_end").dt.replace(year=2000))
+        .otherwise(pl.col("time_end").dt.replace(year=1999))
+    )
     plot_list = []
     if "season" in data.columns:
         plot_list.append(
             alt.Chart(data)
             .mark_line()
             .encode(
-                x=alt.X("elapsed:Q", title="Days since July 1"),
+                x=alt.X(
+                    "time_end:T",
+                    title="Date",
+                    axis=alt.Axis(format="%b", labelAngle=45),
+                ),
                 y=alt.Y("obs:Q", title="Uptake"),
                 color="season:N",
             )
@@ -56,14 +75,22 @@ def plot_uptake(data, color="green"):
                 alt.Chart(data)
                 .mark_errorbar(color="black")
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Date",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
                     y=alt.Y("obs_lower", title="Uptake"),
                     y2="obs_upper",
                 )
                 + alt.Chart(data)
                 .mark_point(color="black")
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Date",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
                     y=alt.Y("obs:Q", title="Uptake"),
                 )
             )
@@ -72,14 +99,22 @@ def plot_uptake(data, color="green"):
                 alt.Chart(data)
                 .mark_area(color=color, opacity=0.3)
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Date",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
                     y=alt.Y("est_lower", title="Uptake"),
                     y2="est_upper",
                 )
                 + alt.Chart(data)
                 .mark_line(color=color)
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Date",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
                     y=alt.Y("est:Q", title="Uptake"),
                 )
             )
@@ -108,10 +143,10 @@ cov_natl = load_data(
 )
 
 # %% Plot national scale covid vax across seasons
-plot_uptake(cov_natl)
+plot_uptake(cov_natl, season_start_month=9)
 
 # %% Plot national scale flu vax across seasons
-plot_uptake(flu_natl)
+plot_uptake(flu_natl, season_start_month=7)
 
 # %% Plot state scale flu vax across seasons
 alt.data_transformers.disable_max_rows()
