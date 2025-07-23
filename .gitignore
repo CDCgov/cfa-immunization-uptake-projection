@@ -205,3 +205,5 @@ cython_debug/
 #.idea/
 
 .vscode/
+
+scripts/config.yaml

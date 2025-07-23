@@ -113,3 +113,5 @@ if __name__ == "__main__":
         eval_all_forecasts(data, pred, config).write_parquet(
             Path(args.output, "scores.parquet")
         )
+    else:
+        print("No evaluation timeframe specified, skipping evaluation.")
