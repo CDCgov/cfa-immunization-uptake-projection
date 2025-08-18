@@ -38,15 +38,36 @@ def load_pred(path, data):
     )
 
 
-def plot_uptake(data, color="green"):
+def plot_uptake(data, color="green", season_start_month=7, upper_bound=0.6):
+    # Set the same year for every date so that seasons can be plotted
+    # overlapping instead of sequential.
+    # Oddly, the second 'with_columns' doesn't work because 1999-2-29
+    # is not a date, even though the conditional should prevent this
+    # date from ever being made, hence the hacky replacement of the 29th
+    # with the 28th whenever it appears.
+    data = data.with_columns(
+        time_end=pl.when(pl.col("time_end").dt.day() == 29)
+        .then(pl.col("time_end").dt.replace(day=28))
+        .otherwise(pl.col("time_end"))
+    ).with_columns(
+        time_end=pl.when(pl.col("time_end").dt.month() < season_start_month)
+        .then(pl.col("time_end").dt.replace(year=2000))
+        .otherwise(pl.col("time_end").dt.replace(year=1999))
+    )
     plot_list = []
     if "season" in data.columns:
         plot_list.append(
             alt.Chart(data)
             .mark_line()
             .encode(
-                x=alt.X("elapsed:Q", title="Days since July 1"),
-                y=alt.Y("obs:Q", title="Uptake"),
+                x=alt.X(
+                    "time_end:T",
+                    title="Month",
+                    axis=alt.Axis(format="%b", labelAngle=45),
+                ),
+                y=alt.Y(
+                    "obs:Q", title="Uptake", scale=alt.Scale(domain=[0, upper_bound])
+                ),
                 color="season:N",
             )
         )
@@ -56,15 +77,31 @@ def plot_uptake(data, color="green"):
                 alt.Chart(data)
                 .mark_errorbar(color="black")
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("obs_lower", title="Uptake"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Month",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
+                    y=alt.Y(
+                        "obs_lower",
+                        title="Uptake",
+                        scale=alt.Scale(domain=[0, upper_bound]),
+                    ),
                     y2="obs_upper",
                 )
                 + alt.Chart(data)
                 .mark_point(color="black")
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("obs:Q", title="Uptake"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Month",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
+                    y=alt.Y(
+                        "obs:Q",
+                        title="Uptake",
+                        scale=alt.Scale(domain=[0, upper_bound]),
+                    ),
                 )
             )
         if "est" in data.columns:
@@ -72,15 +109,31 @@ def plot_uptake(data, color="green"):
                 alt.Chart(data)
                 .mark_area(color=color, opacity=0.3)
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("est_lower", title="Uptake"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Month",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
+                    y=alt.Y(
+                        "est_lower",
+                        title="Uptake",
+                        scale=alt.Scale(domain=[0, upper_bound]),
+                    ),
                     y2="est_upper",
                 )
                 + alt.Chart(data)
                 .mark_line(color=color)
                 .encode(
-                    x=alt.X("elapsed:Q", title="Days since July 1"),
-                    y=alt.Y("est:Q", title="Uptake"),
+                    x=alt.X(
+                        "time_end:T",
+                        title="Month",
+                        axis=alt.Axis(format="%b", labelAngle=45),
+                    ),
+                    y=alt.Y(
+                        "est:Q",
+                        title="Uptake",
+                        scale=alt.Scale(domain=[0, upper_bound]),
+                    ),
                 )
             )
 
@@ -108,10 +161,10 @@ cov_natl = load_data(
 )
 
 # %% Plot national scale covid vax across seasons
-plot_uptake(cov_natl)
+plot_uptake(cov_natl, season_start_month=9)
 
 # %% Plot national scale flu vax across seasons
-plot_uptake(flu_natl)
+plot_uptake(flu_natl, season_start_month=7)
 
 # %% Plot state scale flu vax across seasons
 alt.data_transformers.disable_max_rows()
@@ -119,7 +172,7 @@ plot_uptake(flu_state)
 
 # %% Plot uptake for one state in one season, with empirical uncertainty
 flu_state_sub = flu_state.filter(
-    (pl.col("geography") == "California") & (pl.col("season") == "2023/2024")
+    (pl.col("geography") == "Maryland") & (pl.col("season") == "2020/2021")
 ).drop(["geography", "season"])
 plot_uptake(flu_state_sub)
 
@@ -135,12 +188,24 @@ forecast = load_pred(
 
 # %% Plot posterior prediction vs. data for one state
 postcheck_sub = postcheck.filter(
-    (pl.col("geography") == "Missouri") & (pl.col("season") == "2015/2016")
+    (pl.col("geography") == "Maryland") & (pl.col("season") == "2020/2021")
 ).drop(["geography", "season"])
 plot_uptake(postcheck_sub)
 
 # %% Plot posterior predictions for all states in one season
-postcheck_sub = postcheck.filter(pl.col("season") == "2020/2021").drop("season")
+postcheck_sub = (
+    postcheck.filter(pl.col("season") == "2009/2010")
+    .drop("season")
+    .with_columns(
+        est=pl.when(pl.col("obs").is_null()).then(None).otherwise(pl.col("est")),
+        est_upper=pl.when(pl.col("obs").is_null())
+        .then(None)
+        .otherwise(pl.col("est_upper")),
+        est_lower=pl.when(pl.col("obs").is_null())
+        .then(None)
+        .otherwise(pl.col("est_lower")),
+    )
+)
 alt.data_transformers.disable_max_rows()
 plot_uptake(postcheck_sub)
 
@@ -170,8 +235,10 @@ y = postcheck_last["est"].to_numpy()
 print(np.corrcoef(x, y)[0, 1] ** 2)
 
 # %% Plot final uptake correlation for postchecks in just one year
-postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2018/2019")
-alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
+postcheck_last_sub = postcheck_last.filter(pl.col("season") == "2022/2023")
+alt.Chart(pl.DataFrame({"x": [0.0, 0.55], "y": [0.0, 0.55]})).mark_line(
+    color="black", strokeDash=[5, 5]
+).encode(x="x", y="y") + alt.Chart(postcheck_last_sub).mark_point(color="green").encode(
     x=alt.X("obs:Q", title="Observed May 31 Uptake"),
     y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
@@ -186,7 +253,9 @@ forecast_last = (
     .group_by(["geography"])
     .agg(pl.col("*").first())
 )
-alt.Chart(forecast_last).mark_point(color="tomato").encode(
+alt.Chart(pl.DataFrame({"x": [0.0, 0.55], "y": [0.0, 0.55]})).mark_line(
+    color="black", strokeDash=[5, 5]
+).encode(x="x", y="y") + alt.Chart(forecast_last).mark_point(color="tomato").encode(
     x=alt.X("obs:Q", title="Observed May 31 Uptake"),
     y=alt.Y("est:Q", title="Predicted May 31 Uptake"),
 )
@@ -253,7 +322,11 @@ scores = (
 alt.Chart(scores.filter(pl.col("score_name") == "mspe")).mark_point(
     color="black"
 ).encode(
-    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    x=alt.X(
+        "forecast_start:T",
+        title="Month",
+        axis=alt.Axis(format="%b", labelAngle=45),
+    ),
     y=alt.Y("score_value:Q", title="Mean Squared Prediction Error"),
 )
 
@@ -261,6 +334,10 @@ alt.Chart(scores.filter(pl.col("score_name") == "mspe")).mark_point(
 alt.Chart(scores.filter(pl.col("score_name") == "abs_diff_2024-05-31")).mark_point(
     color="black"
 ).encode(
-    x=alt.X("elapsed:Q", title="Forecast Date (Days Since July 1)"),
+    x=alt.X(
+        "forecast_start:T",
+        title="Month",
+        axis=alt.Axis(format="%b", labelAngle=45),
+    ),
     y=alt.Y("score_value:Q", title="Absolute Error on May 31"),
 )
