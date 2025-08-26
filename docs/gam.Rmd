@@ -81,7 +81,7 @@ library(ggplot2)
 library(mgcv)
 
 ### national flu data ###
-nis <- read.csv("data/nis_flu_national.csv")
+nis <- read.csv("../data/nis_flu_national.csv")
 head(nis)
 nis$time_end = as.Date(nis$time_end)
 
@@ -199,7 +199,7 @@ MSPE is also pretty small.
 How about the model that include both season and state as grouping factors? The influenza vaccine uptake data by season and state is loaded. Here are the similar data cleaning and splitting data as training and testing:
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
-nis_state <- read.csv("data/nis_flu_states.csv")
+nis_state <- read.csv("../data/nis_flu_states.csv")
 
 nis_state %>%
   mutate(time_end=as.Date(time_end),
