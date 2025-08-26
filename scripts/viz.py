@@ -69,11 +69,11 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     for idx, item in enumerate(default_channels.items()):
         key, value = item
         channel, default_dim = value
-        options = ["None"] + dimensions
-        index = options.index(default_dim)
+
+        index = dimensions.index(default_dim)
         dim = st.selectbox(
             f"{channel} by",
-            options=options,
+            options=dimensions,
             index=index,
             key=f"{channel}_{idx}_trajectories",
         )
@@ -214,11 +214,10 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     for idx, item in enumerate(default_channels.items()):
         key, value = item
         channel, default_dim = value
-        options = ["None"] + dimensions
-        index = options.index(default_dim)
+        index = dimensions.index(default_dim)
         dim = st.selectbox(
             f"{channel} by",
-            options=options,
+            options=dimensions,
             index=index,
             key=f"{channel}_{idx}_summary",
         )
@@ -347,10 +346,12 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     for idx, item in enumerate(default_channels.items()):
         key, value = item
         channel, default_dim = value
-        options = ["None"] + dimensions
-        index = options.index(default_dim)
+        index = dimensions.index(default_dim)
         dim = st.selectbox(
-            f"{channel} by", options=options, index=index, key=f"{channel}_{idx}_eval"
+            f"{channel} by",
+            options=dimensions,
+            index=index,
+            key=f"{channel}_{idx}_eval",
         )
 
         if dim != "None":
