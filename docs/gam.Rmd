@@ -1,8 +1,7 @@
 ---
 title: "Generalized Additive Model in R"
 output:
-  pdf_document: default
-  html_document: default
+  github_document
 date: "2025-08-26"
 ---
 
