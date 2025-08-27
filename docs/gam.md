@@ -25,12 +25,12 @@ B-spline basis function with higher order of degree is calculated by $B_{k,0}$ t
 $$
 B_{k,p}(t) = \frac{t-t_k}{t_{k+p}-t_k}B_{k,p-1}(t) + \frac{t_{k+p+1}-t}{t_{k+p+1}-t_{k+1}}B_{k+1,p-1}(t)
 $$
-For a B-spline basis function that has the support between $t_k$ and $t_{k+1}$, it sums up to 1. This is one of the properties of B-spline called partition of unity. It offers convenience and flexibility in estimation. 
+For a B-spline basis function that has the support between $t_k$ and $t_{k+1}$, it sums up to 1. This is one of the properties of B-spline called partition of unity. It offers convenience and flexibility in estimation.
 
 $$
 \sum_{t_{k}=0}^{t_{k+1}}B_k = 1
 $$
- 
+
 #### B-spline
 Given the number of knots or the location of knots, and the degree of basis function, B-spline can be generated as a combination of B-spline basis functions using software package under the rules:
 
@@ -38,7 +38,7 @@ Given the number of knots or the location of knots, and the degree of basis func
 2. Expect the number of basis functions to be: $K-p-1$
 3. Each basis function sums up to 1 in their local support.
 
-For example, to generate a B-spline function with 10 knots on a range of $[0,100]$, one would start with setting up the locations of knots, a common way is to setting them up uniformly as $[0,0,0,20,40,60,80,100,100,100]$. Then the number of basis function is $10 - 2 - 1 = 7$, with the support of each basis are respectively: $[0.20), [0,40),[0,60),[20,80),[40,100),[60,100),[80,100)$. Their function form can be derived using Cox-de Boor formula. Thus, we have a B-spline function as: 
+For example, to generate a B-spline function with 10 knots on a range of $[0,100]$, one would start with setting up the locations of knots, a common way is to setting them up uniformly as $[0,0,0,20,40,60,80,100,100,100]$. Then the number of basis function is $10 - 2 - 1 = 7$, with the support of each basis are respectively: $[0.20), [0,40),[0,60),[20,80),[40,100),[60,100),[80,100)$. Their function form can be derived using Cox-de Boor formula. Thus, we have a B-spline function as:
 
 $$
 f(t) = \sum_{k=1}^{7}\alpha_kB_{k,2}(t)
@@ -47,14 +47,14 @@ $$
 Then the coefficients $\alpha_k$ for each basis function can be estimated given the data.
 
 ### Degree of freedom
-Degree of freedom equals to the number of coefficients to estimate. In the case of spline function, it equals to $K-p-1$. This is an important measure to monitor the overfitting of spline function in estimation. 
+Degree of freedom equals to the number of coefficients to estimate. In the case of spline function, it equals to $K-p-1$. This is an important measure to monitor the overfitting of spline function in estimation.
 
 ## Estimation parameters in GAM
 
 In terms of likelihood function, there are two ways to estimate the parameters in GAM, frequentist-based and Bayesian-based likelihood.
 
 ### Frequentist-based likelihood
-This has been applied by `mgcv` package in R and `pyGAM` in python. `mgcv` is able to not only estimate the coefficients of spline functions, but also choose the number of knots and order of degree of spline function using restricted maximum likelihood (REML). To guarantee model identifibility, it imposes the rule that the smooth functions will sum to zero over the range of predictor: 
+This has been applied by `mgcv` package in R and `pyGAM` in python. `mgcv` is able to not only estimate the coefficients of spline functions, but also choose the number of knots and order of degree of spline function using restricted maximum likelihood (REML). To guarantee model identifibility, it imposes the rule that the smooth functions will sum to zero over the range of predictor:
 
 $$
 \sum_{i}f(x_i) = 0
@@ -62,7 +62,7 @@ $$
 
 See details [here](https://rdrr.io/cran/mgcv/man/identifiability.html)
 
-Here, we use `mgcv` on our vaccine uptake data. 
+Here, we use `mgcv` on our vaccine uptake data.
 
 ### R: mgcv
 
