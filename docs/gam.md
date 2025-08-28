@@ -9,22 +9,27 @@ $g(.)$ is link function, $y_i$ is response variable, $x_{n,i}$ is predictor, $f_
 
 ### Spline function
 Common choices of smooth functions are spline functions, such as B-splines, cubic splines, thin plate regression splines, and penalized splines. See more options [here](https://cran.r-project.org/web/packages/mgcv/mgcv.pdf#Rfn.smooth.terms). Because B-spline is the simpliest spline function and has been commonly used, we use B-spline as an example. Assume $f_1$ is a B-spline over different intervals, connected by $K$ "knots", it is composed by a collection of B-spline basis function $B_{k,p}(t)$.
+
 $$
-f_1(t) = \sum_{k=1}^{K}\alpha_kB_{k,p}(t)
+f_n(t) = \sum_{k=1}^{K}\alpha_kB_{k,p}(t)
 $$
 
 #### B-spline basis function
 B-spline basis function is a piecewise polynomial and is defined by the order of degree $p$ and knots $K$. When $p=0$,
+
 $$
 B_{k,0}(t) = \begin{cases}
 1  &t_{k} ≤ t < t_{k+1}\\
 0 &otherwise
 \end{cases}
 $$
+
 B-spline basis function with higher order of degree is calculated by $B_{k,0}$ through [Cox-de Boor formula](https://en.wikipedia.org/wiki/B-spline#Properties):
+
 $$
 B_{k,p}(t) = \frac{t-t_k}{t_{k+p}-t_k}B_{k,p-1}(t) + \frac{t_{k+p+1}-t}{t_{k+p+1}-t_{k+1}}B_{k+1,p-1}(t)
 $$
+
 For a B-spline basis function that has the support between $t_k$ and $t_{k+1}$, it sums up to 1. This is one of the properties of B-spline called partition of unity. It offers convenience and flexibility in estimation.
 
 $$
