@@ -16,8 +16,8 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 ## Getting started
 
-1. Set up a virtual environment with `poetry shell`.
-2. Installed the required dependencies with `poetry install`.
+1. Set up a virtual environment and install all dependencies with `uv sync`.
+2. Enter the virtual environment with `.venv/Scripts/activate`.
 3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`.
 4. Cache NIS data with `make nis`.
 5. Copy the config template in `scripts/config_template.yaml` to `scripts/config.yaml` and fill in the necessary fields.
