@@ -207,3 +207,6 @@ cython_debug/
 .vscode/
 
 scripts/config.yaml
+
+!data/nis_flu_national.csv
+!data/nis_flu_states.csv
