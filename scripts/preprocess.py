@@ -24,34 +24,15 @@ def preprocess(
         .select(keep)
         .sort("time_end")
         .collect()
+        .rename({"sample_size": "N_tot"})
         .with_columns(
             season=pl.col("time_end").pipe(
                 iup.utils.date_to_season,
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
-            uwald=pl.col("uci") - pl.col("estimate"),
-            lwald=pl.col("estimate") - pl.col("lci"),
+            N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
         )
-        .with_columns(
-            sem=pl.max_horizontal("uwald", "lwald") / st.norm.ppf(0.975, 0, 1)
-        )
-        .with_columns(
-            sem=pl.when(pl.col("sem") < 0.0005).then(0.0005).otherwise(pl.col("sem"))
-        )
-        .with_columns(
-            estimate=pl.when(pl.col("estimate") < 0.0005)
-            .then(0.0005)
-            .otherwise(pl.col("estimate"))
-        )
-        .with_columns(
-            N=(1 - pl.col("estimate")) * pl.col("estimate") / (pl.col("sem") ** 2)
-        )
-        .with_columns(
-            N_vax=(pl.col("estimate") * pl.col("N")).round(0),
-            N_tot=pl.col("N").round(0),
-        )
-        .drop(["lwald", "uwald", "uci", "lci", "N"])
     )
 
     if groups is not None:
