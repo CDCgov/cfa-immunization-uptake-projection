@@ -208,4 +208,5 @@ cython_debug/
 
 scripts/config.yaml
 
-!docs/img/*.jpg
+!data/nis_flu_national.csv
+!data/nis_flu_states.csv
