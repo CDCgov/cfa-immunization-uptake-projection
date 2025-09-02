@@ -673,7 +673,7 @@ dependencies = [
     { name = "vl-convert-python" },
 ]
 
-[package.dev-dependencies]
+[package.optional-dependencies]
 dev = [
     { name = "detect-secrets" },
     { name = "ipykernel" },
@@ -686,6 +686,8 @@ requires-dist = [
     { name = "altair", specifier = ">=5.4.1,<6" },
     { name = "arviz", specifier = ">=0.21.0,<0.22" },
     { name = "datetime", specifier = "~=5.5" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0,<2" },
+    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5,<7" },
     { name = "ipympl", specifier = ">=0.9.7,<0.10" },
     { name = "jax", specifier = ">=0.5.0,<0.6" },
     { name = "nisapi", git = "https://github.com/CDCgov/nis-py-api" },
@@ -694,21 +696,16 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.3,<3" },
     { name = "pathlib", specifier = ">=1.0.1,<2" },
     { name = "polars", specifier = ">=1.7.1,<2" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.1,<5" },
     { name = "pytest", specifier = ">=8.3.3,<9" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3,<9" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "scikit-learn", specifier = ">=1.5.2,<2" },
     { name = "streamlit", specifier = ">=1.45.1,<2" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5" },
     { name = "vl-convert-python", specifier = ">=1.7.0,<2" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "detect-secrets", specifier = ">=1.5.0,<2" },
-    { name = "ipykernel", specifier = ">=6.29.5,<7" },
-    { name = "pre-commit", specifier = ">=4.0.1,<5" },
-    { name = "pytest", specifier = ">=8.3.3,<9" },
-]
+provides-extras = ["dev"]
 
 [[package]]
 name = "jax"
