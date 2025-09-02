@@ -4,7 +4,6 @@ from typing import List
 
 import nisapi
 import polars as pl
-import scipy.stats as st
 import yaml
 
 import iup
