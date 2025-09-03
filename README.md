@@ -16,11 +16,10 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 ## Getting started
 
-1. Set up a virtual environment and install all dependencies with `uv sync`.
-2. Enter the virtual environment with `.venv/Scripts/activate`.
-3. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`.
-4. Cache NIS data with `make nis`.
-5. Copy the config template in `scripts/config_template.yaml` to `scripts/config.yaml` and fill in the necessary fields.
+1. Either set up a virtual environment and install all dependencies with `uv sync` and then enter the virtual environment with `.venv/Scripts/activate`, or else remember to prepend each of your command-line entries with `uv run` (e.g. `uv run make nis`).
+2. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`.
+3. Cache NIS data with `make nis`.
+4. Copy the config template in `scripts/config_template.yaml` to `scripts/config.yaml` and fill in the necessary fields.
     - data: specify the vaccination uptake data to use, including a de facto annual start of the disease season, filters for rows and columns to keep, and grouping factors by which to partition forecasts.
     - forecast_timeframe: specify the start and the end of the forecast period and the interval between reference dates in the forecast (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
     - evaluation_timeframe: specify the interval between forecast dates if multiple forecasts are desired (sharing the same end of the forecast period). This will create different forecast horizons, which can be compared with evaluation scores. If blank, no evaluation score will not be computed.
@@ -28,7 +27,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
     - scores: specify the quantile of the posterior forecasts to use for evaluation, the date(s) on which to compute absolute difference, and any additional evaluation metrics (e.g. mean squared prediction error as `mspe`).
     - forecast_plots: specify the credible interval (in fractional terms) and number of randomly chosen trajectories to show on forecast plots.
     - diagnostics: specify the model (refer to `iup.models`) and the range of forecast dates (i.e. a list of earliest and latest) on which to perform diagnostics, as well as the types of plots and tables to create (refer to `iup.diagnostics`).
-6. Run `make all` to run the model fitting and forecasting pipeline. This will create six `output/` subfolders:
+5. Run `make all` to run the model fitting and forecasting pipeline. This will create six `output/` subfolders:
     - `settings`: a copy of the config.
     - `data`: the pre-processed data.
     - `fits`: the fit model object(s).
@@ -36,8 +35,8 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
     - `forecasts`: posterior predictions and forecasts.
     - `scores`: evaluation scores comparing model structures and/or forecast dates.
     Each run of the pipeline is assigned a `RUN_ID`. When a new `RUN_ID` is given, a new subfolder will be created inside each of the above six folders to store the corresponding outputs. When an existing `RUN_ID` is given, the contents of that `RUN_ID`'s existing subfolders will be overwritten, assuming the pipeline inputs have changed since the last run. `RUN_ID` can be assigned in line 1 of the Makefile or directly in the command line `make all RUN_ID=name_of_run`.
-7. Run `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, credible intervals, and evaluation scores, with options of dimensions and filters to customize the visualization.
-8. Run `make clean` to remove all outputs for a particular `RUN_ID` and `make delete_nis` to delete the NIS data from the cache.
+6. Run `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, credible intervals, and evaluation scores, with options of dimensions and filters to customize the visualization.
+7. Run `make clean` to remove all outputs for a particular `RUN_ID` and `make delete_nis` to delete the NIS data from the cache.
 
 #### Package workflow:
 
