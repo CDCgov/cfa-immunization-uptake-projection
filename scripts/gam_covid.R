@@ -13,7 +13,7 @@ covid %>%
   mutate(elapsed=as.numeric(time_end-season_start))%>%
   mutate(season=factor(season))%>%
   select(-season_start_year) -> covid
-  
+
 train_end <- as.Date("2024-09-01")
 
 covid %>%
@@ -31,17 +31,16 @@ covid_train$fitted <- covid_gam$fitted.values
 
 covid_test$pred <- predict(covid_gam,newdata=covid_test,type="response")
 
-ggplot(covid_train) + 
+ggplot(covid_train) +
   geom_point(aes(x=elapsed,y=estimate,color=season))+
   geom_line(aes(x=elapsed,y=fitted,color=season)) +
   theme_bw()
 ggsave("plot/covid_train.jpg",units="in",
        width=5,height=4)
 
-ggplot(covid_test) + 
+ggplot(covid_test) +
   geom_point(aes(x=elapsed,y=estimate,color=season))+
   geom_line(aes(x=elapsed,y=pred,color=season)) +
   theme_bw()
 ggsave("plot/covid_test.jpg",units="in",
        width=5,height=4)
-

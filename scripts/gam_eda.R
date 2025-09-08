@@ -39,8 +39,8 @@ nis_train$fitted_mean = fitted_mean
 ## Fitted curves shares the same trend
 nis_train %>%
   ggplot() +
-  geom_point(aes(x=elapsed,y=estimate)) + 
-  geom_line(aes(x=elapsed,y=fitted_values,color=season)) + 
+  geom_point(aes(x=elapsed,y=estimate)) +
+  geom_line(aes(x=elapsed,y=fitted_values,color=season)) +
   theme_bw()
 ggsave("plot/fitted_value_by_season.jpg",units="in",
        width=6,height=4)
@@ -54,9 +54,9 @@ fitted_terms <- predict(nis_gam, newdata=nis_train,type="terms")
 fitted_xb <- fitted_terms[,"s(elapsed)"] + coef(nis_gam)[1]
 
 nis_train %>%
-  ggplot() + 
+  ggplot() +
   geom_point(aes(x=elapsed,y=estimate))+
-  geom_line(aes(x=elapsed,y=fitted_xb,color=season)) + 
+  geom_line(aes(x=elapsed,y=fitted_xb,color=season)) +
   theme_bw()
 ggsave("plot/main_effect_by_season.jpg",units="in",
        width=6,height=4)
@@ -65,33 +65,33 @@ ggsave("plot/main_effect_by_season.jpg",units="in",
 ### Prediction ###
 pred_values <- predict(nis_gam, newdata=nis_test,types="response")
 
-## The group-specific intercept is zero as the new seasons 
-# are not in the training. In this case, only the mean of 
+## The group-specific intercept is zero as the new seasons
+# are not in the training. In this case, only the mean of
 # main effect is predicted
-ggplot(nis_test) + 
+ggplot(nis_test) +
   geom_point(aes(x=elapsed,y=estimate))+
-  geom_line(aes(x=elapsed, y=pred_terms,color=season)) + 
+  geom_line(aes(x=elapsed, y=pred_terms,color=season)) +
   theme_bw()
 ggsave("plot/pred_by_season.jpg",units="in",width=6,height=4)
 
 
 ## sequentially add season ##
 pred_by_season <- function(data, train_end){
-  
+
   data %>%
     filter(time_end < train_end) -> data_train
-  
+
   data %>%
     filter(time_end >= train_end) -> data_test
-  
+
   data_gam <- gam(estimate ~ s(elapsed,bs="bs") + s(season,bs="re"),data= data_train)
-  
+
   pred <- predict(data_gam, newdata=data_test,type="response")
-  
+
   data_test$pred <- pred
-  
+
   return(data_test)
-  
+
 }
 
 # use 2, 4, 8, 12, 14 seasons as training #
@@ -104,7 +104,7 @@ train_ids <- data.frame(id=paste(c(2,4,8,12,14),"seasons training"),
                                      as.Date("2013-07-01"), as.Date("2017-07-01"),
                                      as.Date("2021-07-01"), as.Date("2023-07-01")))
 
-pred_list <- lapply(1:nrow(train_ids), 
+pred_list <- lapply(1:nrow(train_ids),
                     function(x){pred_by_season(nis, train_end=train_ids$train_end[x])})
 
 names(pred_list) <- train_ids$id
@@ -113,10 +113,10 @@ pred_df <- plyr::ldply(pred_list)
 
 pred_df %>%
   mutate(id=factor(.id,levels=paste(c(2,4,8,12,14),"seasons training"))) %>%
-  ggplot() + 
-  geom_point(aes(x=elapsed,y=estimate,color=season)) + 
-  geom_line(aes(x=elapsed,y=pred)) + 
-  facet_wrap(id~.) + 
+  ggplot() +
+  geom_point(aes(x=elapsed,y=estimate,color=season)) +
+  geom_line(aes(x=elapsed,y=pred)) +
+  facet_wrap(id~.) +
   theme_bw()
 ggsave("plot/pred_by_sel_seasons.jpg",units="in",width=6,height=4)
 
@@ -136,4 +136,3 @@ mspe_df %>%
   geom_col(aes(x=id,y=mspe)) +
   theme_bw()
 ggsave("plot/mspe_by_sel_seasons.jpg",units="in",width=6,height=4)
-
