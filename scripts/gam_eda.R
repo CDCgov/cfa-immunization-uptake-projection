@@ -30,11 +30,11 @@ nis %>%
   filter(time_end >= train_end) -> nis_test
 
 ##### model fitting ######
-nis_gam <- gam(estimate ~ s(elapsed,bs="bs") + s(season,bs="re"),data= nis_train)
+# add log-normal link function by manually log-transforming response variable
+nis_gam <- gam(log(estimate) ~ s(elapsed,bs="bs") + s(season,bs="re"),data= nis_train)
 
-nis_train$fitted_values = nis_gam$fitted.values
-
-nis_train$fitted_mean = fitted_mean
+# transform back #
+nis_train$fitted_values = exp(nis_gam$fitted.values)
 
 ## Fitted curves shares the same trend
 nis_train %>%
@@ -51,7 +51,7 @@ ggsave("plot/fitted_value_by_season.jpg",units="in",
 fitted_terms <- predict(nis_gam, newdata=nis_train,type="terms")
 
 # if plotting fitted Xb only:
-fitted_xb <- fitted_terms[,"s(elapsed)"] + coef(nis_gam)[1]
+fitted_xb <- exp(fitted_terms[,"s(elapsed)"] + coef(nis_gam)[1])
 
 nis_train %>%
   ggplot() +
@@ -64,6 +64,7 @@ ggsave("plot/main_effect_by_season.jpg",units="in",
 
 ### Prediction ###
 pred_values <- predict(nis_gam, newdata=nis_test,types="response")
+nis_test$pred_terms <- exp(pred_values)
 
 ## The group-specific intercept is zero as the new seasons
 # are not in the training. In this case, only the mean of
@@ -84,9 +85,9 @@ pred_by_season <- function(data, train_end){
   data %>%
     filter(time_end >= train_end) -> data_test
 
-  data_gam <- gam(estimate ~ s(elapsed,bs="bs") + s(season,bs="re"),data= data_train)
+  data_gam <- gam(log(estimate) ~ s(elapsed,bs="bs") + s(season,bs="re"),data= data_train)
 
-  pred <- predict(data_gam, newdata=data_test,type="response")
+  pred <- exp(predict(data_gam, newdata=data_test,type="response"))
 
   data_test$pred <- pred
 
