@@ -6,7 +6,7 @@ library(mgcv)
 ### national flu data ###
 
 ##### data cleaning #####
-nis <- read.csv("../data/nis_flu_national.csv")
+nis <- read.csv("data/nis_flu_national.csv")
 head(nis)
 nis$time_end = as.Date(nis$time_end)
 
@@ -42,7 +42,7 @@ nis_train %>%
   geom_point(aes(x=elapsed,y=estimate)) +
   geom_line(aes(x=elapsed,y=fitted_values,color=season)) +
   theme_bw()
-ggsave("plot/fitted_value_by_season.jpg",units="in",
+ggsave("plot/fitted_value_by_season_lognormal.jpg",units="in",
        width=6,height=4)
 
 
@@ -73,7 +73,7 @@ ggplot(nis_test) +
   geom_point(aes(x=elapsed,y=estimate))+
   geom_line(aes(x=elapsed, y=pred_terms,color=season)) +
   theme_bw()
-ggsave("plot/pred_by_season.jpg",units="in",width=6,height=4)
+ggsave("plot/pred_by_season_lognormal.jpg",units="in",width=6,height=4)
 
 
 ## sequentially add season ##
@@ -95,15 +95,11 @@ pred_by_season <- function(data, train_end){
 
 }
 
-# use 2, 4, 8, 12, 14 seasons as training #
-train_ends <- c(as.Date("2011-07-01"),
-                as.Date("2013-07-01"), as.Date("2017-07-01"),
-                as.Date("2021-07-01"), as.Date("2023-07-01"))
+# use 2 to 14 seasons as training #
+train_ends <- seq(as.Date("2011-07-01"),as.Date("2023-07-01"),"1 year")
+train_ids <- data.frame(id=c(2:14),
+                        train_end=train_ends)
 
-train_ids <- data.frame(id=paste(c(2,4,8,12,14),"seasons training"),
-                         train_end=c(as.Date("2011-07-01"),
-                                     as.Date("2013-07-01"), as.Date("2017-07-01"),
-                                     as.Date("2021-07-01"), as.Date("2023-07-01")))
 
 pred_list <- lapply(1:nrow(train_ids),
                     function(x){pred_by_season(nis, train_end=train_ids$train_end[x])})
@@ -113,13 +109,13 @@ names(pred_list) <- train_ids$id
 pred_df <- plyr::ldply(pred_list)
 
 pred_df %>%
-  mutate(id=factor(.id,levels=paste(c(2,4,8,12,14),"seasons training"))) %>%
+  mutate(id=factor(.id,levels=train_ids$id,labels=paste(train_ids$id,"seasons\ntraining"))) %>%
   ggplot() +
   geom_point(aes(x=elapsed,y=estimate,color=season)) +
-  geom_line(aes(x=elapsed,y=pred)) +
+  geom_line(aes(x=elapsed,y=pred,color=season)) +
   facet_wrap(id~.) +
   theme_bw()
-ggsave("plot/pred_by_sel_seasons.jpg",units="in",width=6,height=4)
+ggsave("plot/pred_by_all_seasons.jpg",units="in",width=6,height=4)
 
 # evaluate using mspe
 mspe <- function(data, pred) {
@@ -131,9 +127,9 @@ pred_df %>%
   reframe(mspe=mspe(estimate,pred)) -> mspe_df
 
 mspe_df %>%
-  mutate(id=factor(.id,levels=paste(c(2,4,8,12,14),"seasons training"),
-                   labels=paste(c(2,4,8,12,14),"seasons\ntraining"),)) %>%
+  mutate(id=factor(.id,levels=train_ids$id,
+                   labels=paste(train_ids$id,"seasons\ntraining"))) %>%
   ggplot() +
   geom_col(aes(x=id,y=mspe)) +
   theme_bw()
-ggsave("plot/mspe_by_sel_seasons.jpg",units="in",width=6,height=4)
+ggsave("plot/mspe_by_all_seasons.jpg",units="in",width=6,height=4)
