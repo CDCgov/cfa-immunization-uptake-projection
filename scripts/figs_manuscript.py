@@ -258,7 +258,8 @@ alt.Chart(may31).mark_text(align="center", baseline="middle", fontSize=10).encod
 plot_uptake(
     postcheck.filter(
         (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
-    ).drop(["geography", "season"])
+    ).drop(["geography", "season"]),
+    color="gray",
 )
 
 # %% Figure 2b: Bar graph of MSPE by state in one season
@@ -281,7 +282,7 @@ alt.Chart(mspe.filter(pl.col("season") == "2015/2016").sort("state")).mark_bar(
 )
 
 # %% Figure 2c: Distribution of MSPE across all states x seasons
-alt.Chart(mspe).mark_bar(color="black").encode(
+alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_bar(color="black").encode(
     x=alt.X("mspe:Q", bin=alt.Bin(step=0.0005), title="MSPE"),
     y=alt.Y("count()", stack="zero", title="Number of Trajectories"),
     color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
