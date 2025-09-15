@@ -125,9 +125,7 @@ def plot_uptake(data, color="green", season_start_month=7, upper_bound=0.6):
                 y=alt.Y(
                     "obs:Q", title="Uptake", scale=alt.Scale(domain=[0, upper_bound])
                 ),
-                color=alt.Color(
-                    "season:N", scale=alt.Scale(scheme="category20")
-                ),  # "season:N",
+                color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
             )
         )
     else:
@@ -215,9 +213,16 @@ flu_natl = load_data(
 flu_state = load_data(
     "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_flu_state.parquet"
 )
-cov_natl = load_data(
-    "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_cov_natl.parquet"
+
+# %% Load posterior checks and forecasts
+postcheck = load_pred(
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/postchecks.parquet",
+    flu_state,
 )
+forecast = load_pred(
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/forecasts.parquet",
+    flu_state,
+).drop("season")
 
 # %% Figure 1a: National flu vaccine uptake by season
 plot_uptake(flu_natl, season_start_month=7)
@@ -234,7 +239,6 @@ plot_uptake(
     upper_bound=0.7,
 )
 
-
 # %% Figure 1c: Avg. vs. std. dev. of final uptake by state
 may31 = (
     flu_state.filter(pl.col("time_end").dt.month() == 5)
@@ -248,6 +252,39 @@ alt.Chart(may31).mark_text(align="center", baseline="middle", fontSize=10).encod
     x=alt.X("avg:Q", title="Average", scale=alt.Scale(domain=[0.15, 0.55])),
     y=alt.Y("std:Q", title="Standard Deviation", scale=alt.Scale(domain=[0.02, 0.09])),
     text="state:N",
+)
+
+# %% Figure 2a: Data vs. model for one state and one season
+plot_uptake(
+    postcheck.filter(
+        (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
+    ).drop(["geography", "season"])
+)
+
+# %% Figure 2b: Bar graph of MSPE by state in one season
+mspe = (
+    postcheck.drop_nulls()
+    .with_columns(sqerr=(pl.col("est") - pl.col("obs")) ** 2)
+    .group_by(["geography", "season"])
+    .agg(mspe=pl.col("sqerr").mean())
+    .with_columns(
+        state=pl.col("geography").replace(state_to_abbrv),
+    )
+)
+mspe.filter((pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016"))
+
+alt.Chart(mspe.filter(pl.col("season") == "2015/2016").sort("state")).mark_bar(
+    color="#d62728"
+).encode(
+    y=alt.Y("state:N", title="State"),
+    x=alt.X("mspe:Q", title="MSPE"),
+)
+
+# %% Figure 2c: Distribution of MSPE across all states x seasons
+alt.Chart(mspe).mark_bar(color="black").encode(
+    x=alt.X("mspe:Q", bin=alt.Bin(step=0.0005), title="MSPE"),
+    y=alt.Y("count()", stack="zero", title="Number of Trajectories"),
+    color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
 )
 
 # %%
