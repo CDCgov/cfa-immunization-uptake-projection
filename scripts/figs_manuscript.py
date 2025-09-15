@@ -2,6 +2,64 @@
 import altair as alt
 import polars as pl
 
+# %% US state abbreviations
+state_to_abbrv = {
+    "Alabama": "AL",
+    "Alaska": "AK",
+    "Arizona": "AZ",
+    "Arkansas": "AR",
+    "California": "CA",
+    "Colorado": "CO",
+    "Connecticut": "CT",
+    "Delaware": "DE",
+    "Florida": "FL",
+    "Georgia": "GA",
+    "Hawaii": "HI",
+    "Idaho": "ID",
+    "Illinois": "IL",
+    "Indiana": "IN",
+    "Iowa": "IA",
+    "Kansas": "KS",
+    "Kentucky": "KY",
+    "Louisiana": "LA",
+    "Maine": "ME",
+    "Maryland": "MD",
+    "Massachusetts": "MA",
+    "Michigan": "MI",
+    "Minnesota": "MN",
+    "Mississippi": "MS",
+    "Missouri": "MO",
+    "Montana": "MT",
+    "Nebraska": "NE",
+    "Nevada": "NV",
+    "New Hampshire": "NH",
+    "New Jersey": "NJ",
+    "New Mexico": "NM",
+    "New York": "NY",
+    "North Carolina": "NC",
+    "North Dakota": "ND",
+    "Ohio": "OH",
+    "Oklahoma": "OK",
+    "Oregon": "OR",
+    "Pennsylvania": "PA",
+    "Rhode Island": "RI",
+    "South Carolina": "SC",
+    "South Dakota": "SD",
+    "Tennessee": "TN",
+    "Texas": "TX",
+    "Utah": "UT",
+    "Vermont": "VT",
+    "Virginia": "VA",
+    "Washington": "WA",
+    "West Virginia": "WV",
+    "Wisconsin": "WI",
+    "Wyoming": "WY",
+    "District of Columbia": "DC",
+    "Guam": "GU",
+    "Puerto Rico": "PR",
+    "U.S. Virgin Islands": "VI",
+}
+
 
 # %% Define some functions
 def load_data(path):
@@ -67,7 +125,9 @@ def plot_uptake(data, color="green", season_start_month=7, upper_bound=0.6):
                 y=alt.Y(
                     "obs:Q", title="Uptake", scale=alt.Scale(domain=[0, upper_bound])
                 ),
-                color="season:N",
+                color=alt.Color(
+                    "season:N", scale=alt.Scale(scheme="category20")
+                ),  # "season:N",
             )
         )
     else:
@@ -158,3 +218,36 @@ flu_state = load_data(
 cov_natl = load_data(
     "/home/tec0/cfa-immunization-uptake-projection/output/data/nis_raw_cov_natl.parquet"
 )
+
+# %% Figure 1a: National flu vaccine uptake by season
+plot_uptake(flu_natl, season_start_month=7)
+
+# %% Figure 1b: State flu vaccine uptake by season
+plot_uptake(
+    flu_state.filter(pl.col("geography") == "Nevada").drop("geography"),
+    season_start_month=7,
+    upper_bound=0.7,
+)
+plot_uptake(
+    flu_state.filter(pl.col("geography") == "Rhode Island").drop("geography"),
+    season_start_month=7,
+    upper_bound=0.7,
+)
+
+
+# %% Figure 1c: Avg. vs. std. dev. of final uptake by state
+may31 = (
+    flu_state.filter(pl.col("time_end").dt.month() == 5)
+    .group_by("geography")
+    .agg(avg=pl.col("obs").mean(), std=pl.col("obs").std())
+    .with_columns(
+        state=pl.col("geography").replace(state_to_abbrv),
+    )
+)
+alt.Chart(may31).mark_text(align="center", baseline="middle", fontSize=10).encode(
+    x=alt.X("avg:Q", title="Average", scale=alt.Scale(domain=[0.15, 0.55])),
+    y=alt.Y("std:Q", title="Standard Deviation", scale=alt.Scale(domain=[0.02, 0.09])),
+    text="state:N",
+)
+
+# %%
