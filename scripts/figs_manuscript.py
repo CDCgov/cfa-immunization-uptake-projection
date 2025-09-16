@@ -1,6 +1,5 @@
 # %% Imports
 import altair as alt
-import numpy as np
 import polars as pl
 
 # %% US state abbreviations
@@ -223,7 +222,15 @@ postcheck = load_pred(
 forecast = load_pred(
     "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/test/forecasts.parquet",
     flu_state,
-).drop("season")
+)
+pred = pl.concat(
+    [
+        postcheck.with_columns(type=pl.lit("postcheck")),
+        forecast.with_columns(
+            type=pl.lit("forecast"),
+        ),
+    ]
+)
 
 # %% Figure 1a: National flu vaccine uptake by season
 plot_uptake(flu_natl, season_start_month=7)
@@ -257,7 +264,7 @@ alt.Chart(may31).mark_text(align="center", baseline="middle", fontSize=10).encod
 
 # %% Figure 2a: Data vs. model for one state and one season
 plot_uptake(
-    postcheck.filter(
+    pred.filter(
         (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
     ).drop(["geography", "season"]),
     color="gray",
@@ -265,12 +272,13 @@ plot_uptake(
 
 # %% Figure 2b: Bar graph of MSPE by state in one season
 mspe = (
-    postcheck.drop_nulls()
+    pred.drop_nulls()
     .with_columns(sqerr=(pl.col("est") - pl.col("obs")) ** 2)
-    .group_by(["geography", "season"])
+    .group_by(["geography", "season", "type"])
     .agg(mspe=pl.col("sqerr").mean())
     .with_columns(
         state=pl.col("geography").replace(state_to_abbrv),
+        log_mspe=pl.col("mspe").log(),
     )
 )
 mspe.filter((pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016"))
@@ -283,15 +291,20 @@ alt.Chart(mspe.filter(pl.col("season") == "2015/2016").sort("state")).mark_bar(
 )
 
 # %% Figure 2c: Distribution of MSPE across all states x seasons
-alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_bar(color="black").encode(
-    x=alt.X("mspe:Q", bin=alt.Bin(step=0.0005), title="MSPE"),
-    y=alt.Y("count()", stack="zero", title="Number of Trajectories"),
+alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).transform_density(
+    density="log_mspe",
+    groupby=["season"],
+    as_=["log_mspe", "density"],
+    extent=[-11, -4],
+).mark_area().encode(
+    x=alt.X("log_mspe:Q", title="Log MSPE", scale=alt.Scale(domain=[-11, -4])),
+    y=alt.Y("density:Q", title="Density"),
     color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
 )
 
 # %% Figure 2d: Correlation of May 31 obs vs. est uptake in 2015/2016
 abse = (
-    postcheck.drop_nulls()
+    pred.drop_nulls()
     .filter(pl.col("time_end").dt.month() == 5)
     .with_columns(
         abse=pl.col("est") - pl.col("obs"),
@@ -314,22 +327,108 @@ alt.Chart(pl.DataFrame({"x": [0.3, 0.55], "y": [0.3, 0.55]})).mark_line(
     ),
     tooltip="state",
 )
-x = abse["obs"].to_numpy()
-y = abse["est"].to_numpy()
-print(np.corrcoef(x, y)[0, 1] ** 2)
 
 # %% Figure 2e: Correlation of May 31 obs vs. est uptake over all seasons
 corr = (
-    abse.group_by("season")
+    abse.group_by(["season", "type"])
     .agg(corr=pl.corr(pl.col("obs"), pl.col("est")))
     .sort("season")
 )
+alt.Chart(corr.filter(pl.col("season") != "2023/2024")).mark_line(color="gray").encode(
+    x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
+    y=alt.Y("corr:Q", title="Correlation"),
+) + alt.Chart(corr.filter(pl.col("season") != "2023/2024")).mark_point(
+    size=100, filled=True, opacity=1.0
+).encode(
+    x=alt.X("season:N", title="Season"),
+    y=alt.Y("corr:Q", title="Correlation"),
+    color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
+)
+
+# %% Figure 3a: Data vs. model for retrospective forecasting in one state
+plot_uptake(
+    pred.filter(
+        (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2023/2024")
+    )
+    .drop(["geography", "season"])
+    .with_columns(
+        est=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est")),
+        est_upper=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est_upper")),
+        est_lower=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est_lower")),
+    ),
+    color="gray",
+)
+
+# %% Figure 3b: Bar graph of retrospective forecasting MSPE by state
+mspe.filter(
+    (pl.col("geography") == "Pennsylvania")
+    & (pl.col("season") == "2023/2024")
+    & (pl.col("type") == "forecast")
+)
+
+alt.Chart(
+    mspe.filter(
+        (pl.col("season") == "2023/2024") & (pl.col("type") == "forecast")
+    ).sort("state")
+).mark_bar(color="#c5b0d5").encode(
+    y=alt.Y("state:N", title="State"),
+    x=alt.X("mspe:Q", title="MSPE"),
+) + alt.Chart(
+    pl.DataFrame({"x": mspe.filter(pl.col("season") != "2023/2024")["mspe"].mean()})
+).mark_rule(color="black").encode(
+    x="x:Q",
+    strokeDash=alt.value([5, 5]),
+)
+
+# %% Figure 3c: Distribution of MSPE in forecasting vs. postchecks
+alt.Chart(mspe).transform_density(
+    density="log_mspe", groupby=["type"], as_=["log_mspe", "density"], extent=[-11, -4]
+).mark_area().encode(
+    x=alt.X("log_mspe:Q", title="Log MSPE", scale=alt.Scale(domain=[-11, -4])),
+    y=alt.Y("density:Q", title="Density"),
+    color=alt.Color(
+        "type:N",
+        title=None,
+        scale=alt.Scale(domain=["postcheck", "forecast"], range=["#393939", "#c5b0d5"]),
+    ),
+)
+
+# %% Figure 3d: Correlation of May 31 obs vs. est uptake in 2015/2016
+alt.Chart(pl.DataFrame({"x": [0.1, 0.61], "y": [0.1, 0.61]})).mark_line(
+    color="black", strokeDash=[5, 5]
+).encode(
+    x=alt.X("x", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])),
+    y=alt.Y("y", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])),
+) + alt.Chart(abse.filter(pl.col("type") == "forecast")).mark_point(
+    color="#c5b0d5"
+).encode(
+    x=alt.X(
+        "obs:Q", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])
+    ),
+    y=alt.Y(
+        "est:Q", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])
+    ),
+    tooltip="state",
+)
+
+# %% Figure 3e: Correlation of May 31 obs vs. est uptake over all seasons
 alt.Chart(corr).mark_line(color="gray").encode(
     x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
     y=alt.Y("corr:Q", title="Correlation"),
 ) + alt.Chart(corr).mark_point(size=100, filled=True, opacity=1.0).encode(
     x=alt.X("season:N", title="Season"),
     y=alt.Y("corr:Q", title="Correlation"),
-    color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
+    color=alt.Color(
+        "type:N",
+        title=None,
+        scale=alt.Scale(domain=["postcheck", "forecast"], range=["#393939", "#c5b0d5"]),
+    ),
 )
+
 # %%
