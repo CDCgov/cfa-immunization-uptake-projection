@@ -1,5 +1,6 @@
 # %% Imports
 import altair as alt
+import numpy as np
 import polars as pl
 
 # %% US state abbreviations
@@ -288,4 +289,47 @@ alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_bar(color="black").
     color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
 )
 
+# %% Figure 2d: Correlation of May 31 obs vs. est uptake in 2015/2016
+abse = (
+    postcheck.drop_nulls()
+    .filter(pl.col("time_end").dt.month() == 5)
+    .with_columns(
+        abse=pl.col("est") - pl.col("obs"),
+        state=pl.col("geography").replace(state_to_abbrv),
+    )
+)
+alt.Chart(pl.DataFrame({"x": [0.3, 0.55], "y": [0.3, 0.55]})).mark_line(
+    color="black", strokeDash=[5, 5]
+).encode(
+    x=alt.X("x", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])),
+    y=alt.Y("y", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])),
+) + alt.Chart(abse.filter(pl.col("season") == "2015/2016")).mark_point(
+    color="#d62728"
+).encode(
+    x=alt.X(
+        "obs:Q", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])
+    ),
+    y=alt.Y(
+        "est:Q", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])
+    ),
+    tooltip="state",
+)
+x = abse["obs"].to_numpy()
+y = abse["est"].to_numpy()
+print(np.corrcoef(x, y)[0, 1] ** 2)
+
+# %% Figure 2e: Correlation of May 31 obs vs. est uptake over all seasons
+corr = (
+    abse.group_by("season")
+    .agg(corr=pl.corr(pl.col("obs"), pl.col("est")))
+    .sort("season")
+)
+alt.Chart(corr).mark_line(color="gray").encode(
+    x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
+    y=alt.Y("corr:Q", title="Correlation"),
+) + alt.Chart(corr).mark_point(size=100, filled=True, opacity=1.0).encode(
+    x=alt.X("season:N", title="Season"),
+    y=alt.Y("corr:Q", title="Correlation"),
+    color=alt.Color("season:N", scale=alt.Scale(scheme="category20")),
+)
 # %%
