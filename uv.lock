@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.10, <4"
+requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13'",
     "python_full_version == '3.12.*'",
@@ -668,6 +668,7 @@ dependencies = [
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "streamlit" },
     { name = "typing-extensions" },
     { name = "vl-convert-python" },
@@ -685,7 +686,7 @@ dev = [
 requires-dist = [
     { name = "altair", specifier = ">=5.4.1,<6" },
     { name = "arviz", specifier = ">=0.21.0,<0.22" },
-    { name = "datetime", specifier = "~=5.5" },
+    { name = "datetime", specifier = ">=5.5" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0,<2" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5,<7" },
     { name = "ipympl", specifier = ">=0.9.7,<0.10" },
@@ -701,6 +702,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3,<9" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "scikit-learn", specifier = ">=1.5.2,<2" },
+    { name = "scipy", specifier = ">=1.15.3" },
     { name = "streamlit", specifier = ">=1.45.1,<2" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5" },
     { name = "vl-convert-python", specifier = ">=1.7.0,<2" },
