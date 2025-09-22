@@ -7,7 +7,7 @@ g^{-1}(E(y_i)) = f(x_i) + u_j + \beta_0
 
 ```
 
-where $f(x_i)=\sum_{k=1}^{K}{\beta_k}{B_k(x_{i,k})}$.
+where $f(x_i)=\sum_{k=1}^{K}{\beta_k}{B_k(x_{i})}$.
 
 $\beta_0$ is intercept for main effect.
 
@@ -30,7 +30,7 @@ The loglikelihood function is:
 ```math
 Loglik(\beta, \lambda, u |y) = Loglik(y| \beta) - \lambda \beta^TS\beta
 ```
-$S$ is called penalty matrix that is used to penalize the wiggliness of smooth function. In our case, we will use cubic spline function as the basis function, and the wiggliness of cubic spline function is measured as the integral of squared secondary derivatives of $B_k(x_{i,k})$, which is:
+$S$ is called penalty matrix that is used to penalize the wiggliness of smooth function. In our case, we will use cubic spline function as the basis function, and the wiggliness of cubic spline function is measured as the integral of squared secondary derivatives of $B_k(x_{i})$, which is:
 
 ```math
 S_{ij} = \int{B''_i(x)B''_j(x)dx}
