@@ -405,7 +405,7 @@ alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_point(
     x=alt.X("state:N"),
 )
 
-# %% Figure 2d: Correlation of May 31 obs vs. est uptake in 2015/2016
+# %% FIGURE 2 OUTDATED: Correlation of May 31 obs vs. est uptake in 2015/2016
 abse = (
     pred.drop_nulls()
     .filter(pl.col("time_end").dt.month() == 5)
@@ -433,7 +433,7 @@ alt.Chart(pl.DataFrame({"x": [0.3, 0.55], "y": [0.3, 0.55]})).mark_line(
     tooltip="state",
 )
 
-# %% Figure 2e: Correlation of May 31 obs vs. est uptake over all seasons
+# %% FIGURE 2 OUTDATED: Correlation of May 31 obs vs. est uptake over all seasons
 corr = (
     abse.group_by(["season", "type"])
     .agg(corr=pl.corr(pl.col("obs"), pl.col("est")))
