@@ -25,6 +25,7 @@ dependencies = [
     "streamlit>=1.45.1,<2",
     "scipy>=1.15.3",
     "scikit-fda>=0.10.1",
+    "pre-commit>=4.2.0",
 ]
 
 [project.optional-dependencies]
