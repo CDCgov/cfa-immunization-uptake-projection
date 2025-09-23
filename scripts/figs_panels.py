@@ -256,12 +256,12 @@ pred = pl.concat(
     ]
 )
 
-# %% Figure 1a: National flu vaccine uptake by season
+# %% FIGURE 1A: National flu vaccine uptake by season
 plot_uptake(flu_natl, season_start_month=7)
 
-# %% Figure 1b: State flu vaccine uptake by season
+# %% FIGURE 1B: State flu vaccine uptake in 2015/2016
 plot_data = (
-    flu_state.filter(pl.col("geography").is_in(["Nevada", "Rhode Island"]))
+    flu_state.filter(pl.col("season") == "2015/2016")
     .with_columns(
         time_end=pl.when(pl.col("time_end").dt.day() == 29)
         .then(pl.col("time_end").dt.replace(day=28))
@@ -274,28 +274,50 @@ plot_data = (
     )
     .rename({"geography": "state"})
 )
-alt.Chart(plot_data).mark_line().encode(
+alt.Chart(plot_data).mark_line(color="gray", opacity=0.25).encode(
     x=alt.X(
         "time_end:T",
         title="Month",
         axis=alt.Axis(format="%b", labelAngle=45),
     ),
     y=alt.Y("obs:Q", title="Uptake", scale=alt.Scale(domain=[0, 0.65])),
-    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
-    strokeDash=alt.StrokeDash("state:N"),
+    color=alt.Color("state:N", scale=alt.Scale(range=["gray"]), legend=None),
 )
 
-# %% Figure 1c: Avg. vs. std. dev. of final uptake by state
+# %% Prepare May 31 metrics for Figure 2
 may31 = flu_state.filter(pl.col("time_end").dt.month() == 5).with_columns(
     state=pl.col("geography").replace(state_to_abbrv),
 )
-may31_mean = (
+may31_mean_state = (
     may31.group_by("geography")
     .agg(avg=pl.col("obs").mean())
     .with_columns(
         state=pl.col("geography").replace(state_to_abbrv),
     )
 )
+may31_mean_season = may31.group_by("season").agg(avg=pl.col("obs").mean())
+
+# %% FIGURE 1C: Distribution of May 31 uptake across states stratified by season
+alt.Chart(may31).mark_point(filled=True, size=75, opacity=0.5).encode(
+    y=alt.Y(
+        "obs:Q",
+        title="May 31 Uptake",
+        axis=alt.Axis(titleFontSize=12, labelFontSize=10),
+    ),
+    x=alt.X(
+        "season:N",
+        title="Season",
+        axis=alt.Axis(titleFontSize=12, labelFontSize=10, labelAngle=45),
+    ),
+    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
+) + alt.Chart(may31_mean_season).mark_point(
+    color="black", shape="square", size=100, opacity=1.0
+).encode(
+    y=alt.Y("avg:Q", title="May 31 Uptake"),
+    x=alt.X("season:N", title="Season"),
+)
+
+# %% FIGURE 1D: Distribution of May 31 uptake across seasons stratified by state
 alt.Chart(may31).mark_point(filled=True, size=75, opacity=0.75).encode(
     y=alt.Y(
         "obs:Q",
@@ -308,7 +330,7 @@ alt.Chart(may31).mark_point(filled=True, size=75, opacity=0.75).encode(
         axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
     ),
     color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
-) + alt.Chart(may31_mean).mark_point(
+) + alt.Chart(may31_mean_state).mark_point(
     color="black", shape="square", size=100, opacity=1.0
 ).encode(
     y=alt.Y("avg:Q", title="May 31 Uptake"),
@@ -407,51 +429,6 @@ alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_point(
 ).encode(
     y=alt.Y("avg_log_mspe:Q"),
     x=alt.X("state:N"),
-)
-
-# %% FIGURE 2 OUTDATED: Correlation of May 31 obs vs. est uptake in 2015/2016
-abse = (
-    pred.drop_nulls()
-    .filter(pl.col("time_end").dt.month() == 5)
-    .with_columns(
-        abse=pl.col("est") - pl.col("obs"),
-        state=pl.col("geography").replace(state_to_abbrv),
-    )
-)
-abse.filter((pl.col("season") == "2015/2016") & (pl.col("geography") == "Pennsylvania"))
-
-alt.Chart(pl.DataFrame({"x": [0.3, 0.55], "y": [0.3, 0.55]})).mark_line(
-    color="black", strokeDash=[5, 5]
-).encode(
-    x=alt.X("x", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])),
-    y=alt.Y("y", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])),
-) + alt.Chart(abse.filter(pl.col("season") == "2015/2016")).mark_point(
-    color=season_colors[6]
-).encode(
-    x=alt.X(
-        "obs:Q", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])
-    ),
-    y=alt.Y(
-        "est:Q", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.3, 0.55])
-    ),
-    tooltip="state",
-)
-
-# %% FIGURE 2 OUTDATED: Correlation of May 31 obs vs. est uptake over all seasons
-corr = (
-    abse.group_by(["season", "type"])
-    .agg(corr=pl.corr(pl.col("obs"), pl.col("est")))
-    .sort("season")
-)
-alt.Chart(corr.filter(pl.col("season") != "2023/2024")).mark_line(color="gray").encode(
-    x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
-    y=alt.Y("corr:Q", title="Correlation"),
-) + alt.Chart(corr.filter(pl.col("season") != "2023/2024")).mark_point(
-    size=100, filled=True, opacity=1.0
-).encode(
-    x=alt.X("season:N", title="Season"),
-    y=alt.Y("corr:Q", title="Correlation"),
-    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
 )
 
 # %% FIGURE 3A: Retrospective forecasting for Pennsylvania in 2023/2024
@@ -568,40 +545,4 @@ alt.Chart(
             axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
         ),
     )
-)
-
-# %% FIGURE 3 OUTDATED: Correlation of May 31 obs vs. est uptake in 2015/2016
-abse.filter((pl.col("season") == "2023/2024") & (pl.col("geography") == "Pennsylvania"))
-
-alt.Chart(pl.DataFrame({"x": [0.1, 0.61], "y": [0.1, 0.61]})).mark_line(
-    color="black", strokeDash=[5, 5]
-).encode(
-    x=alt.X("x", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])),
-    y=alt.Y("y", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])),
-) + alt.Chart(abse.filter(pl.col("type") == "forecast")).mark_point(
-    color=season_colors[14]
-).encode(
-    x=alt.X(
-        "obs:Q", title="Observed May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])
-    ),
-    y=alt.Y(
-        "est:Q", title="Predicted May 31 Uptake", scale=alt.Scale(domain=[0.1, 0.61])
-    ),
-    tooltip="state",
-)
-
-# %% FIGURE 3 OUTDATED: Correlation of May 31 obs vs. est uptake over all seasons
-alt.Chart(corr).mark_line(color="gray").encode(
-    x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
-    y=alt.Y("corr:Q", title="Correlation"),
-) + alt.Chart(corr).mark_point(size=100, filled=True, opacity=1.0).encode(
-    x=alt.X("season:N", title="Season"),
-    y=alt.Y("corr:Q", title="Correlation"),
-    color=alt.Color(
-        "type:N",
-        title=None,
-        scale=alt.Scale(
-            domain=["postcheck", "forecast"], range=["#393939", season_colors[14]]
-        ),
-    ),
 )
