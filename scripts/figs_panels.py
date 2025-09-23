@@ -326,22 +326,26 @@ mspe = (
         log_mspe=pl.col("mspe").log(),
     )
 )
-mspe_mean = (
-    mspe.group_by("geography")
+mspe_mean_state = (
+    mspe.filter(~((pl.col("season") == "2023/2024") & (pl.col("type") == "postcheck")))
+    .group_by("geography")
     .agg(avg_log_mspe=pl.col("log_mspe").mean())
     .with_columns(
         state=pl.col("geography").replace(state_to_abbrv),
     )
 )
 mspe_mean_season = (
-    mspe.group_by("season")
+    mspe.filter(~((pl.col("season") == "2023/2024") & (pl.col("type") == "postcheck")))
+    .group_by("season")
     .agg(avg_log_mspe=pl.col("log_mspe").mean())
-    .with_columns(
-        state=pl.col("season").replace(state_to_abbrv),
-    )
+)
+mspe_mean_type = (
+    mspe.filter(~((pl.col("season") == "2023/2024") & (pl.col("type") == "postcheck")))
+    .group_by("type")
+    .agg(avg_log_mspe=pl.col("log_mspe").mean())
 )
 
-# %% FIGURE 2A: Data vs. model for PA in 2015/2016
+# %% FIGURE 2A: Posterior check for PA in 2015/2016
 plot_uptake(
     pred.filter(
         (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
@@ -350,7 +354,7 @@ plot_uptake(
 )
 mspe.filter((pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016"))
 
-# %% FIGURE 2B: Data vs. model for NV in 2017/2018
+# %% FIGURE 2B: Posterior check for NV in 2017/2018
 plot_uptake(
     pred.filter(
         (pl.col("geography") == "Nevada") & (pl.col("season") == "2017/2018")
@@ -398,7 +402,7 @@ alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_point(
         axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
     ),
     color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
-) + alt.Chart(mspe_mean).mark_point(
+) + alt.Chart(mspe_mean_state).mark_point(
     color="black", shape="square", size=100, opacity=1.0
 ).encode(
     y=alt.Y("avg_log_mspe:Q"),
@@ -450,7 +454,7 @@ alt.Chart(corr.filter(pl.col("season") != "2023/2024")).mark_line(color="gray").
     color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
 )
 
-# %% Figure 3a: Data vs. model for retrospective forecasting in one state
+# %% FIGURE 3A: Retrospective forecasting for Pennsylvania in 2023/2024
 plot_uptake(
     pred.filter(
         (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2023/2024")
@@ -470,43 +474,103 @@ plot_uptake(
     color=season_colors[14],
 )
 
-# %% Figure 3b: Bar graph of retrospective forecasting MSPE by state
 mspe.filter(
     (pl.col("geography") == "Pennsylvania")
     & (pl.col("season") == "2023/2024")
     & (pl.col("type") == "forecast")
 )
 
-alt.Chart(
-    mspe.filter(
-        (pl.col("season") == "2023/2024") & (pl.col("type") == "forecast")
-    ).sort("state")
-).mark_bar(color=season_colors[14]).encode(
-    y=alt.Y("state:N", title="State"),
-    x=alt.X("mspe:Q", title="MSPE"),
-) + alt.Chart(
-    pl.DataFrame({"x": mspe.filter(pl.col("season") != "2023/2024")["mspe"].mean()})
-).mark_rule(color="black").encode(
-    x="x:Q",
-    strokeDash=alt.value([5, 5]),
-)
-
-# %% Figure 3c: Distribution of MSPE in forecasting vs. postchecks
-alt.Chart(mspe).transform_density(
-    density="log_mspe", groupby=["type"], as_=["log_mspe", "density"], extent=[-11, -4]
-).mark_area().encode(
-    x=alt.X("log_mspe:Q", title="Log MSPE", scale=alt.Scale(domain=[-11, -4])),
-    y=alt.Y("density:Q", title="Density"),
-    color=alt.Color(
-        "type:N",
-        title=None,
-        scale=alt.Scale(
-            domain=["postcheck", "forecast"], range=["#393939", season_colors[14]]
-        ),
+# %% FIGURE 3B: Retrospective forecasting for Nevada in 2023/2024
+plot_uptake(
+    pred.filter((pl.col("geography") == "Nevada") & (pl.col("season") == "2023/2024"))
+    .drop(["geography", "season"])
+    .with_columns(
+        est=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est")),
+        est_upper=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est_upper")),
+        est_lower=pl.when(pl.col("time_end").dt.month().is_in([7, 8]))
+        .then(None)
+        .otherwise(pl.col("est_lower")),
     ),
+    color=season_colors[14],
 )
 
-# %% Figure 3d: Correlation of May 31 obs vs. est uptake in 2015/2016
+mspe.filter(
+    (pl.col("geography") == "Nevada")
+    & (pl.col("season") == "2023/2024")
+    & (pl.col("type") == "forecast")
+)
+
+# %% FIGURE 3C: Distribution of MSPE across states stratified by prediction type
+alt.Chart(
+    mspe.filter(~((pl.col("season") == "2023/2024") & (pl.col("type") == "postcheck")))
+).mark_point(filled=True, size=75, opacity=0.5).encode(
+    y=alt.Y(
+        "log_mspe:Q",
+        title="Log MSPE",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+        scale=alt.Scale(domain=[-11, -4]),
+    ),
+    x=alt.X(
+        "type:N",
+        title="Prediction Type",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+        sort="descending",
+    ),
+    color=alt.Color("type:N", scale=alt.Scale(range=[season_colors[14], "gray"])),
+) + alt.Chart(mspe_mean_type).mark_point(
+    color="black", shape="square", size=100, opacity=1.0
+).encode(
+    y=alt.Y("avg_log_mspe:Q"),
+    x=alt.X("type:N", sort="descending"),
+)
+
+# %% FIGURE 3D: Distribution of MSPE across prediction type stratified by state
+(
+    alt.Chart(mspe.filter(pl.col("season") != "2023/2024"))
+    .mark_point(filled=True, size=75, opacity=0.75, color="gray")
+    .encode(
+        y=alt.Y(
+            "log_mspe:Q",
+            title="Log MSPE",
+            axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+            scale=alt.Scale(domain=[-11, -4]),
+        ),
+        x=alt.X(
+            "state:N",
+            title="State",
+            axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+        ),
+    )
+    + alt.Chart(mspe_mean_state)
+    .mark_point(color="black", shape="square", size=100, opacity=1.0)
+    .encode(
+        y=alt.Y("avg_log_mspe:Q"),
+        x=alt.X("state:N"),
+    )
+    + alt.Chart(
+        mspe.filter((pl.col("season") == "2023/2024") & (pl.col("type") == "forecast"))
+    )
+    .mark_point(filled=True, size=75, opacity=1, color=season_colors[14])
+    .encode(
+        y=alt.Y(
+            "log_mspe:Q",
+            title="Log MSPE",
+            axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+            scale=alt.Scale(domain=[-11, -4]),
+        ),
+        x=alt.X(
+            "state:N",
+            title="State",
+            axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+        ),
+    )
+)
+
+# %% FIGURE 3 OUTDATED: Correlation of May 31 obs vs. est uptake in 2015/2016
 abse.filter((pl.col("season") == "2023/2024") & (pl.col("geography") == "Pennsylvania"))
 
 alt.Chart(pl.DataFrame({"x": [0.1, 0.61], "y": [0.1, 0.61]})).mark_line(
@@ -526,7 +590,7 @@ alt.Chart(pl.DataFrame({"x": [0.1, 0.61], "y": [0.1, 0.61]})).mark_line(
     tooltip="state",
 )
 
-# %% Figure 3e: Correlation of May 31 obs vs. est uptake over all seasons
+# %% FIGURE 3 OUTDATED: Correlation of May 31 obs vs. est uptake over all seasons
 alt.Chart(corr).mark_line(color="gray").encode(
     x=alt.X("season:N", title="Season", axis=alt.Axis(labelAngle=45)),
     y=alt.Y("corr:Q", title="Correlation"),
@@ -541,5 +605,3 @@ alt.Chart(corr).mark_line(color="gray").encode(
         ),
     ),
 )
-
-# %%
