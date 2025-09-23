@@ -260,41 +260,62 @@ pred = pl.concat(
 plot_uptake(flu_natl, season_start_month=7)
 
 # %% Figure 1b: State flu vaccine uptake by season
-plot_uptake(
-    flu_state.filter(pl.col("geography") == "Nevada").drop("geography"),
-    season_start_month=7,
-    upper_bound=0.7,
+plot_data = (
+    flu_state.filter(pl.col("geography").is_in(["Nevada", "Rhode Island"]))
+    .with_columns(
+        time_end=pl.when(pl.col("time_end").dt.day() == 29)
+        .then(pl.col("time_end").dt.replace(day=28))
+        .otherwise(pl.col("time_end"))
+    )
+    .with_columns(
+        time_end=pl.when(pl.col("time_end").dt.month() < 7)
+        .then(pl.col("time_end").dt.replace(year=2000))
+        .otherwise(pl.col("time_end").dt.replace(year=1999))
+    )
+    .rename({"geography": "state"})
 )
-plot_uptake(
-    flu_state.filter(pl.col("geography") == "Rhode Island").drop("geography"),
-    season_start_month=7,
-    upper_bound=0.7,
+alt.Chart(plot_data).mark_line().encode(
+    x=alt.X(
+        "time_end:T",
+        title="Month",
+        axis=alt.Axis(format="%b", labelAngle=45),
+    ),
+    y=alt.Y("obs:Q", title="Uptake", scale=alt.Scale(domain=[0, 0.65])),
+    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
+    strokeDash=alt.StrokeDash("state:N"),
 )
 
 # %% Figure 1c: Avg. vs. std. dev. of final uptake by state
-may31 = (
-    flu_state.filter(pl.col("time_end").dt.month() == 5)
-    .group_by("geography")
-    .agg(avg=pl.col("obs").mean(), std=pl.col("obs").std())
+may31 = flu_state.filter(pl.col("time_end").dt.month() == 5).with_columns(
+    state=pl.col("geography").replace(state_to_abbrv),
+)
+may31_mean = (
+    may31.group_by("geography")
+    .agg(avg=pl.col("obs").mean())
     .with_columns(
         state=pl.col("geography").replace(state_to_abbrv),
     )
 )
-alt.Chart(may31).mark_text(align="center", baseline="middle", fontSize=10).encode(
-    x=alt.X("avg:Q", title="Average", scale=alt.Scale(domain=[0.15, 0.55])),
-    y=alt.Y("std:Q", title="Standard Deviation", scale=alt.Scale(domain=[0.02, 0.09])),
-    text="state:N",
+alt.Chart(may31).mark_point(filled=True, size=75, opacity=0.75).encode(
+    y=alt.Y(
+        "obs:Q",
+        title="May 31 Uptake",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+    ),
+    x=alt.X(
+        "state:N",
+        title="State",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+    ),
+    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
+) + alt.Chart(may31_mean).mark_point(
+    color="black", shape="square", size=100, opacity=1.0
+).encode(
+    y=alt.Y("avg:Q", title="May 31 Uptake"),
+    x=alt.X("state:N", title="State"),
 )
 
-# %% Figure 2a: Data vs. model for one state and one season
-plot_uptake(
-    pred.filter(
-        (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
-    ).drop(["geography", "season"]),
-    color=season_colors[6],
-)
-
-# %% Figure 2b: Bar graph of MSPE by state in one season
+# %% Prepare MSPE metrics for Figure 2
 mspe = (
     pred.drop_nulls()
     .with_columns(sqerr=(pl.col("est") - pl.col("obs")) ** 2)
@@ -305,25 +326,83 @@ mspe = (
         log_mspe=pl.col("mspe").log(),
     )
 )
-mspe.filter((pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016"))
-
-alt.Chart(mspe.filter(pl.col("season") == "2015/2016").sort("state")).mark_bar(
-    color=season_colors[6]
-).encode(
-    y=alt.Y("state:N", title="State"),
-    x=alt.X("mspe:Q", title="MSPE"),
+mspe_mean = (
+    mspe.group_by("geography")
+    .agg(avg_log_mspe=pl.col("log_mspe").mean())
+    .with_columns(
+        state=pl.col("geography").replace(state_to_abbrv),
+    )
+)
+mspe_mean_season = (
+    mspe.group_by("season")
+    .agg(avg_log_mspe=pl.col("log_mspe").mean())
+    .with_columns(
+        state=pl.col("season").replace(state_to_abbrv),
+    )
 )
 
-# %% Figure 2c: Distribution of MSPE across all states x seasons
-alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).transform_density(
-    density="log_mspe",
-    groupby=["season"],
-    as_=["log_mspe", "density"],
-    extent=[-11, -4],
-).mark_area().encode(
-    x=alt.X("log_mspe:Q", title="Log MSPE", scale=alt.Scale(domain=[-11, -4])),
-    y=alt.Y("density:Q", title="Density"),
+# %% FIGURE 2A: Data vs. model for PA in 2015/2016
+plot_uptake(
+    pred.filter(
+        (pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016")
+    ).drop(["geography", "season"]),
+    color=season_colors[6],
+)
+mspe.filter((pl.col("geography") == "Pennsylvania") & (pl.col("season") == "2015/2016"))
+
+# %% FIGURE 2B: Data vs. model for NV in 2017/2018
+plot_uptake(
+    pred.filter(
+        (pl.col("geography") == "Nevada") & (pl.col("season") == "2017/2018")
+    ).drop(["geography", "season"]),
+    color=season_colors[8],
+)
+mspe.filter((pl.col("geography") == "Nevada") & (pl.col("season") == "2017/2018"))
+
+# %% FIGURE 2C: Distribution of MSPE across states stratified by season
+alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_point(
+    filled=True, size=75, opacity=0.5
+).encode(
+    y=alt.Y(
+        "log_mspe:Q",
+        title="Log MSPE",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+        scale=alt.Scale(domain=[-11, -4]),
+    ),
+    x=alt.X(
+        "season:N",
+        title="Season",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+    ),
     color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
+) + alt.Chart(mspe_mean_season.filter(pl.col("season") != "2023/2024")).mark_point(
+    color="black", shape="square", size=100, opacity=1.0
+).encode(
+    y=alt.Y("avg_log_mspe:Q"),
+    x=alt.X("season:N"),
+)
+
+# %% FIGURE 2D: Distribution of MSPE across seasons stratified by state
+alt.Chart(mspe.filter(pl.col("season") != "2023/2024")).mark_point(
+    filled=True, size=75, opacity=0.75
+).encode(
+    y=alt.Y(
+        "log_mspe:Q",
+        title="Log MSPE",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16),
+        scale=alt.Scale(domain=[-11, -4]),
+    ),
+    x=alt.X(
+        "state:N",
+        title="State",
+        axis=alt.Axis(titleFontSize=16, labelFontSize=16, labelAngle=45),
+    ),
+    color=alt.Color("season:N", scale=alt.Scale(range=season_colors)),
+) + alt.Chart(mspe_mean).mark_point(
+    color="black", shape="square", size=100, opacity=1.0
+).encode(
+    y=alt.Y("avg_log_mspe:Q"),
+    x=alt.X("state:N"),
 )
 
 # %% Figure 2d: Correlation of May 31 obs vs. est uptake in 2015/2016
