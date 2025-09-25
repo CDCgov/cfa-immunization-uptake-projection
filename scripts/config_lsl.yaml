@@ -29,7 +29,7 @@ evaluation_timeframe:
 # Details of the models to fit
 models:
   - name: LSLModel
-    seed: 42
+    seed: 1
     params:
       a_shape1: 100.0
       a_shape2: 180.0
