@@ -23,7 +23,10 @@ def preprocess(
         .select(keep)
         .sort("time_end")
         .collect()
-        .rename({"sample_size": "N_tot"})
+        # .rename({"sample_size": "N_tot"})
+        .with_columns(
+            N_tot=1000.0
+        )  # Hack, because current data do not have sample size!
         .with_columns(
             season=pl.col("time_end").pipe(
                 iup.utils.date_to_season,
