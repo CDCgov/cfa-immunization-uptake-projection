@@ -38,6 +38,7 @@ models:
       h_shape2: 225.0
       n_shape: 150.0
       n_rate: 6.0
+      n_sig: 80.0
       k_shape1: 225.0
       k_shape2: 225.0
       k_sig: 80.0

@@ -112,6 +112,7 @@ class LSLModel(UptakeModel):
         h_shape2=225.0,
         n_shape=25.0,
         n_rate=1.0,
+        n_sig=40.0,
         k_shape1=225.0,
         k_shape2=225.0,
         k_sig=40.0,
@@ -157,21 +158,28 @@ class LSLModel(UptakeModel):
             k_sigs = numpyro.sample(
                 "k_sigs", dist.Exponential(k_sig), sample_shape=(num_group_factors,)
             )
+            n_sigs = numpyro.sample(
+                "n_sigs", dist.Exponential(n_sig), sample_shape=(num_group_factors,)
+            )
             a_devs = numpyro.sample(
                 "a_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(a_sigs, np.array(num_group_levels))
             k_devs = k_devs = numpyro.sample(
                 "k_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(k_sigs, np.array(num_group_levels))
+            n_devs = n_devs = numpyro.sample(
+                "n_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(n_sigs, np.array(num_group_levels))
             a_tot = np.sum(a_devs[groups], axis=1) + a
             k_tot = np.sum(k_devs[groups], axis=1) + k
+            n_tot = np.sum(n_devs[groups], axis=1) + n
             # Calculate slope and intercept of the linear
-            m_tot = (a_tot * n * jnp.exp(0 - n * (k_tot - h))) / (
-                (1 + jnp.exp(0 - n * (k_tot - h))) ** 2
+            m_tot = (a_tot * n_tot * jnp.exp(0 - n_tot * (k_tot - h))) / (
+                (1 + jnp.exp(0 - n_tot * (k_tot - h))) ** 2
             )
-            b_tot = a_tot / (1 + jnp.exp(0 - n * (k_tot - h))) - m_tot * k_tot
+            b_tot = a_tot / (1 + jnp.exp(0 - n_tot * (k_tot - h))) - m_tot * k_tot
             # Calculate latent true uptake at each datum
-            mu = (a_tot / (1 + jnp.exp(0 - n * (elapsed - h)))) * (elapsed <= k) + (
+            mu = (a_tot / (1 + jnp.exp(0 - n_tot * (elapsed - h)))) * (elapsed <= k) + (
                 m_tot * elapsed + b_tot
             ) * (elapsed > k)
         else:
@@ -302,6 +310,7 @@ class LSLModel(UptakeModel):
             h_shape2=params["h_shape2"],
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
+            n_sig=params["n_sig"],
             k_shape1=params["k_shape1"],
             k_shape2=params["k_shape2"],
             k_sig=params["k_sig"],
