@@ -112,7 +112,7 @@ class LSLModel(UptakeModel):
         h_shape2=225.0,
         n_shape=25.0,
         n_rate=1.0,
-        k_shape1=300.0,
+        k_shape1=225.0,
         k_shape2=225.0,
         k_sig=40.0,
         d_shape=350.0,
@@ -147,7 +147,7 @@ class LSLModel(UptakeModel):
         a = numpyro.sample("a", dist.Beta(a_shape1, a_shape2))
         h = numpyro.sample("h", dist.Beta(h_shape1, h_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
-        k = numpyro.sample("M", dist.Beta(k_shape1, k_shape2))
+        k = numpyro.sample("k", dist.Beta(k_shape1, k_shape2))
         d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
