@@ -493,6 +493,7 @@ class LPLModel(UptakeModel):
         H_shape2=225.0,
         n_shape=25.0,
         n_rate=1.0,
+        n_sig=40.0,
         M_shape=1.0,
         M_rate=10.0,
         M_sig=40.0,
@@ -538,16 +539,23 @@ class LPLModel(UptakeModel):
             M_sigs = numpyro.sample(
                 "M_sigs", dist.Exponential(M_sig), sample_shape=(num_group_factors,)
             )
+            n_sigs = numpyro.sample(
+                "n_sigs", dist.Exponential(n_sig), sample_shape=(num_group_factors,)
+            )
             A_devs = numpyro.sample(
                 "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(A_sigs, np.array(num_group_levels))
             M_devs = M_devs = numpyro.sample(
                 "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(M_sigs, np.array(num_group_levels))
+            n_devs = n_devs = numpyro.sample(
+                "n_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(n_sigs, np.array(num_group_levels))
             A_tot = np.sum(A_devs[groups], axis=1) + A
             M_tot = np.sum(M_devs[groups], axis=1) + M
+            n_tot = np.sum(n_devs[groups], axis=1) + n
             # Calculate latent true uptake at each datum
-            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            mu = A_tot / (1 + jnp.exp(0 - n_tot * (elapsed - H))) + (M_tot * elapsed)
         else:
             # Calculate latent true uptake at each datum if no grouping factors
             mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
@@ -669,6 +677,7 @@ class LPLModel(UptakeModel):
             H_shape2=params["H_shape2"],
             n_shape=params["n_shape"],
             n_rate=params["n_rate"],
+            n_sig=params["n_sig"],
             M_shape=params["M_shape"],
             M_rate=params["M_rate"],
             M_sig=params["M_sig"],
