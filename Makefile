@@ -1,7 +1,7 @@
-RUN_ID = lpl
+RUN_ID = lsli
 TOKEN_PATH = scripts/socrata_app_token.txt
 TOKEN = $(shell cat $(TOKEN_PATH))
-CONFIG = scripts/config_lpl.yaml
+CONFIG = scripts/config_lsli.yaml
 SETTINGS = output/settings/$(RUN_ID)/
 RAW_DATA = output/data/$(RUN_ID)/
 MODEL_FITS = output/fits/$(RUN_ID)/
