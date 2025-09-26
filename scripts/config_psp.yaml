@@ -42,15 +42,15 @@ models:
       a1_sig: 10.0
       n1_shape: 25.0
       n1_rate: 10.0
-      n1_sig=: 10.0
+      n1_sig: 10.0
       s2_shape: 2.0
       s2_rate: 10.0
       s2_sig: 20.0
       n2_shape1: 5.0
       n2_shape2: 10.0
       n2_sig: 40.0
-      k_shape1: 100.0
-      k_shape2: 225.0
+      k_shape1: 50.0
+      k_shape2: 150.0
       k_sig: 80.0
       d_shape: 1000
       d_rate: 3.0
