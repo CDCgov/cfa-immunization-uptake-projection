@@ -321,7 +321,7 @@ class LSLIModel(UptakeModel):
             a_shape1=params["a_shape1"],
             a_shape2=params["a_shape2"],
             a_sig=params["a_sig"],
-            c_center=params["a_center"],
+            c_center=params["c_center"],
             c_spread=params["c_spread"],
             c_sig=params["c_sig"],
             h_shape1=params["h_shape1"],
