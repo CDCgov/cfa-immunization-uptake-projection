@@ -31,24 +31,24 @@ models:
   - name: PSPModel
     seed: 1
     params:
-      c1_shape: 1.0
-      c1_rate: 1.0
-      c1_sig: 1.0
-      s1_shape: 1.0
-      s1_rate: 1.0
-      s1_sig: 1.0
-      a1_shape: 1.0
-      a1_rate: 1.0
-      a1_sig: 1.0
-      n1_shape: 1.0
-      n1_rate: 1.0
-      n1_sig=: 1.0
-      s2_shape: 1.0
-      s2_rate: 1.0
-      s2_sig: 1.0
-      n2_shape1: 1.0
-      n2_shape2: 1.0
-      n2_sig: 1.0
+      c1_shape: 2.0
+      c1_rate: 500.0
+      c1_sig: 1000.0
+      s1_shape: 2.0
+      s1_rate: 500.0
+      s1_sig: 1000.0
+      a1_shape: 45.0
+      a1_rate: 10.0
+      a1_sig: 10.0
+      n1_shape: 25.0
+      n1_rate: 10.0
+      n1_sig=: 10.0
+      s2_shape: 2.0
+      s2_rate: 10.0
+      s2_sig: 20.0
+      n2_shape1: 5.0
+      n2_shape2: 10.0
+      n2_sig: 40.0
       k_shape1: 100.0
       k_shape2: 225.0
       k_sig: 80.0

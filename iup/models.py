@@ -208,7 +208,7 @@ class PSPModel(UptakeModel):
                 "k_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(k_sigs, np.array(num_group_levels))
             c1_tot = np.sum(c1_devs[groups], axis=1) + c1
-            s1_tot = np.sum(s1_devs[groups], axis=1) + s1
+            s1_tot = -1 * (np.sum(s1_devs[groups], axis=1) + s1)
             a1_tot = np.sum(a1_devs[groups], axis=1) + a1
             n1_tot = np.sum(n1_devs[groups], axis=1) + n1
             s2_tot = np.sum(s2_devs[groups], axis=1) + s2
