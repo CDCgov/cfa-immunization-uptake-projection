@@ -151,7 +151,7 @@ class LSLIModel(UptakeModel):
         a = numpyro.sample("a", dist.Beta(a_shape1, a_shape2))
         h = numpyro.sample("h", dist.Beta(h_shape1, h_shape2))
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
-        c = numpyro.sample("n", dist.Normal(c_center, c_spread))
+        c = numpyro.sample("c", dist.Normal(c_center, c_spread))
         k = numpyro.sample("k", dist.Beta(k_shape1, k_shape2))
         d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
         # If grouping factors are given, find the group-specific deviations for each datum
