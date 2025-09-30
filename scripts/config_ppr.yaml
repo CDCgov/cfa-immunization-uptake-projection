@@ -28,7 +28,7 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  - name: PSRModel
+  - name: PPRModel
     seed: 1
     params:
       b1_shape: 2.0
@@ -69,7 +69,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [PSRModel]
+  model: [PPRModel]
   forecast_date: [2023-09-01]
   # If blank: use start and end in "forecast_timeframe" and interval
   # in "evaluation_timeframe".
