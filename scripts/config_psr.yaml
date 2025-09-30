@@ -28,29 +28,23 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  - name: PSPModel
+  - name: PSRModel
     seed: 1
     params:
-      c1_shape: 2.0
-      c1_rate: 500.0
-      c1_sig: 1000.0
-      s1_shape: 2.0
-      s1_rate: 500.0
-      s1_sig: 1000.0
-      a1_shape: 45.0
-      a1_rate: 10.0
-      a1_sig: 10.0
-      n1_shape: 25.0
-      n1_rate: 10.0
-      n1_sig: 10.0
-      s2_shape: 2.0
-      s2_rate: 10.0
-      s2_sig: 20.0
-      n2_shape1: 5.0
-      n2_shape2: 10.0
-      n2_sig: 40.0
+      b1_shape: 3.0
+      b1_rate: 2.0
+      b1_sig: 25.0
+      n1_shape: 5.0
+      n1_rate: 2.0
+      n1_sig: 25.0
+      b2_shape: 40.0
+      b2_rate: 2.0
+      b2_sig: 1.0
+      n2_shape: 5.0
+      n2_rate: 2.0
+      n2_sig: 25.0
       k_shape1: 50.0
-      k_shape2: 150.0
+      k_shape2: 120.0
       k_sig: 80.0
       d_shape: 1000
       d_rate: 3.0
@@ -75,7 +69,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [PSPModel]
+  model: [PSRModel]
   forecast_date: [2023-09-01]
   # If blank: use start and end in "forecast_timeframe" and interval
   # in "evaluation_timeframe".
