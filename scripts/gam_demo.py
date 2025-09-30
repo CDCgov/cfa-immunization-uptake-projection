@@ -1,3 +1,4 @@
+import arviz as az
 import jax.numpy as jnp
 import numpy as np
 import numpyro
@@ -129,28 +130,45 @@ def gam(
     lam_rate=1.0,
     sigma_shape=1.0,
     sigma_rate=1.0,
-    beta_mu=0,
 ):
-    # sample the priors
+    n, p = X.shape
+
+    # Priors
     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
     sigma = numpyro.sample("sigma", dist.InverseGamma(sigma_shape, sigma_rate))
 
-    beta_mu_array = jnp.array([beta_mu] * S.shape[0])
-    S_inv = jnp.linalg.inv(S)
+    # Constraint matrix for identifiability: 1ᵀXβ = 0
+    C = X.T @ jnp.ones(n)  # Constraint vector
 
-    beta = numpyro.sample(
-        "beta", dist.MultivariateNormal(beta_mu_array, S_inv * sigma / lam)
+    # Penalized precision matrix, add 1e-6 to make sure stability
+    precision = (lam * S) + 1e-6 * jnp.eye(p)
+
+    # Sample coefficients with constraint
+    beta_unconstrained = numpyro.sample(
+        "beta_unconstrained",
+        dist.MultivariateNormal(
+            jnp.zeros(p - 1), jnp.linalg.inv(precision[: p - 1, : p - 1])
+        ),
     )
+    # because the constraint, only p - 1 beta need to estimated, the left one can be calculated
 
-    # Identifiability constraints: 1^TX\beta = 0
-    Identity = jnp.array([1.0] * X.shape[0])
+    # QR decomposition: project to satisfy constraint
+    Q, R = jnp.linalg.qr(C.reshape(-1, 1))
+    P = jnp.eye(p) - Q @ Q.T  # Projection matrix
 
-    if Identity @ X @ beta.T == 0.0:
-        # model formula
-        mu = X @ beta.T
+    beta_full = jnp.zeros(p)
+    beta_full = beta_full.at[1:].set(
+        beta_unconstrained
+    )  # pad 0 at the start of beta_unconstrainted
 
-        # return the sample of observed estimate given mean
-        numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
+    # constrained beta: map unconstrained padded version to constrained direction.
+    beta = P @ beta_full
+
+    # Compute mean
+    mu = X @ beta
+
+    # Likelihood
+    numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
 
 
 bss = get_Bspline_basis(x=x)
@@ -162,7 +180,7 @@ rng_key = random.PRNGKey(0)
 rng_key, rng_key_ = random.split(rng_key)
 
 kernel = NUTS(gam)
-mcmc_par = {"num_warmup": 1000, "num_samples": 1000, "num_chains": 1}
+mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
 mcmc = MCMC(
     kernel,
     num_warmup=mcmc_par["num_warmup"],
@@ -170,3 +188,8 @@ mcmc = MCMC(
     num_chains=mcmc_par["num_chains"],
 )
 mcmc.run(rng_key_, S=S, X=X, estimate=estimate)
+
+
+data = az.from_numpyro(mcmc)
+az.plot_trace(data)
+az.plot_posterior(data)
