@@ -31,21 +31,21 @@ models:
   - name: PSRModel
     seed: 1
     params:
-      b1_shape: 3.0
-      b1_rate: 2.0
-      b1_sig: 25.0
-      n1_shape: 5.0
+      b1_shape: 2.0
+      b1_rate: 25.0
+      b1_sig: 80.0
+      n1_shape: 2.0
       n1_rate: 2.0
-      n1_sig: 25.0
-      b2_shape: 40.0
-      b2_rate: 2.0
+      n1_sig: 40.0
+      b2_shape: 180.0
+      b2_rate: 1.0
       b2_sig: 1.0
-      n2_shape: 5.0
-      n2_rate: 2.0
-      n2_sig: 25.0
-      k_shape1: 50.0
-      k_shape2: 120.0
-      k_sig: 80.0
+      n2_shape: 100.0
+      n2_rate: 20.0
+      n2_sig: 40.0
+      a_shape1: 100.0
+      a_shape2: 120.0
+      a_sig: 80.0
       d_shape: 1000
       d_rate: 3.0
 

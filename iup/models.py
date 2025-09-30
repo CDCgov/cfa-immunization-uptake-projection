@@ -80,9 +80,9 @@ class UptakeModel(abc.ABC):
     mcmc = None
 
 
-class PSRModel(UptakeModel):
+class PPRModel(UptakeModel):
     """
-    Subclass of UptakeModel for a mixed Polynomial Splice Reciprocal model.
+    Subclass of UptakeModel for a mixed Polynomial Plus Reciprocal model.
     """
 
     def __init__(self, seed: int):
@@ -95,10 +95,10 @@ class PSRModel(UptakeModel):
         """
         self.rng_key = random.key(seed)
         self.fit_key, self.pred_key = random.split(self.rng_key, 2)
-        self.model = PSRModel._poly_splice_recip
+        self.model = PPRModel._poly_plus_recip
 
     @staticmethod
-    def _poly_splice_recip(
+    def _poly_plus_recip(
         elapsed,
         N_vax=None,
         N_tot=None,
@@ -117,14 +117,14 @@ class PSRModel(UptakeModel):
         n2_shape=1.0,
         n2_rate=1.0,
         n2_sig=1.0,
-        k_shape1=1.0,
-        k_shape2=1.0,
-        k_sig=1.0,
+        a_shape1=1.0,
+        a_shape2=1.0,
+        a_sig=1.0,
         d_shape=350.0,
         d_rate=1.0,
     ):
         """
-        Fit a mixed Polynomial Splice Reciprocal model on training data.
+        Fit a mixed Polynomial Plus Reciprocal model on training data.
 
         Parameters
         elapsed: np.array
@@ -153,7 +153,7 @@ class PSRModel(UptakeModel):
         n1 = numpyro.sample("n1", dist.Gamma(n1_shape, n1_rate))
         b2 = numpyro.sample("s2", dist.Gamma(b2_shape, b2_rate))
         n2 = numpyro.sample("n2", dist.Gamma(n2_shape, n2_rate))
-        k = numpyro.sample("k", dist.Beta(k_shape1, k_shape2))
+        a = numpyro.sample("k", dist.Beta(a_shape1, a_shape2))
         d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
@@ -169,8 +169,8 @@ class PSRModel(UptakeModel):
             n2_sigs = numpyro.sample(
                 "n2_sigs", dist.Exponential(n2_sig), sample_shape=(num_group_factors,)
             )
-            k_sigs = numpyro.sample(
-                "k_sigs", dist.Exponential(k_sig), sample_shape=(num_group_factors,)
+            a_sigs = numpyro.sample(
+                "a_sigs", dist.Exponential(a_sig), sample_shape=(num_group_factors,)
             )
             b1_devs = numpyro.sample(
                 "b1_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
@@ -184,36 +184,23 @@ class PSRModel(UptakeModel):
             n2_devs = numpyro.sample(
                 "n2_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(n2_sigs, np.array(num_group_levels))
-            k_devs = k_devs = numpyro.sample(
-                "k_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(k_sigs, np.array(num_group_levels))
+            a_devs = numpyro.sample(
+                "a_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            ) * np.repeat(a_sigs, np.array(num_group_levels))
             b1_tot = np.sum(b1_devs[groups], axis=1) + b1
             n1_tot = np.sum(n1_devs[groups], axis=1) + n1
             b2_tot = np.sum(b2_devs[groups], axis=1) + b2
             n2_tot = np.sum(n2_devs[groups], axis=1) + n2
-            k_tot = np.sum(k_devs[groups], axis=1) + k
-            # Calculate the determined parameters of the reciprocal
-            a_tot = -1 * (
-                ((1 + (b2_tot * k_tot) ** n2_tot) ** 2)
-                * (n1_tot / n2_tot)
-                * (b1_tot / b2_tot)
-                * (k_tot ** (n1_tot - n2_tot))
-            )
-            c_tot = ((b1_tot * k_tot) ** n1_tot) - a_tot / (
-                1 + (b2_tot * k_tot) ** n2_tot
-            )
+            a_tot = np.sum(a_devs[groups], axis=1) + a
             # Calculate latent true uptake at each datum
-            mu = ((b1_tot * elapsed) ** n1_tot) * (elapsed <= k) + (
-                c_tot + a_tot / (1 + (b2_tot * elapsed) ** n2_tot)
-            ) * (elapsed > k)
+            mu = (
+                a_tot
+                + (b1_tot * elapsed**n1_tot)
+                - (a_tot / (1 + b2_tot * elapsed**n2_tot))
+            )
         else:
-            # Calculate the determined parameters of the reciprocal
-            a = ((1 + (b2 * k) ** n2) ** 2) * (n1 / n2) * (b1 / b2) * (k ** (n1 - n2))
-            c = ((b1 * k) ** n1) - a / (1 + (b2 * k) ** n2)
             # Calculate latent true uptake at each datum
-            mu = ((b1 * elapsed) ** n1) * (elapsed <= k) + (
-                c + a / (1 + (b2 * elapsed) ** n2)
-            ) * (elapsed > k)
+            mu = a + (b1 * elapsed**n1) - (a / (1 + b2 * elapsed**n2))
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d
@@ -226,18 +213,18 @@ class PSRModel(UptakeModel):
         season_start_day: int,
     ) -> CumulativeUptakeData:
         """
-        Format preprocessed data for fitting a Polynomial Splice Reciprocal model.
+        Format preprocessed data for fitting a Polynomial Plus Reciprocal model.
 
         Parameters:
         data: CumulativeUptakeData
-            training data for fitting a Polynomial Splice Reciprocal model
+            training data for fitting a Polynomial Plus Reciprocal model
          season_start_month: int
             first month of the overwinter disease season
         season_start_day: int
             first day of the first month of the overwinter disease season
 
         Returns:
-            Cumulative uptake data ready for fitting a Polynomial Splice Reciprocal model.
+            Cumulative uptake data ready for fitting a Polynomial Plus Reciprocal model.
 
         Details
         The following steps are required to prepare preprocessed data:
@@ -265,7 +252,7 @@ class PSRModel(UptakeModel):
         mcmc: dict,
     ) -> Self:
         """
-        Fit a mixed Polynomial Splice Reciprocal model on training data.
+        Fit a mixed Polynomial Plus Reciprocal model on training data.
 
         Parameters
         data: CumulativeUptakeData
@@ -278,7 +265,7 @@ class PSRModel(UptakeModel):
             control parameters for mcmc fitting
 
         Returns
-        PSPModel
+        PPRModel
             model object with grouping factor combinaions
             and the model fit all stored as attributes
 
@@ -335,9 +322,9 @@ class PSRModel(UptakeModel):
             n2_shape=params["n2_shape"],
             n2_rate=params["n2_rate"],
             n2_sig=params["n2_sig"],
-            k_shape1=params["k_shape1"],
-            k_shape2=params["k_shape2"],
-            k_sig=params["k_sig"],
+            a_shape1=params["a_shape1"],
+            a_shape2=params["a_shape2"],
+            a_sig=params["a_sig"],
             d_shape=params["d_shape"],
             d_rate=params["d_rate"],
         )
@@ -351,7 +338,7 @@ class PSRModel(UptakeModel):
         scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
     ) -> pl.DataFrame:
         """
-        Add columns to a scaffold of dates for forecasting from a Polynomial Splice Reciprocal model.
+        Add columns to a scaffold of dates for forecasting from a Polynomial Plus Reciprocal model.
 
         Parameters:
         scaffold: pl.DataFrame
@@ -389,7 +376,7 @@ class PSRModel(UptakeModel):
         season_start_day: int,
     ) -> pl.DataFrame:
         """
-        Make projections from a fit Polynomial Splice Reciprocal model.
+        Make projections from a fit Polynomial Plus Reciprocal model.
 
         Parameters
         start_date: dt.date
@@ -409,7 +396,7 @@ class PSRModel(UptakeModel):
             first day of the first month of the overwinter disease season
 
         Returns
-        LSLModel
+        PPRModel
             the model with incident and cumulative projections as attributes
 
         Details
@@ -428,7 +415,7 @@ class PSRModel(UptakeModel):
             season_start_day,
         )
 
-        scaffold = PSRModel.augment_scaffold(
+        scaffold = PPRModel.augment_scaffold(
             scaffold, season_start_month, season_start_day
         )
 
