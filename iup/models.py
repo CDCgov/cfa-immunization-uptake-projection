@@ -149,11 +149,11 @@ class PPRModel(UptakeModel):
         Provides the model structure and priors for a Logistic Splice Linear model.
         """
         # Sample the overall average value for each parameter
-        b1 = numpyro.sample("c1", dist.Gamma(b1_shape, b1_rate))
+        b1 = numpyro.sample("b1", dist.Gamma(b1_shape, b1_rate))
         n1 = numpyro.sample("n1", dist.Gamma(n1_shape, n1_rate))
-        b2 = numpyro.sample("s2", dist.Gamma(b2_shape, b2_rate))
+        b2 = numpyro.sample("b2", dist.Gamma(b2_shape, b2_rate))
         n2 = numpyro.sample("n2", dist.Gamma(n2_shape, n2_rate))
-        a = numpyro.sample("k", dist.Beta(a_shape1, a_shape2))
+        a = numpyro.sample("a", dist.Beta(a_shape1, a_shape2))
         d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
