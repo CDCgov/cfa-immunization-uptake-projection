@@ -37,13 +37,13 @@ models:
       n1_shape: 2.0
       n1_rate: 2.0
       n1_sig: 40.0
-      b2_shape: 180.0
+      b2_shape: 100.0
       b2_rate: 1.0
       b2_sig: 1.0
       n2_shape: 100.0
-      n2_rate: 20.0
+      n2_rate: 22.0
       n2_sig: 40.0
-      a_shape1: 100.0
+      a_shape1: 80.0
       a_shape2: 120.0
       a_sig: 80.0
       d_shape: 1000
