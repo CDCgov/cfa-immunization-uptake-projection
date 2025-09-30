@@ -193,7 +193,7 @@ class PSRModel(UptakeModel):
             n2_tot = np.sum(n2_devs[groups], axis=1) + n2
             k_tot = np.sum(k_devs[groups], axis=1) + k
             # Calculate the determined parameters of the reciprocal
-            a_tot = (
+            a_tot = -1 * (
                 ((1 + (b2_tot * k_tot) ** n2_tot) ** 2)
                 * (n1_tot / n2_tot)
                 * (b1_tot / b2_tot)
