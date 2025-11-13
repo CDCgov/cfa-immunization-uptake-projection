@@ -28,24 +28,22 @@ evaluation_timeframe:
 
 # Details of the models to fit
 models:
-  - name: PPRModel
+  - name: PPRRModel
     seed: 1
     params:
-      b1_shape: 2.0
-      b1_rate: 25.0
-      b1_sig: 200.0
-      n1_shape: 20.0
-      n1_rate: 20.0
-      n1_sig: 40.0
-      b2_shape: 120.0
+      b1_shape: 25.0
+      b1_rate: 500.0
+      b1_sig: 40.0
+      n1_shape: 500.0
+      n1_rate: 420.0
+      b2_shape: 160.0
       b2_rate: 1.0
-      b2_sig: 1.0
-      n2_shape: 450.0
-      n2_rate: 100.0
-      n2_sig: 40.0
-      a_shape1: 80.0
-      a_shape2: 120.0
-      a_sig: 200.0
+      b2_sig: 0.1
+      n2_shape: 1200.0
+      n2_rate: 200.0
+      a_shape1: 140.0
+      a_shape2: 200.0
+      a_sig: 40.0
       d_shape: 2000
       d_rate: 4.0
 
@@ -69,7 +67,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [PPRModel]
+  model: [PPRRModel]
   forecast_date: [2023-09-01]
   # If blank: use start and end in "forecast_timeframe" and interval
   # in "evaluation_timeframe".
