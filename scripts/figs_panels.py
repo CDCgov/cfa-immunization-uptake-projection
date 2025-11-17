@@ -240,11 +240,11 @@ flu_state = load_data(
 
 # %% Load posterior checks and forecasts
 postcheck = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/lsli/postchecks.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/pprr/postchecks.parquet",
     flu_state,
 )
 forecast = load_pred(
-    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/lsli/forecasts.parquet",
+    "/home/tec0/cfa-immunization-uptake-projection/output/forecasts/pprr/forecasts.parquet",
     flu_state,
 )
 pred = pl.concat(
