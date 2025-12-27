@@ -409,16 +409,16 @@ def layer_with_facets(charts: List, encodings: Dict):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--obs", help="observed data")
-    p.add_argument("--pred", help="forecasts")
-    p.add_argument("--score", help="score metrics")
-    p.add_argument("--config", help="config yaml file")
+    p.add_argument("--obs", help="observed data", required=True)
+    p.add_argument("--pred", help="forecasts", required=True)
+    p.add_argument("--score", help="score metrics", required=True)
+    p.add_argument("--config", help="config yaml file", required=True)
     args = p.parse_args()
 
     @st.cache_data
     def load_data():
         return {
-            "observed": pl.read_parquet(Path(args.obs, "nis_data.parquet")),
+            "observed": pl.read_parquet(args.obs),
             "forecasts": pl.read_parquet(Path(args.pred, "forecasts.parquet")),
         }
 

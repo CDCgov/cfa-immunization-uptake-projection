@@ -42,8 +42,8 @@ def preprocess(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--output", help="output directory", required=True)
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--output", help="output parquet file", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
@@ -60,5 +60,9 @@ if __name__ == "__main__":
         season_start_day=config["data"]["season_start_day"],
     )
 
-    Path(args.output).mkdir(parents=True, exist_ok=True)
-    clean_data.write_parquet(Path(args.output, "nis_data.parquet"))
+    if clean_data.height == 0:
+        raise RuntimeError("No data after preprocessing")
+
+    # ensure output directory exists
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    clean_data.write_parquet(args.output)
