@@ -5,11 +5,11 @@ data:
   # filter data; eg `vaccine: covid` means filter column "vaccine" for value "covid"
   filters:
     vaccine: [flu]
-    geography_type: [admin1] # For states, use admin1. For national, use "nation"
-    domain_type: [age]
-    domain: [18+ years]
-    indicator_type: [4-level vaccination and intent, uptake]
-    indicator: [received a vaccination]
+    geography_type: [admin1]
+    domain_type: ["age & possible risk"]
+    domain: [">=18 years"]
+    indicator_type: ["received a vaccination"]
+    indicator: ["yes"]
     time_type: [month]
   # keep only these data columns
   keep: [estimate, time_end, lci, uci, geography, sample_size] # For states, include geography
@@ -18,8 +18,8 @@ data:
 
 # Timeframe for the longest desired forecast
 forecast_timeframe:
-  start: 2023-09-01
-  end: 2024-06-30
+  start: 2009-09-01
+  end: 2022-06-30
   interval: 1mo
 
 # Spacing between multiple forecasts, for evaluation
@@ -53,7 +53,7 @@ mcmc:
 # score metrics
 scores:
   quantiles: [0.5] # Must specify at least one fraction
-  difference_by_date: [2024-03-31] # if blank, abs_diff will not be used
+  difference_by_date:
   others: [mspe]
 
 # Prediction credible interval plot
@@ -65,11 +65,6 @@ forecast_plots:
 
 diagnostics:
   model: [LPLModel]
-  forecast_date: [2023-09-01]
-  # If blank: use start and end in "forecast_timeframe" and interval
-  # in "evaluation_timeframe".
-  # If one element: use that date only.
-  # If two elements: use the first date as start and
-  # the second date as end, separated by ["evaluation_timeframe"]["interval"].
+  forecast_date:
   plot: [posterior_density_plot, parameter_trace_plot]
   table: [print_posterior_dist, print_model_summary]

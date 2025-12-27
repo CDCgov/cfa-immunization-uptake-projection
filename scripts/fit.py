@@ -89,19 +89,17 @@ def fit_model(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data directory")
-    p.add_argument("--output", help="output directory")
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--data", help="input data", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(
-        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
-    )
-
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
+
+    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
     all_models = fit_all_models(input_data, config)
 

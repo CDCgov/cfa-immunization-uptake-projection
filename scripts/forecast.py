@@ -99,18 +99,16 @@ def run_all_forecasts(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data directory")
-    p.add_argument("--models", help="fitted model directory")
-    p.add_argument("--output", help="output directory")
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--data", help="input data", required=True)
+    p.add_argument("--models", help="fitted model directory", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(
-        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
-    )
+    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
     with open(Path(args.models, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
