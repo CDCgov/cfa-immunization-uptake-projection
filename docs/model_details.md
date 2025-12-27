@@ -1,19 +1,20 @@
-# Overview
+# Model details
 
 These are the mathematical details of the models used to capture and forecast vaccine uptake. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true uptake curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
 
-# Logistic Plus Linear (LPL) Model
+## Logistic Plus Linear (LPL) Model
 
-## Notation
+### Notation
 
 The following notation will be used for the LPL model:
+
 - $t$ = time since the start of the season, expressed as the fraction of a year elapsed
 - $V_t^{obs}$ = number of people surveyed at time $t$ who are vaccinated
 - $N_t^{obs}$ = total number of people surveyed at time $t$
 - $c_t$ = latent true cumulative uptake on day $t$
 - $G$ = grouping factors (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
 
-## Summary
+### Summary
 
 At a high level, the LPL model is structured as follows:
 
@@ -35,7 +36,7 @@ Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion 
 \end{align*}
 ```
 
-## Observation Layer
+### Observation Layer
 
 The observed uptake is considered a draw from the beta-binomial distribution, governed in part by the true latent uptake in the population.
 
@@ -47,7 +48,7 @@ The observed uptake is considered a draw from the beta-binomial distribution, go
 
 Note that the shape parameters $\alpha$ and $\beta$ are not declared explicitly. Rather they are implied by an alternate mean and concentration parametrization, described below.
 
-## Functional Structure
+### Functional Structure
 
 The model's functional structure describes the latent true uptake curve:
 
@@ -57,7 +58,7 @@ The model's functional structure describes the latent true uptake curve:
 \end{align*}
 ```
 
- $c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
+$c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
 
 ```math
 \begin{align*}
@@ -66,7 +67,7 @@ The model's functional structure describes the latent true uptake curve:
 \end{align*}
 ```
 
-## Hierarchical Structure
+### Hierarchical Structure
 
 Certain parameters of the latent true uptake curve have group-specific deviations, determined as follows:
 
@@ -79,7 +80,7 @@ Certain parameters of the latent true uptake curve have group-specific deviation
 
 and similarly for $M$.
 
-## Priors
+### Priors
 
 ```math
 \begin{align*}
