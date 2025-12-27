@@ -60,26 +60,27 @@ def diagnostic_table(
 def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) -> dict:
     """Select the model to diagnose based on the model name and the training end date"""
 
-    assert len(config["diagnostics"]["forecast_date"]) <= 2, (
-        "forecast_date should be None or a list of length 1 or 2"
-    )
-
     if config["diagnostics"]["forecast_date"] is None:
+        print("No diagnostic forecast date selected; using all forecast dates.")
         forecast_dates = pl.date_range(
             config["forecast_timeframe"]["start"],
             config["forecast_timeframe"]["end"],
-            config["evaluation_timeframe"]["interval"],
+            config["forecast_timeframe"]["interval"],
             eager=True,
         )
     elif len(config["diagnostics"]["forecast_date"]) == 1:
         forecast_dates = config["diagnostics"]["forecast_date"]
-    else:
+    elif len(config["diagnostics"]["forecast_date"]) == 2:
+        assert config["evaluation_timeframe"]["interval"] is not None
+
         forecast_dates = pl.date_range(
             config["diagnostics"]["forecast_date"][0],
             config["diagnostics"]["forecast_date"][1],
             interval=config["evaluation_timeframe"]["interval"],
             eager=True,
         )
+    else:
+        raise RuntimeError("forecast_date should be None or a list of length 1 or 2")
 
     sel_keys = [
         key

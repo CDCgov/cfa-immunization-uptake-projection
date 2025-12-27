@@ -96,15 +96,17 @@ def map_value_to_index(groups: pl.DataFrame) -> dict:
 
     Returns
     dict
-        Dictionary of dictionaries: for each grouping factor, a dictionary mapping levels to numeric codes
+        {grouping_factor => {value => integer_index}}
     """
-    mapping = {}
-    for i in range(groups.shape[1]):
-        col_name = groups.columns[i]
-        unique_values = groups.select(col_name).unique().to_series().to_list()
-        mapping[col_name] = {v: j for j, v in enumerate(unique_values)}
-
-    return mapping
+    return {
+        col: {
+            value: i
+            for i, value in enumerate(
+                groups.select(pl.col(col).unique().sort()).to_series()
+            )
+        }
+        for col in groups.columns
+    }
 
 
 def value_to_index(
@@ -133,10 +135,14 @@ def value_to_index(
         "Keys of mapping do not match grouping factor names."
     )
 
-    for i in range(groups.shape[1]):
-        col_name = groups.columns[i]
+    for col_name in groups.columns:
+        if missing_values := set(
+            groups.select(pl.col(col_name).unique()).to_series()
+        ) - set(mapping[col_name].keys()):
+            raise RuntimeError(f"Missing indices for values: {missing_values}")
+
         groups = groups.with_columns(
-            pl.col(col_name).replace(mapping[col_name]).cast(pl.UInt8).alias(col_name)
+            pl.col(col_name).replace_strict(mapping[col_name]).cast(pl.UInt8)
         )
 
     array = groups.to_numpy() + np.cumsum([0] + num_group_levels[:-1])
