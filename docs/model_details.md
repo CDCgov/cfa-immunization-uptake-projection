@@ -8,88 +8,58 @@ These are the mathematical details of the models used to capture and forecast va
 
 The following notation will be used for the LPL model:
 
-- $t$ = time since the start of the season, expressed as the fraction of a year elapsed
-- $V_t^{obs}$ = number of people surveyed at time $t$ who are vaccinated
-- $N_t^{obs}$ = total number of people surveyed at time $t$
-- $c_t$ = latent true cumulative uptake on day $t$
-- $G$ = grouping factors (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
+- $t$: Time, where $t=0$ is the start of the season, measured in years (i.e., $t=1$ is 1 year after $t=0$)
+- $v_{gt}$: observed uptake among group $g$ at time $t$
+- $V_g(t)$: latent true cumulative uptake on day $t$
+- $g = (\mathcal{X}_{g1}, \ldots, \mathcal{X}_{gN})$: each group $g$ encodes the values $\mathcal{X}_{gi}$ of each of the $N$ modeled features $i$. In our main analysis, the features are season, geographic area, and age group.
 
-### Summary
+### Formulation
 
-At a high level, the LPL model is structured as follows:
-
-```math
-\begin{align*}
-&V_{t,G}^{obs} \sim \text{Pr}(V_{t,G}^{obs}~|~c_{t,G},~N_{t,G}^{obs}) \\
-&c_{t,G} := f_{\text{Logistic + Linear}}(t,~\phi_G) \\
-&\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
-&\xi \sim \text{Pr}(\xi) \\
-\end{align*}
-```
-
-Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$. As a result, the standard error of the mean $\sigma_{t,G}^{SEM}$ is considered known for each data point, and $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are as follows:
+The observed uptakes are beta distributed around the latent uptake:
 
 ```math
-\begin{align*}
-&N_{t,G}^{obs} = \frac{c_{t,G}^{obs} \cdot (1-c_{t,G}^{obs})}{{\sigma_{t,G}^{SEM}}^2} \\
-&V_{t,G}^{obs} = N_{t,G}^{obs} \cdot c_{t,G}^{obs} \\
-\end{align*}
+v_{gt} \sim \mathrm{Beta}(\alpha_{gt}, \beta_{gt})
 ```
 
-### Observation Layer
+The values $\alpha_{gt}$ and $\beta_{gt}$ are chosen so that the mean of this distribution is $V_g(t)$ and the variance best matches the reported NIS confidence intervals (see [below](#beta-variance)).
 
-The observed uptake is considered a draw from the beta-binomial distribution, governed in part by the true latent uptake in the population.
+The latent uptake follows the LPL:
 
-```math
-\begin{align*}
-&V_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta_{t,G_1,...,G_I}, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
-\end{align*}
-```
+$$
+V_g(t) = \frac{A_g}{1 + \exp\left\{-K (t-\tau)\right\}} + M_g t
+$$
 
-Note that the shape parameters $\alpha$ and $\beta$ are not declared explicitly. Rather they are implied by an alternate mean and concentration parametrization, described below.
+The group-level amplitude $A_g$ and slope $M_g$ are sums of feature value-level deviations from a grand mean. For $A_g$:
 
-### Functional Structure
+$$
+A_g = \mu_A + \sum_{i=1}^N \delta_{A,i,\mathcal{X}_{gi}}
+$$
 
-The model's functional structure describes the latent true uptake curve:
+where $\delta_{Aix}$ is the deviation for parameter $A$, feature $i$ (e.g., season), and group $g$ (which has, say, season $\mathcal{X}_{gi}$).
 
-```math
-\begin{align*}
-&c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I}}{1 + e^{-n \cdot (t - H)}} + M_{G_1,...,G_I} \cdot t \\
-\end{align*}
-```
+We specify a prior for each grand mean like $\mu_A$. The deviations are assumed to be normally distributed:
 
-$c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
+$$
+\delta_{Aix} \sim \mathcal{N}\left( 0, \sigma^2_A \right)
+$$
 
-```math
-\begin{align*}
-&\alpha_{t,G_1,...,G_I} = c_{t,G_1,...,G_I} \cdot d \\
-&\beta_{t,G_1,...,G_I} = (1 - c_{t,G_1,...,G_I}) \cdot d \\
-\end{align*}
-```
+and we specify a prior for each standard deviation $\sigma_A$.
 
-### Hierarchical Structure
-
-Certain parameters of the latent true uptake curve have group-specific deviations, determined as follows:
-
-```math
-\begin{align*}
-&A_{G_1,...,G_I} = A + A_{G_1} + ... + A_{G_I} \\
-&\frac{A_{G_i}}{\sigma_{A_{G_i}}} \sim \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
-\end{align*}
-```
-
-and similarly for $M$.
+The other logistic parameters $K$ and $\tau$ are assumed common to all groups.
 
 ### Priors
 
 ```math
 \begin{align*}
-&A \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }180.0) \\
-&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&H \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }225.0) \\
-&n \sim \text{Gamma}(\text{shape = }25.0, \text{ rate = }1.0) \\
-&M \sim \text{Gamma}(\text{shape = }1.0, \text{ rate = }10.0) \\
-&\sigma_{M_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&d \sim \text{Gamma}(\text{shape = }350.0, \text{ rate = }1.0) \\
+\mu_A &\sim \text{Beta}(100.0, 180.0) \\
+\sigma_A &\sim \text{Exponential}(40.0) \\
+\tau &\sim \text{Beta}(100.0, 225.0) \\
+K &\sim \text{Gamma}(\text{shape} = 25.0, \text{rate} = 1.0) \\
+\mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
+\sigma_M &\sim \text{Exponential}(40.0) \\
 \end{align*}
 ```
+
+### Beta variance
+
+The NIS data report the point estimate, which we interpret as the observed value $v_{gt}$, and 95% confidence intervals. Let $q_1 = 0.025$ and $q_2 = 1-q_1$ be those quantiles and $(x_1, x_2)$ be the confidence interval. Find the $n>0$ that minimizes $\sum_{j \in \{1, 2\}} \left(F^{-1}(q_j; \alpha, \beta) - x_j\right)^2$, where $\alpha = v_{gt} n$ and $\beta = (1 - v_{gt})n$.
