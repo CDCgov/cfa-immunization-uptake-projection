@@ -2,7 +2,10 @@
 name = "iup"
 version = "0.1.0"
 description = ""
-authors = [{ name = "Edward Schrom", email = "tec0@cdc.gov" }]
+authors = [
+    { name = "Scott Olesen", email = "ulp7@cdc.gov" },
+    { name = "Edward Schrom", email = "tec0@cdc.gov" },
+]
 requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
