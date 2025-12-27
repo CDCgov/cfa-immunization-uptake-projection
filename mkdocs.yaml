@@ -1,0 +1,59 @@
+site_name: IUP
+
+nav:
+  - index.md
+  - analytical_plan.md
+  - gam.md
+  - model_details.md
+  - model_journal.md
+
+repo_url: https://github.com/CDCgov/cfa-immunization-uptake-projection
+repo_name: repo
+
+# advanced configuration ------------------------------------------------------
+theme:
+  name: "material"
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            # see <https://mkdocstrings.github.io/python/usage/> for options
+            show_root_heading: true
+            show_object_full_path: true
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences:
+      custom_fences:
+        # enables rendering of ```mermaid and ```math blocks
+        # the !! parts of this section will trip yaml checkers as "unsafe"
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+        - name: math
+          class: arithmatex
+          format:
+            !!python/object/apply:pymdownx.arithmatex.arithmatex_fenced_format {
+              kwds: { mode: generic, tag: div },
+            }
+
+# math rendering
+extra_javascript:
+  - javascript/katex.js
+  - https://unpkg.com/katex@0/dist/katex.min.js
+  - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+
+extra_css:
+  - https://unpkg.com/katex@0/dist/katex.min.css
