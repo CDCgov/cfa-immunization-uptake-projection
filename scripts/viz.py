@@ -60,7 +60,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "forecast_start"] + config["data"]["groups"]
+    dimensions = ["model", "forecast_start"] + config["groups"]
     default_channels = {
         "column": ("Column", "forecast_start"),
         "row": ("Row", "model"),
@@ -95,9 +95,14 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     # draw indices of trajectories randomly #
     rng = np.random.default_rng()
 
+    min_id = pred["sample_id"].cast(pl.Int64).min()
+    max_id = pred["sample_id"].cast(pl.Int64).max()
+    assert isinstance(min_id, int)
+    assert isinstance(max_id, int)
+
     selected_ids = rng.integers(
-        low=pred["sample_id"].cast(pl.Int64).min(),
-        high=pred["sample_id"].cast(pl.Int64).max() + 1,
+        low=min_id,
+        high=max_id + 1,
         size=n_samples,
     )
 
@@ -106,11 +111,10 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     # merge observed data with prediction by the combination of models and forecast starts
     model_forecast_starts = pred.select(["model", "forecast_start"]).unique()
     plot_obs = obs.join(model_forecast_starts, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique())
-        for factor in config["data"]["groups"]
+        pl.col(factor).is_in(pred[factor].unique()) for factor in config["groups"]
     )
 
-    groupings = ["model", "forecast_start", "time_end"] + config["data"]["groups"]
+    groupings = ["model", "forecast_start", "time_end"] + config["groups"]
 
     data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
 
@@ -168,14 +172,11 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     # data process: merge observed data with prediction by combinations of model and forecast start #
     forecast_starts = pred.select(["model", "forecast_start"]).unique()
     plot_obs = obs.join(forecast_starts, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique())
-        for factor in config["data"]["groups"]
+        pl.col(factor).is_in(pred[factor].unique()) for factor in config["groups"]
     )
 
     # summarize sample predictions by grouping factors #
-    groups_to_include = ["model", "forecast_start", "time_end"] + config["data"][
-        "groups"
-    ]
+    groups_to_include = ["model", "forecast_start", "time_end"] + config["groups"]
 
     plot_pred = (
         pred.group_by(groups_to_include)
@@ -196,7 +197,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "forecast_start"] + config["data"]["groups"]
+    dimensions = ["model", "forecast_start"] + config["groups"]
 
     if "season" in dimensions:
         default_channels = {
@@ -329,7 +330,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "score_name"] + config["data"]["groups"]
+    dimensions = ["model", "score_name"] + config["groups"]
     if "season" in dimensions:
         default_channels = {
             "color": ("Color", "model"),

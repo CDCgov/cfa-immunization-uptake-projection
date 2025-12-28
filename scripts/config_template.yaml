@@ -1,32 +1,13 @@
-# The data sets to load and how to interpret them
-data:
-  season_start_month: 7
-  season_start_day: 1
-  # filter data; eg `vaccine: covid` means filter column "vaccine" for value "covid"
-  filters:
-    vaccine: [flu]
-    geography_type: [admin1]
-    domain_type: ["age & possible risk"]
-    domain: [">=18 years"]
-    indicator_type: ["received a vaccination"]
-    indicator: ["yes"]
-    time_type: [month]
-  # keep only these data columns
-  keep: [estimate, time_end, lci, uci, geography, sample_size] # For states, include geography
-  # use these columns as grouping factors. Use an empty list if there are none.
-  groups: [season, geography] # For states, include geography
+season:
+  start_month: 7 # July
+  start_day: 1
+  end_month: 4 # April
+  end_day: 1
+  first_year: 2018 # 2009 for full data
+  last_year: 2022
 
-# Timeframe for the longest desired forecast
-forecast_timeframe:
-  start: 2009-09-01
-  end: 2022-06-30
-  interval: 1mo
+groups: [season, geography]
 
-# Spacing between multiple forecasts, for evaluation
-evaluation_timeframe:
-  interval: # e.g. 3mo, otherwise leave this blank if you don't want evaluation
-
-# Details of the models to fit
 models:
   - name: LPLModel
     seed: 42
@@ -44,16 +25,22 @@ models:
       d_shape: 1000
       d_rate: 3.0
 
-# MCMC control parameters
 mcmc:
   num_warmup: 1000
   num_samples: 1000
   num_chains: 4
 
+forecasts:
+  start_date:
+    start: 2021-08-01
+    end: 2021-08-01
+    interval: 1mo
+  end_date: 2022-04-01
+
 # score metrics
 scores:
   quantiles: [0.5] # Must specify at least one fraction
-  difference_by_date:
+  difference_by_date: [2024-04-01]
   others: [mspe]
 
 # Prediction credible interval plot
@@ -64,7 +51,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  model: [LPLModel]
   forecast_date:
+  model: [LPLModel]
   plot: [posterior_density_plot, parameter_trace_plot]
   table: [print_posterior_dist, print_model_summary]

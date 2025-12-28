@@ -76,6 +76,10 @@ class UptakeModel(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def __init__(self, seed: int):
+        pass
+
     # save for future models #
     mcmc = None
 

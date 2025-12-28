@@ -28,8 +28,8 @@ def eval_all_forecasts(
     forecast_starts = pred["forecast_start"].unique()
 
     # group sample forecasts by date and grouping factors #
-    if config["data"]["groups"] is not None:
-        groups = config["data"]["groups"] + ["time_end"]
+    if config["groups"] is not None:
+        groups = config["groups"] + ["time_end"]
     else:
         groups = ["time_end"]
 
@@ -49,7 +49,7 @@ def eval_all_forecasts(
             test = CumulativeUptakeData(
                 data.filter(
                     pl.col("time_end") >= forecast_start,
-                    pl.col("time_end") <= config["forecast_timeframe"]["end"],
+                    pl.col("time_end") <= config["forecasts"]["end_date"],
                 )
             )
 
@@ -82,7 +82,7 @@ def eval_all_forecasts(
                         score_funcs[score_fun_name] = getattr(eval, score_fun_name)
 
                 scores = eval.summarize_score(
-                    test, summary_pred, config["data"]["groups"], score_funcs
+                    test, summary_pred, config["groups"], score_funcs
                 )
 
                 scores = scores.with_columns(
@@ -108,10 +108,7 @@ if __name__ == "__main__":
     pred = pl.read_parquet(Path(args.pred, "forecasts.parquet"))
     data = pl.read_parquet(args.obs)
 
-    if config["evaluation_timeframe"]["interval"] is not None:
-        Path(args.output).mkdir(parents=True, exist_ok=True)
-        eval_all_forecasts(data, pred, config).write_parquet(
-            Path(args.output, "scores.parquet")
-        )
-    else:
-        print("No evaluation timeframe specified, skipping evaluation.")
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    eval_all_forecasts(data, pred, config).write_parquet(
+        Path(args.output, "scores.parquet")
+    )

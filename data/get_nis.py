@@ -17,7 +17,6 @@ data = (
         pl.col("indicator") == pl.lit("yes"),
         pl.col("id") == pl.lit("vh55-3he6"),
     )
-    .with_columns(pl.col(["estimate", "lci", "uci"]).round(3))
     .select(
         [
             "geography_type",
@@ -33,4 +32,4 @@ data = (
     .collect()
 )
 
-data.write_csv("nis.csv")
+data.write_parquet("data/raw.parquet")
