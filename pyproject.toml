@@ -24,8 +24,6 @@ dependencies = [
     "pathlib>=1.0.1,<2",
     "streamlit>=1.45.1,<2",
     "scipy>=1.15.3",
-    "pre-commit>=4.2.0",
-    "ipykernel>=6.29.5",
 ]
 
 [project.optional-dependencies]
