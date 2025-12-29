@@ -27,11 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gam = ["scikit-fda"]
-
+gam = ["scikit-fda>=0.10.1"]
 
 [tool.uv]
-
 [tool.uv.sources]
 nisapi = { git = "https://github.com/CDCgov/nis-py-api" }
 
@@ -45,4 +43,10 @@ dev = [
     "ipykernel>=7.1.0",
     "pre-commit>=4.2.0",
     "pytest>=8.4.0",
+]
+mkdocs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.1",
+    "mkdocstrings>=1.0.0",
+    "mkdocstrings-python>=2.0.1",
 ]
