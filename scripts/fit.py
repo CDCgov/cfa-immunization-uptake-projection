@@ -19,15 +19,12 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
 
-    if config["evaluation_timeframe"]["interval"] is not None:
-        forecast_dates = pl.date_range(
-            config["forecast_timeframe"]["start"],
-            config["forecast_timeframe"]["end"],
-            config["evaluation_timeframe"]["interval"],
-            eager=True,
-        ).to_list()
-    else:
-        forecast_dates = [config["forecast_timeframe"]["start"]]
+    forecast_dates = pl.date_range(
+        config["forecasts"]["start_date"]["start"],
+        config["forecasts"]["start_date"]["end"],
+        config["forecasts"]["start_date"]["interval"],
+        eager=True,
+    )
 
     all_models = {}
 
@@ -41,8 +38,8 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
 
         augmented_data = model_class.augment_data(
             data,
-            config["data"]["season_start_month"],
-            config["data"]["season_start_day"],
+            config["season"]["start_month"],
+            config["season"]["start_day"],
         )
 
         for forecast_date in forecast_dates:
@@ -52,7 +49,7 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
                 seed=config_model["seed"],
                 params=config_model["params"],
                 mcmc=config["mcmc"],
-                grouping_factors=config["data"]["groups"],
+                grouping_factors=config["groups"],
                 forecast_start=forecast_date,
             )
 
@@ -71,8 +68,6 @@ def fit_model(
     grouping_factors: List[str] | None,
     forecast_start: dt.date,
 ) -> iup.models.UptakeModel:
-    """fit model using training data, return fitted model object"""
-
     """Run a single model for a single forecast date"""
     train_data, _ = iup.UptakeData.split_train_test(data, forecast_start)
 
@@ -89,19 +84,17 @@ def fit_model(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data directory")
-    p.add_argument("--output", help="output directory")
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--data", help="input data", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(
-        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
-    )
-
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
+
+    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
     all_models = fit_all_models(input_data, config)
 

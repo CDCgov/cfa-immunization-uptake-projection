@@ -44,11 +44,13 @@ def check_date_match(
                     "time_end"
                 ].to_list()
                 assert set(data_times) == set(pred_times), (
-                    "The forecast and the data should have the same forecast dates for each group."
+                    "The forecast and the data should have the same forecast dates for each group. "
+                    f"Instead, we have {data_times=} and {pred_times=}"
                 )
     else:
         assert (data["time_end"] == pred["time_end"]).all(), (
-            "The forecast and the data should have the same forecast dates"
+            "The forecast and the data should have the same forecast dates. "
+            f"Instead, we have {data['time_end']=} and {pred['time_end']=}."
         )
 
     if groups is not None:

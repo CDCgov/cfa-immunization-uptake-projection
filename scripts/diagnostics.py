@@ -1,9 +1,9 @@
 import argparse
+import datetime as dt
 import pickle
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
-import polars as pl
 import yaml
 
 import iup
@@ -12,7 +12,9 @@ import iup.models
 
 
 def diagnostic_plot(
-    models: Dict[str, iup.models.UptakeModel], config: Dict[str, Any], output_dir
+    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel],
+    config: Dict[str, Any],
+    output_dir,
 ):
     """select the fitted model using model name and training end date
     and generate selected diagnostic plots"""
@@ -35,7 +37,9 @@ def diagnostic_plot(
 
 
 def diagnostic_table(
-    models: Dict[str, iup.models.UptakeModel], config: Dict[str, Any], output_dir
+    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel],
+    config: Dict[str, Any],
+    output_dir,
 ):
     """select the fitted model using model name and training end date
     and generate selected diagnostics: summary/posterior as parquet"""
@@ -57,36 +61,27 @@ def diagnostic_table(
             )
 
 
-def select_model_to_diagnose(models: Dict[str, iup.models.UptakeModel], config) -> dict:
+def select_model_to_diagnose(
+    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel], config
+) -> dict:
     """Select the model to diagnose based on the model name and the training end date"""
 
-    assert len(config["diagnostics"]["forecast_date"]) <= 2, (
-        "forecast_date should be None or a list of length 1 or 2"
-    )
+    forecast_dates = config["diagnostics"]["forecast_date"]
 
-    if config["diagnostics"]["forecast_date"] is None:
-        forecast_dates = pl.date_range(
-            config["forecast_timeframe"]["start"],
-            config["forecast_timeframe"]["end"],
-            config["evaluation_timeframe"]["interval"],
-            eager=True,
-        )
-    elif len(config["diagnostics"]["forecast_date"]) == 1:
-        forecast_dates = config["diagnostics"]["forecast_date"]
+    if forecast_dates is None:
+        sel_keys = [
+            (model, date)
+            for model, date in models.keys()
+            if model in config["diagnostics"]["model"]
+        ]
     else:
-        forecast_dates = pl.date_range(
-            config["diagnostics"]["forecast_date"][0],
-            config["diagnostics"]["forecast_date"][1],
-            interval=config["evaluation_timeframe"]["interval"],
-            eager=True,
-        )
-
-    sel_keys = [
-        key
-        for key in models.keys()
-        if key[0] in config["diagnostics"]["model"]
-        if key[1] in forecast_dates
-    ]
+        assert isinstance(forecast_dates, list)
+        assert all(isinstance(x, dt.date) for x in forecast_dates)
+        sel_keys = [
+            (model, date)
+            for model, date in models.keys()
+            if model in config["diagnostics"]["model"] and date in forecast_dates
+        ]
 
     return {key: models[key] for key in sel_keys}
 

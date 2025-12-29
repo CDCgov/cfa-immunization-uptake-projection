@@ -76,6 +76,10 @@ class UptakeModel(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def __init__(self, seed: int):
+        pass
+
     # save for future models #
     mcmc = None
 
@@ -161,7 +165,7 @@ class LPLModel(UptakeModel):
             A_devs = numpyro.sample(
                 "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(A_sigs, np.array(num_group_levels))
-            M_devs = M_devs = numpyro.sample(
+            M_devs = numpyro.sample(
                 "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             ) * np.repeat(M_sigs, np.array(num_group_levels))
             A_tot = np.sum(A_devs[groups], axis=1) + A

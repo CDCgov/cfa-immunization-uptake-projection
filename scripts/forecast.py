@@ -1,4 +1,5 @@
 import argparse
+import datetime as dt
 import pickle
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -34,10 +35,8 @@ def run_all_forecasts(
     all_forecasts = pl.DataFrame()
     all_postchecks = pl.DataFrame()
 
-    for model_details, fitted_model in fitted_models.items():
-        model_name = model_details[0]
-        forecast_date = model_details[1]
-
+    for (model_name, forecast_date), fitted_model in fitted_models.items():
+        assert isinstance(forecast_date, dt.date)
         assert hasattr(iup.models, model_name), (
             f"{model_name} is not a valid model type!"
         )
@@ -45,8 +44,8 @@ def run_all_forecasts(
 
         augmented_data = model_class.augment_data(
             data,
-            config["data"]["season_start_month"],
-            config["data"]["season_start_day"],
+            config["season"]["start_month"],
+            config["season"]["start_day"],
         )
 
         train_data, test_data = iup.UptakeData.split_train_test(
@@ -61,16 +60,16 @@ def run_all_forecasts(
         postcheck = fitted_model.predict(
             start_date=train_data["time_end"].min(),
             end_date=train_data["time_end"].max(),
-            interval=config["forecast_timeframe"]["interval"],
+            interval=config["forecasts"]["start_date"]["interval"],
             test_dates=train_dates,
-            groups=config["data"]["groups"],
-            season_start_month=config["data"]["season_start_month"],
-            season_start_day=config["data"]["season_start_day"],
+            groups=config["groups"],
+            season_start_month=config["season"]["start_month"],
+            season_start_day=config["season"]["start_day"],
         )
 
         postcheck = postcheck.with_columns(
             forecast_start=forecast_date,
-            forecast_end=config["forecast_timeframe"]["end"],
+            forecast_end=config["forecasts"]["end_date"],
             model=pl.lit(model_name),
         )
 
@@ -78,17 +77,17 @@ def run_all_forecasts(
 
         forecast = fitted_model.predict(
             start_date=forecast_date,
-            end_date=config["forecast_timeframe"]["end"],
-            interval=config["forecast_timeframe"]["interval"],
+            end_date=config["forecasts"]["end_date"],
+            interval=config["forecasts"]["start_date"]["interval"],
             test_dates=test_dates,
-            groups=config["data"]["groups"],
-            season_start_month=config["data"]["season_start_month"],
-            season_start_day=config["data"]["season_start_day"],
+            groups=config["groups"],
+            season_start_month=config["season"]["start_month"],
+            season_start_day=config["season"]["start_day"],
         )
 
         forecast = forecast.with_columns(
             forecast_start=forecast_date,
-            forecast_end=config["forecast_timeframe"]["end"],
+            forecast_end=config["forecasts"]["end_date"],
             model=pl.lit(model_name),
         )
 
@@ -99,18 +98,16 @@ def run_all_forecasts(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="input data directory")
-    p.add_argument("--models", help="fitted model directory")
-    p.add_argument("--output", help="output directory")
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--data", help="input data", required=True)
+    p.add_argument("--models", help="fitted model directory", required=True)
+    p.add_argument("--output", help="output directory", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(
-        pl.scan_parquet(Path(args.input, "nis_data.parquet")).collect()
-    )
+    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
     with open(Path(args.models, "model_fits.pkl"), "rb") as f:
         models = pickle.load(f)
