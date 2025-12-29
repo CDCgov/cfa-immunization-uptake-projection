@@ -26,6 +26,9 @@ dependencies = [
     "scipy>=1.15.3",
 ]
 
+[project.optional-dependencies]
+gam = ["scikit-fda"]
+
 
 [tool.uv]
 
@@ -43,4 +46,3 @@ dev = [
     "pre-commit>=4.2.0",
     "pytest>=8.4.0",
 ]
-gam = ["scikit-fda"]
