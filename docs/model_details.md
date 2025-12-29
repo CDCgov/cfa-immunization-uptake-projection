@@ -9,19 +9,33 @@ These are the mathematical details of the models used to capture and forecast va
 The following notation will be used for the LPL model:
 
 - $t$: Time, where $t=0$ is the start of the season, measured in years (i.e., $t=1$ is 1 year after $t=0$)
-- $v_{gt}$: observed uptake among group $g$ at time $t$
-- $V_g(t)$: latent true cumulative uptake on day $t$
-- $g = (\mathcal{X}_{g1}, \ldots, \mathcal{X}_{gN})$: each group $g$ encodes the values $\mathcal{X}_{gi}$ of each of the $N$ modeled features $i$. In our main analysis, the features are season, geographic area, and age group.
+- $v_{gt}$: NIS point estimate for uptake among group $g$ at time $t$
+- $s_{gt}$: NIS sample size for group $g$ at time $t$
+- $n_{gt} = \mathrm{round}(v_{gt} s_{gt})$: crude estimate of number of sampled individuals in $g$ at time $t$ who are vaccinated
+- $V_g(t)$: latent true cumulative uptake at time $t$
+- $g = (\mathcal{X}_{g1}, \ldots, \mathcal{X}_{gm})$: each group $g$ encodes the values $\mathcal{X}_{gi}$ of each of the $m$ modeled features $i$. In our main analysis, the features are season, geographic area, and age group.
 
 ### Formulation
 
-The observed uptakes are beta distributed around the latent uptake:
+To account for the NIS-reported observation error, encoded in $s_{gt}$, we use a beta-binomial distribution:
 
-```math
-v_{gt} \sim \mathrm{Beta}(\alpha_{gt}, \beta_{gt})
-```
+$$
+n_{gt} \sim \mathrm{BetaBinom}(s_{gt}, \alpha_{gt}, \beta_{gt})
+$$
 
-The values $\alpha_{gt}$ and $\beta_{gt}$ are chosen so that the mean of this distribution is $V_g(t)$ and the variance best matches the reported NIS confidence intervals (see [below](#beta-variance)).
+The values $\alpha_{gt}$ and $\beta_{gt}$ are chosen so that the mean of this distribution is $V_g(t)$:
+
+$$
+\frac{\alpha_{gt}}{\alpha_{gt} + \beta_{gt}} = V_g(t)
+$$
+
+and they are fully specified by a common weight parameter $D$:
+
+$$
+\alpha_{gt} + \beta_{gt} = D
+$$
+
+which follows some prior.
 
 The latent uptake follows the LPL:
 
@@ -32,7 +46,7 @@ $$
 The group-level amplitude $A_g$ and slope $M_g$ are sums of feature value-level deviations from a grand mean. For $A_g$:
 
 $$
-A_g = \mu_A + \sum_{i=1}^N \delta_{A,i,\mathcal{X}_{gi}}
+A_g = \mu_A + \sum_{i=1}^m \delta_{A,i,\mathcal{X}_{gi}}
 $$
 
 where $\delta_{Aix}$ is the deviation for parameter $A$, feature $i$ (e.g., season), and group $g$ (which has, say, season $\mathcal{X}_{gi}$).
@@ -57,6 +71,7 @@ The other logistic parameters $K$ and $\tau$ are assumed common to all groups.
 K &\sim \text{Gamma}(\text{shape} = 25.0, \text{rate} = 1.0) \\
 \mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
 \sigma_M &\sim \text{Exponential}(40.0) \\
+D &\sim \text{Gamma}(\text{shape} = 1000, \text{rate} = 3.0)
 \end{align*}
 ```
 
