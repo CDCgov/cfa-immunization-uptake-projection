@@ -8,6 +8,8 @@ season:
 
 groups: [season, geography]
 
+geographies: [Alaska, New Jersey, Connecticut]
+
 models:
   - name: LPLModel
     seed: 42

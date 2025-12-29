@@ -15,7 +15,15 @@ def preprocess(
     groups: List[str] | None,
     season_start_month: int,
     season_start_day: int,
+    geographies: List[str] | None,
 ) -> iup.CumulativeUptakeData:
+    # filter for specific geographies
+    def geo_filter(df: pl.LazyFrame) -> pl.LazyFrame:
+        if geographies is None:
+            return df
+        else:
+            return df.filter(pl.col("geography").is_in(geographies))
+
     data = iup.CumulativeUptakeData(
         raw_data.rename({"sample_size": "N_tot"})
         .with_columns(
@@ -36,8 +44,6 @@ def preprocess(
             pl.col("geography")
             .is_in(["Puerto Rico", "U.S. Virgin Islands", "Guam"])
             .not_(),
-            # DEBUG: this is for testing purposes -- use only a few states
-            pl.col("geography").is_in(["Alaska", "New Jersey", "Connecticut"]),
             # remove data that don't fit nicely into seasons
             pl.col("time_end").is_between(
                 date(
@@ -52,6 +58,7 @@ def preprocess(
                 ),
             ),
         )
+        .pipe(geo_filter)
         .sort("time_end")
         .collect()
     )
@@ -74,11 +81,15 @@ if __name__ == "__main__":
 
     raw_data = pl.scan_parquet(args.input)
 
+    assert isinstance(config, dict)
+    geographies = config.get("geographies", None)
+
     clean_data = preprocess(
         raw_data,
         groups=config["groups"],
         season_start_month=config["season"]["start_month"],
         season_start_day=config["season"]["start_day"],
+        geographies=geographies,
     )
 
     if clean_data.height == 0:
