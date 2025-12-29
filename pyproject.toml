@@ -24,7 +24,6 @@ dependencies = [
     "pathlib>=1.0.1,<2",
     "streamlit>=1.45.1,<2",
     "scipy>=1.15.3",
-    "scikit-fda>=0.10.1",
     "pre-commit>=4.2.0",
     "ipykernel>=6.29.5",
 ]
@@ -36,6 +35,8 @@ dev = [
     "ipykernel>=6.29.5,<7",
     "pre-commit>=4.0.1,<5",
 ]
+
+gam = ["scikit-fda>=0.10.1"]
 
 [tool.uv]
 
