@@ -111,7 +111,8 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     # merge observed data with prediction by the combination of models and forecast starts
     model_forecast_starts = pred.select(["model", "forecast_start"]).unique()
     plot_obs = obs.join(model_forecast_starts, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique()) for factor in config["groups"]
+        pl.col(factor).is_in(pred[factor].unique().implode())
+        for factor in config["groups"]
     )
 
     groupings = ["model", "forecast_start", "time_end"] + config["groups"]
@@ -150,7 +151,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     chart = layer_with_facets([obs_chart, pred_chart], encodings)
 
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart)
 
 
 def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
@@ -172,7 +173,8 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     # data process: merge observed data with prediction by combinations of model and forecast start #
     forecast_starts = pred.select(["model", "forecast_start"]).unique()
     plot_obs = obs.join(forecast_starts, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique()) for factor in config["groups"]
+        pl.col(factor).is_in(pred[factor].unique().implode())
+        for factor in config["groups"]
     )
 
     # summarize sample predictions by grouping factors #
@@ -290,7 +292,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     chart_list = [interval_chart, obs_chart, pred_chart]
     chart = layer_with_facets(chart_list, encodings)
 
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart)
 
 
 def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
@@ -379,7 +381,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
         .resolve_scale(y="independent")
     )
 
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart)
 
 
 ## helper: feed correct argument to altair ##
