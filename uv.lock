@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -793,7 +793,6 @@ dependencies = [
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pyyaml" },
-    { name = "scikit-fda" },
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "streamlit" },
@@ -807,6 +806,9 @@ dev = [
     { name = "ipykernel" },
     { name = "pre-commit" },
     { name = "pytest" },
+]
+gam = [
+    { name = "scikit-fda" },
 ]
 
 [package.metadata]
@@ -830,14 +832,14 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.3.3,<9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3,<9" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
-    { name = "scikit-fda", specifier = ">=0.10.1" },
+    { name = "scikit-fda", marker = "extra == 'gam'", specifier = ">=0.10.1" },
     { name = "scikit-learn", specifier = ">=1.5.2,<2" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "streamlit", specifier = ">=1.45.1,<2" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5" },
     { name = "vl-convert-python", specifier = ">=1.7.0,<2" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "gam"]
 
 [[package]]
 name = "jax"
