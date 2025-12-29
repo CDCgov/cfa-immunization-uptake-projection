@@ -20,5 +20,5 @@ jobs:
 
       - name: Test
         run: |
-          uv sync --all-extras --all-groups
+          uv sync --only-dev --frozen
           uv run pytest -v
