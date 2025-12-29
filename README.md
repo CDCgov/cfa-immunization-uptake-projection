@@ -18,8 +18,6 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
 
 1. Read the docs at <https://cdcgov.github.io/cfa-immunization-uptake-projection>, or build them locally with `mkdocs serve`
 1. This project uses [`uv`](https://docs.astral.sh/uv/) for environment and dependency management. Ensure you can `uv sync`. Use the uv-managed virtual environment (e.g., by prepending `uv run`).
-1. Get a [Socrata app token](https://github.com/CDCgov/nis-py-api?tab=readme-ov-file#getting-started) and save it in `scripts/socrata_app_token.txt`.
-1. Cache NIS data with `make nis`.
 1. Copy the config template in `scripts/config_template.yaml` to `scripts/config.yaml` and fill in the necessary fields. See the [file structure](#config-file-structure) below.
 1. Run `make all` to run the model fitting and forecasting pipeline. This will create six `output/` subfolders:
    - `settings`: a copy of the config.
@@ -29,7 +27,7 @@ Use <https://github.com/CDCgov/nis-py-api> for access to the NIS data.
    - `forecasts`: posterior predictions and forecasts.
    - `scores`: evaluation scores comparing model structures and/or forecast dates. Each run of the pipeline is assigned a `RUN_ID`. When a new `RUN_ID` is given, a new subfolder will be created inside each of the above six folders to store the corresponding outputs. When an existing `RUN_ID` is given, the contents of that `RUN_ID`'s existing subfolders will be overwritten, assuming the pipeline inputs have changed since the last run. `RUN_ID` can be assigned in line 1 of the Makefile or directly in the command line `make all RUN_ID=name_of_run`.
 1. Run `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, credible intervals, and evaluation scores, with options of dimensions and filters to customize the visualization.
-1. Run `make clean` to remove all outputs for a particular `RUN_ID` and `make delete_nis` to delete the NIS data from the cache.
+1. Run `make clean` to remove all outputs for a particular `RUN_ID` .
 
 ## Config file structure
 
