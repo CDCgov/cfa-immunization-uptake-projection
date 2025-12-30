@@ -107,9 +107,8 @@ class LPLModel(UptakeModel):
         elapsed,
         N_vax=None,
         N_tot=None,
-        groups=None,
-        num_group_factors=0,
-        num_group_levels=[0],
+        data_level_matrix: np.ndarray | None = None,
+        level_factor_matrix: np.ndarray | None = None,
         A_shape1=100.0,
         A_shape2=180.0,
         A_sig=40.0,
@@ -154,31 +153,56 @@ class LPLModel(UptakeModel):
         n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
         M = numpyro.sample("M", dist.Gamma(M_shape, M_rate))
         d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
+
         # If grouping factors are given, find the group-specific deviations for each datum
-        if groups is not None:
+        if data_level_matrix is not None:
+            assert level_factor_matrix is not None
+            n_data, n_levels = data_level_matrix.shape
+            _, n_factors = level_factor_matrix.shape
+            assert level_factor_matrix.shape[0] == n_levels
+
+            if N_vax is not None:
+                assert len(N_vax) == n_data
+
+            if N_tot is not None:
+                assert len(N_tot) == n_data
+
             A_sigs = numpyro.sample(
-                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+                "A_sigs", dist.Exponential(A_sig), sample_shape=(n_factors,)
             )
             M_sigs = numpyro.sample(
-                "M_sigs", dist.Exponential(M_sig), sample_shape=(num_group_factors,)
+                "M_sigs", dist.Exponential(M_sig), sample_shape=(n_factors,)
             )
-            A_devs = numpyro.sample(
-                "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(A_sigs, np.array(num_group_levels))
-            M_devs = numpyro.sample(
-                "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(M_sigs, np.array(num_group_levels))
-            A_tot = np.sum(A_devs[groups], axis=1) + A
-            M_tot = np.sum(M_devs[groups], axis=1) + M
+
+            A_zs = numpyro.sample("A_zs", dist.Normal(0, 1), sample_shape=(n_levels,))
+            M_zs = numpyro.sample("M_zs", dist.Normal(0, 1), sample_shape=(n_levels,))
+
+            A_devs = numpyro.deterministic(
+                "A_devs",
+                jnp.matmul(level_factor_matrix, A_sigs) * A_zs,  # type: ignore
+            )
+            M_devs = numpyro.deterministic(
+                "M_devs",
+                jnp.matmul(level_factor_matrix, M_sigs) * M_zs,  # type: ignore
+            )
+
+            A_tot = A + jnp.matmul(data_level_matrix, A_devs)
+            M_tot = M + jnp.matmul(data_level_matrix, M_devs)
+
             # Calculate latent true uptake at each datum
-            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            )
         else:
             # Calculate latent true uptake at each datum if no grouping factors
-            mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            )
+
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d
-        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
+        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
@@ -253,17 +277,14 @@ class LPLModel(UptakeModel):
 
         # Tranform the levels of the grouping factors into numeric codes
         if groups is not None:
-            self.num_group_factors = len(groups)
-            self.num_group_levels = iup.utils.count_unique_values(self.group_combos)
-            self.value_to_index = iup.utils.map_value_to_index(data.select(groups))
-            group_codes = iup.utils.value_to_index(
-                data.select(groups), self.value_to_index, self.num_group_levels
+            self.level_to_index = iup.utils.map_level_to_index(data.select(groups))
+            data_level_matrix, level_factor_matrix = iup.utils.get_design_matrices(
+                data.select(groups), self.level_to_index
             )
         else:
-            group_codes = None
-            self.num_group_factors = 0
-            self.num_group_levels = [0]
-            self.value_to_index = None
+            self.level_to_index = None
+            data_level_matrix = None
+            level_factor_matrix = None
 
         # Prepare the data to be fed to the model. Must be numpy arrays.
         elapsed = data["elapsed"].to_numpy()
@@ -283,9 +304,8 @@ class LPLModel(UptakeModel):
             elapsed=elapsed,
             N_vax=N_vax,
             N_tot=N_tot,
-            groups=group_codes,
-            num_group_factors=self.num_group_factors,
-            num_group_levels=self.num_group_levels,
+            data_level_matrix=data_level_matrix,
+            level_factor_matrix=level_factor_matrix,
             A_shape1=params["A_shape1"],
             A_shape2=params["A_shape2"],
             A_sig=params["A_sig"],
@@ -393,10 +413,9 @@ class LPLModel(UptakeModel):
         predictive = Predictive(self.model, self.mcmc.get_samples())
 
         if groups is not None:
-            # Make a numpy array of numeric codes for grouping factor levels
-            # that matches the same codes used when fitting the model
-            group_codes = iup.utils.value_to_index(
-                scaffold.select(groups), self.value_to_index, self.num_group_levels
+            assert self.level_to_index is not None
+            data_level_matrix, level_factor_matrix = iup.utils.get_design_matrices(
+                scaffold.select(groups), self.level_to_index
             )
 
             # Make a prediction-machine from the fit model
@@ -405,9 +424,8 @@ class LPLModel(UptakeModel):
                     self.pred_key,
                     elapsed=scaffold["elapsed"].to_numpy(),
                     N_tot=scaffold["N_tot"].to_numpy(),
-                    groups=group_codes,
-                    num_group_factors=self.num_group_factors,
-                    num_group_levels=self.num_group_levels,
+                    data_level_matrix=data_level_matrix,
+                    level_factor_matrix=level_factor_matrix,
                 )["obs"]
             ).transpose()
         else:

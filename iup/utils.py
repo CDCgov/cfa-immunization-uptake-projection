@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Tuple
 
 import numpy as np
 import polars as pl
@@ -86,9 +86,11 @@ def date_to_elapsed(
         return (date_col - season_start).dt.total_days()
 
 
-def map_value_to_index(groups: pl.DataFrame) -> dict:
+def map_level_to_index(groups: pl.DataFrame) -> dict[Tuple[str, Any], int]:
     """
-    Choose a numeric index for each level of each grouping factor in a data frame.
+    Choose a numeric index for each level (i.e., factor and value) in a data frame.
+    There is a single set of indices for all factors (e.g., index 0 refer to a
+    particular factor *and* level, like season 2019/2020).
 
     Parameters
     groups: pl.DataFrame
@@ -96,72 +98,50 @@ def map_value_to_index(groups: pl.DataFrame) -> dict:
 
     Returns
     dict
-        {grouping_factor => {value => integer_index}}
+        { (factor, level) => index }, e.g., { ("season", "2019/2020") => 0 }
     """
     return {
-        col: {
-            value: i
-            for i, value in enumerate(
-                groups.select(pl.col(col).unique().sort()).to_series()
+        x: i
+        for i, x in enumerate(
+            sorted(
+                set(
+                    (factor, level)
+                    for factor in groups.columns
+                    for level in groups[factor]
+                )
             )
-        }
-        for col in groups.columns
+        )
     }
 
 
-def value_to_index(
-    groups: pl.DataFrame, mapping: dict, num_group_levels: List[int,]
-) -> np.ndarray:
+def get_design_matrices(
+    groups: pl.DataFrame, level_to_index: dict[Tuple[str, Any], int]
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Replace each level of each grouping factor in a data frame, using a pre-determined mapping.
+    Create design matrices
 
-    Parameters
-    groups: pl.DataFrame
-        levels of grouping factors (cols) for multiple data points (rows)
-    mapping: dict
-        mapping of each level of each grouping factor to a numeric code
-    num_group_levels: bool
-        total number of levels for each grouping factor
+    Args:
+        groups: each column is a factor; each row is an observation; values are
+            the levels of each factor for that observation
+        level_to_index: see map_level_to_index()
 
-    Returns
-    np.ndarray
-        array of group levels but with numeric codes instead of level names
-
-    Details
-    Numeric codes will be used only once across grouping factors.
-    The keys of mapping must match the column names of groups.
+    Returns: data-level matrix and level-factor matrix. The data-level matrix
+        has row i column j = 1 if observation i is associated with level j
+        (where the index of the level if from `level_to_index`); otherwise 0.
+        The level-factor matrix has row i column j = 1 if level i is associated
+        with factor j (where the order of the factors is from the order of
+        columns in `groups`); otherwise 0.
     """
-    assert set(mapping.keys()) == set(groups.columns), (
-        "Keys of mapping do not match grouping factor names."
-    )
+    data_level_matrix = np.zeros((groups.height, len(level_to_index)))
+    for i, row in enumerate(groups.rows(named=True)):
+        for factor, level in row.items():
+            j = level_to_index[(factor, level)]
+            data_level_matrix[i, j] = 1
 
-    for col_name in groups.columns:
-        if missing_values := set(
-            groups.select(pl.col(col_name).unique()).to_series()
-        ) - set(mapping[col_name].keys()):
-            raise RuntimeError(f"Missing indices for values: {missing_values}")
+    factors = groups.columns
+    level_factor_matrix = np.zeros((len(level_to_index), groups.width))
+    for (factor, level), i in level_to_index.items():
+        j = factors.index(factor)
+        level_factor_matrix[i, j] = 1
 
-        groups = groups.with_columns(
-            pl.col(col_name).replace_strict(mapping[col_name]).cast(pl.UInt8)
-        )
-
-    array = groups.to_numpy() + np.cumsum([0] + num_group_levels[:-1])
-
-    return array
-
-
-def count_unique_values(df: pl.DataFrame | None) -> List[int,]:
-    """
-    Count unique values in each column of a data frame
-
-    Parameters
-    df: pl.DataFrame
-
-    Returns
-    List[int,]
-        Number of unique values in each column of the data frame
-    """
-    if df is None:
-        return [0]
-    else:
-        return [df.n_unique(subset=col) for col in df.columns]
+    return (data_level_matrix, level_factor_matrix)
