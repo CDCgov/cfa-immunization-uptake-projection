@@ -89,7 +89,8 @@ def test_augment_scaffold(frame):
     """
     output = iup.models.LPLModel.augment_scaffold(frame, 9, 1)
 
-    assert output.shape[1] == frame.shape[1]
+    assert output.shape == (frame.height, frame.width + 1)
+
     assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
         121.0,
         121.0,

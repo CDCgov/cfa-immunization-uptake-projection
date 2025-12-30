@@ -326,19 +326,14 @@ class LPLModel(UptakeModel):
 
         Returns:
             Scaffold with extra columns required by the Logistic Plus Linear model.
-
-        Details
-        An extra column is added for the time elapsed since the season start.
         """
-        scaffold = scaffold.with_columns(
+        return scaffold.with_columns(
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
             / 365,
             N_tot=N_tot,
         )
-
-        return scaffold
 
     def predict(
         self,
