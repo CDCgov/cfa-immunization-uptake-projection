@@ -13,6 +13,9 @@ if __name__ == "__main__":
     data = pl.read_parquet(args.input)
     out_dir = Path(args.output_dir)
 
+    # ensure output directory exists
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # national, every month, every season
     alt.Chart(
         data.filter(pl.col("geography_type") == pl.lit("nation"))

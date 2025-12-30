@@ -100,8 +100,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
     p.add_argument("--data", help="input data", required=True)
-    p.add_argument("--models", help="fitted model directory", required=True)
-    p.add_argument("--output", help="output directory", required=True)
+    p.add_argument("--fits", required=True)
+    p.add_argument("--output", help="forecasts parquet", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
@@ -109,11 +109,10 @@ if __name__ == "__main__":
 
     input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
-    with open(Path(args.models, "model_fits.pkl"), "rb") as f:
+    with open(args.fits, "rb") as f:
         models = pickle.load(f)
 
-    output = run_all_forecasts(input_data, models, config)
+    postchecks, forecasts = run_all_forecasts(input_data, models, config)
 
-    Path(args.output).mkdir(parents=True, exist_ok=True)
-    output[0].write_parquet(Path(args.output, "postchecks.parquet"))
-    output[1].write_parquet(Path(args.output, "forecasts.parquet"))
+    forecasts.write_parquet(args.output)
+    postchecks.write_parquet(Path(args.output).parent / "postchecks.parquet")

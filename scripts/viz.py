@@ -1,5 +1,4 @@
 import argparse
-from pathlib import Path
 from typing import Any, Dict, List
 
 import altair as alt
@@ -412,8 +411,8 @@ def layer_with_facets(charts: List, encodings: Dict):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--obs", help="observed data", required=True)
-    p.add_argument("--pred", help="forecasts", required=True)
+    p.add_argument("--data", help="observed data", required=True)
+    p.add_argument("--forecasts", help="forecasts", required=True)
     p.add_argument("--score", help="score metrics", required=True)
     p.add_argument("--config", help="config yaml file", required=True)
     args = p.parse_args()
@@ -421,16 +420,19 @@ if __name__ == "__main__":
     @st.cache_data
     def load_data():
         return {
-            "observed": pl.read_parquet(args.obs),
-            "forecasts": pl.read_parquet(Path(args.pred, "forecasts.parquet")),
+            "observed": pl.read_parquet(args.data),
+            "forecasts": pl.read_parquet(args.forecasts),
         }
 
     @st.cache_data
     def load_scores():
-        return pl.read_parquet(Path(args.score, "scores.parquet"))
+        return pl.read_parquet(args.score)
 
     @st.cache_data
     def load_config():
-        return yaml.safe_load(open(args.config, "r"))
+        with open(args.config) as f:
+            config = yaml.safe_load(f)
+
+        return config
 
     app()
