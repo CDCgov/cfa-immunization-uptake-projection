@@ -15,7 +15,7 @@ def app():
     # load data
     data = load_data()
     obs = data["observed"]
-    pred = data["forecasts"]
+    pred = data["preds"]
 
     # load config
     config = load_config()
@@ -312,36 +312,39 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
         "y": alt.Y("score_value:Q", title="Score value"),
     }
 
-    score_names = scores["score_name"].unique()
+    score_funs = scores["score_fun"].unique()
 
-    if "mspe" in score_names:
+    if "mspe" in score_funs:
         score_dict = {
             "mspe": "Mean Squared Prediction Error",
+            "eos_abs_diff": "End-of-season absolute error",
         }
     else:
         score_dict = {}
 
-    for name in score_names:
+    for name in score_funs:
         if name.startswith("abs_diff_"):
             score_dict[name] = "Absolute difference at " + name[len("abs_diff_") :]
 
     # every score name should have a label for the plot
-    assert set(score_names).issubset(score_dict.keys())
+    assert set(score_funs).issubset(score_dict.keys()), (
+        f"Missing score names: {set(score_funs) - set(score_dict.keys())}"
+    )
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "score_name"] + config["groups"]
+    dimensions = ["model", "score_fun"] + config["groups"]
     if "season" in dimensions:
         default_channels = {
             "color": ("Color", "model"),
-            "column": ("Column", "score_name"),
+            "column": ("Column", "score_fun"),
             "row": ("Row", "season"),
         }
     else:
         default_channels = {
             "color": ("Color", "model"),
-            "column": ("Column", "score_name"),
+            "column": ("Column", "score_fun"),
             "row": ("Row", "None"),
         }
 
@@ -369,9 +372,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
         )
         plot_score = scores.filter(pl.col(dim) == pl.lit(filter_val))
 
-    plot_score = plot_score.with_columns(
-        pl.col("score_name").replace_strict(score_dict)
-    )
+    plot_score = plot_score.with_columns(pl.col("score_fun").replace_strict(score_dict))
 
     chart = (
         alt.Chart(plot_score)
@@ -412,8 +413,8 @@ def layer_with_facets(charts: List, encodings: Dict):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--data", help="observed data", required=True)
-    p.add_argument("--forecasts", help="forecasts", required=True)
-    p.add_argument("--score", help="score metrics", required=True)
+    p.add_argument("--preds", help="predictions", required=True)
+    p.add_argument("--scores", help="score metrics", required=True)
     p.add_argument("--config", help="config yaml file", required=True)
     args = p.parse_args()
 
@@ -421,12 +422,12 @@ if __name__ == "__main__":
     def load_data():
         return {
             "observed": pl.read_parquet(args.data),
-            "forecasts": pl.read_parquet(args.forecasts),
+            "preds": pl.read_parquet(args.preds),
         }
 
     @st.cache_data
     def load_scores():
-        return pl.read_parquet(args.score)
+        return pl.read_parquet(args.scores)
 
     @st.cache_data
     def load_config():
