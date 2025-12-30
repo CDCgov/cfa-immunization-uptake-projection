@@ -1,5 +1,4 @@
 import abc
-import datetime as dt
 from typing import List
 
 import jax.numpy as jnp
@@ -63,10 +62,7 @@ class UptakeModel(abc.ABC):
     @abc.abstractmethod
     def predict(
         self,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_dates: pl.DataFrame | None,
+        test_dates: pl.DataFrame,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -182,7 +178,7 @@ class LPLModel(UptakeModel):
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d
-        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
+        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
@@ -342,10 +338,7 @@ class LPLModel(UptakeModel):
 
     def predict(
         self,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_dates: pl.DataFrame | None,
+        test_data: pl.DataFrame,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -354,13 +347,6 @@ class LPLModel(UptakeModel):
         Make projections from a fit Logistic Plus Linear model.
 
         Parameters
-        start_date: dt.date
-            the date on which projections should begin
-        end_date: dt.date
-            the date on which projections should end
-        interval: str
-            the time interval between projection dates,
-            following timedelta convention (e.g. '7d' = seven days)
         test_dates: pl.DataFrame | None
             exact target dates to use, when test data exists
         groups: (str,) | None
@@ -380,15 +366,8 @@ class LPLModel(UptakeModel):
 
         Forecasts are the made for each date in this scaffold.
         """
-        scaffold = build_scaffold(
-            start_date,
-            end_date,
-            interval,
-            test_dates,
-            self.group_combos,
-            season_start_month,
-            season_start_day,
-        )
+        assert "time_end" in test_data.columns
+        scaffold = build_scaffold(test_data, self.group_combos)
 
         scaffold = LPLModel.augment_scaffold(
             scaffold, season_start_month, season_start_day
@@ -399,6 +378,7 @@ class LPLModel(UptakeModel):
         if groups is not None:
             # Make a numpy array of numeric codes for grouping factor levels
             # that matches the same codes used when fitting the model
+            assert self.value_to_index is not None
             group_codes = iup.utils.value_to_index(
                 scaffold.select(groups), self.value_to_index, self.num_group_levels
             )
@@ -472,25 +452,12 @@ def extract_group_combos(
 
 
 def build_scaffold(
-    start_date: dt.date,
-    end_date: dt.date,
-    interval: str,
-    test_dates: pl.DataFrame | None,
-    group_combos: pl.DataFrame | None,
-    season_start_month: int,
-    season_start_day: int,
+    test_dates: pl.DataFrame, group_combos: pl.DataFrame | None
 ) -> pl.DataFrame:
     """
     Build a scaffold data frame to hold forecasts.
 
     Parameters
-    start_date: dt.date
-        the date on which projections should begin
-    end_date: dt.date
-        the date on which projections should end
-    interval: str
-        the time interval between projection dates,
-        following timedelta convention (e.g. '7d' = seven days)
     test_dates pl.DataFrame | None
         exact target dates to use, when test data exists
     group_combos: pl.DataFrame | None
@@ -508,32 +475,10 @@ def build_scaffold(
     The desired time frame for projections is repeated over grouping factors,
     if any grouping factors exist. This is required by multiple models.
     """
-    # If there is test data such that evaluation will be performed,
-    # use exactly the dates that are in the test data
-    if test_dates is not None:
-        scaffold = (
-            test_dates.filter((pl.col("time_end").is_between(start_date, end_date)))
-            .with_columns(estimate=pl.lit(0.0))
-            .unique()
-        )
-    # If there are no test data, use exactly the dates that were provided
-    else:
-        scaffold = (
-            pl.date_range(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                eager=True,
-            )
-            .alias("time_end")
-            .to_frame()
-            .with_columns(
-                estimate=pl.lit(0.0),
-                season=iup.utils.date_to_season(
-                    pl.col("time_end"), season_start_month, season_start_day
-                ),
-            )
-        )
+
+    scaffold = (
+        test_dates.select(["time_end"]).with_columns(estimate=pl.lit(0.0)).unique()
+    )
 
     if group_combos is not None:
         # Even if season is a grouping factor, predictions should not

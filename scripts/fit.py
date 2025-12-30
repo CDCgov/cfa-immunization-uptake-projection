@@ -68,7 +68,7 @@ def fit_model(
     forecast_start: dt.date,
 ) -> iup.models.UptakeModel:
     """Run a single model for a single forecast date"""
-    train_data, _ = iup.UptakeData.split_train_test(data, forecast_start)
+    train_data = iup.UptakeData(data.filter(pl.col("time_end") <= forecast_start))
 
     # Make an instance of the model, fit it using training data, and make projections
     fit_model = model_class(seed).fit(

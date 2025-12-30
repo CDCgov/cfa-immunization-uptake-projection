@@ -3,7 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
-from iup import CumulativeUptakeData, QuantileForecast, SampleForecast, eval
+import iup.eval
 
 
 def eval_all_forecasts(
@@ -23,72 +23,44 @@ def eval_all_forecasts(
     Returns:
         A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
     """
-    model_names = pred["model"].unique()
     forecast_starts = pred["forecast_start"].unique()
+    score_funs = [getattr(iup.eval, fun_name) for fun_name in config["score_funs"]]
 
-    # group sample forecasts by date and grouping factors #
-    if config["groups"] is not None:
-        groups = config["groups"] + ["time_end"]
-    else:
-        groups = ["time_end"]
+    assert config["groups"] is not None
+    cols = config["groups"] + [
+        "model",
+        "forecast_start",
+        "score_value",
+        "score_fun",
+        "score_type",
+    ]
 
     all_scores = pl.DataFrame()
 
-    for model in model_names:
-        for forecast_start in forecast_starts:
-            pred_by_start = SampleForecast(
-                CumulativeUptakeData(
-                    pred.filter(
-                        pl.col("model") == model,
-                        pl.col("forecast_start") == forecast_start,
-                    )
+    for forecast_start in forecast_starts:
+        # get a fit score
+        fit_data = data.filter(pl.col("time_end") <= forecast_start)
+        fit_pred = pred.filter(pl.col("time_end") <= forecast_start)
+
+        fc_data = data.filter(pl.col("time_end") > forecast_start)
+        fc_pred = pred.filter(pl.col("time_end") > forecast_start)
+
+        for score_fun in score_funs:
+            fit_scores = (
+                score_fun(
+                    obs=fit_data, pred=fit_pred, grouping_factors=config["groups"]
                 )
+                .with_columns(score_type=pl.lit("fit"))
+                .select(cols)
             )
 
-            test = CumulativeUptakeData(
-                data.filter(
-                    pl.col("time_end") >= forecast_start,
-                    pl.col("time_end") <= config["forecasts"]["end_date"],
-                )
+            fc_scores = (
+                score_fun(obs=fc_data, pred=fc_pred, grouping_factors=config["groups"])
+                .with_columns(score_type=pl.lit("forecast"))
+                .select(cols)
             )
 
-            # 1. Convert sample forecast pred into quantiles
-            assert config["scores"]["quantiles"] is not None, (
-                "Quantiles of posterior prediction distribution must be specified in the config file."
-            )
-
-            for quantile in config["scores"]["quantiles"]:
-                summary_pred = QuantileForecast(
-                    (
-                        pred_by_start.group_by(groups)
-                        .agg(pl.col("estimate").quantile(quantile))
-                        .with_columns(quantile=quantile)
-                    )
-                )
-
-                score_funcs = {}
-
-                if config["scores"]["difference_by_date"] is not None:
-                    score_funcs = {
-                        f"{eval.abs_diff.__name__}_{date}": eval.abs_diff(
-                            date, pl.col("time_end")
-                        )
-                        for date in config["scores"]["difference_by_date"]
-                    }
-
-                if config["scores"]["others"] is not None:
-                    for score_fun_name in config["scores"]["others"]:
-                        score_funcs[score_fun_name] = getattr(eval, score_fun_name)
-
-                scores = eval.summarize_score(
-                    test, summary_pred, config["groups"], score_funcs
-                )
-
-                scores = scores.with_columns(
-                    model=pl.lit(model),
-                )
-
-                all_scores = pl.concat([all_scores, scores])
+            all_scores = pl.concat([all_scores, fit_scores, fc_scores])
 
     return all_scores
 
@@ -96,8 +68,8 @@ def eval_all_forecasts(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
-    p.add_argument("--forecasts", help="forecasts parquet", required=True)
     p.add_argument("--data", help="observed data", required=True)
+    p.add_argument("--forecasts", help="forecasts parquet", required=True)
     p.add_argument("--output", help="output scores parquet", required=True)
     args = p.parse_args()
 

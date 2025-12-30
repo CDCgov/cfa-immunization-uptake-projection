@@ -1,4 +1,3 @@
-import datetime as dt
 from typing import List
 
 import polars as pl
@@ -45,30 +44,6 @@ class UptakeData(Data):
         Must have time_end and estimate columns; can have more
         """
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
-
-    @classmethod
-    def split_train_test(cls, uptake_data: "UptakeData", split_date: dt.date) -> tuple:
-        """
-        Subset a training or test set from data.
-
-        Parameters
-        uptake_data: UptakeData
-            cumulative or incident uptake data
-        split_date: dt.date
-            date at which to split data
-
-        Returns
-        pl.DataFrames
-            training and test portions of the cumulative or uptake data
-
-        Details
-        Training data are before the start date; test data are on or after.
-        Infers what type of UptakeData to return from what type was given.
-        """
-        train = uptake_data.sort("time_end").filter(pl.col("time_end") < split_date)
-        test = uptake_data.sort("time_end").filter(pl.col("time_end") >= split_date)
-
-        return type(uptake_data)(train), type(uptake_data)(test)
 
 
 class IncidentUptakeData(UptakeData):

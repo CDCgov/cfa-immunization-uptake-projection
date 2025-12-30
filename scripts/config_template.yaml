@@ -39,11 +39,7 @@ forecasts:
     interval: 1mo
   end_date: 2022-04-01
 
-# score metrics
-scores:
-  quantiles: [0.5] # Must specify at least one fraction
-  difference_by_date: [2024-04-01]
-  others: [mspe]
+score_funs: [mspe, eos_abs_diff]
 
 # Prediction credible interval plot
 forecast_plots:
