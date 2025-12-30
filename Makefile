@@ -7,29 +7,29 @@ OUTPUT_DIR = output/$(RUN_ID)
 CONFIG_COPY = $(OUTPUT_DIR)/config.yaml
 DATA = $(OUTPUT_DIR)/nis.parquet
 FITS = $(OUTPUT_DIR)/fits.pkl
-FORECASTS = $(OUTPUT_DIR)/forecasts.parquet
+PREDS = $(OUTPUT_DIR)/predictions.parquet
 DIAGNOSTICS = $(OUTPUT_DIR)/diagnostics/status.txt
 SCORES = $(OUTPUT_DIR)/scores.parquet
 
 PLOT_DATA = $(OUTPUT_DIR)/plots/data_one_season_by_state.png
-PLOT_FORECAST = $(OUTPUT_DIR)/plots/forecast_example.png
+PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
 
 
 .PHONY: clean viz
 
-all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PLOT_DATA) $(PLOT_FORECAST)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_FORECAST)
 
 viz:
 	streamlit run scripts/viz.py -- \
-		--data=$(DATA) --forecasts=$(FORECASTS) --scores=$(SCORES) --config=$(CONFIG)
+		--data=$(DATA) --preds=$(PREDS) --scores=$(SCORES) --config=$(CONFIG)
 
-$(SCORES): scripts/eval.py $(FORECASTS) $(DATA)
-	python $< --forecasts=$(FORECASTS) --data=$(DATA) --config=$(CONFIG) --output=$@
+$(SCORES): scripts/eval.py $(PREDS) $(DATA)
+	python $< --preds=$(PREDS) --data=$(DATA) --config=$(CONFIG) --output=$@
 
-$(PLOT_FORECAST): scripts/plot_forecast.py $(CONFIG) $(DATA) $(FORECASTS) $(SCORES)
-	python $< --config=$(CONFIG) --data=$(DATA) --forecasts=$(FORECASTS) --scores=$(SCORES) --output=$@
+$(PLOT_PREDS): scripts/plot_pred.py $(CONFIG) $(DATA) $(PREDS) $(SCORES)
+	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PREDS) --scores=$(SCORES) --output=$@
 
-$(FORECASTS): scripts/forecast.py $(DATA) $(FITS) $(CONFIG)
+$(PREDS): scripts/predict.py $(DATA) $(FITS) $(CONFIG)
 	python $< --data=$(DATA) --fits=$(FITS) --config=$(CONFIG) --output=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(FITS) $(CONFIG)

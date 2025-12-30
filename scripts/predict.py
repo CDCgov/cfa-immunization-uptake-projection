@@ -46,10 +46,12 @@ def run_all_forecasts(
             config["season"]["start_day"],
         )
 
-        test_dates = augmented_data.select(["time_end", "season"])
+        test_data = augmented_data.select(
+            ["time_end", "season"] + [x for x in config["groups"] if x != "season"]
+        )
 
         forecast = fitted_model.predict(
-            test_dates=test_dates,
+            test_data=test_data,
             groups=config["groups"],
             season_start_month=config["season"]["start_month"],
             season_start_day=config["season"]["start_day"],

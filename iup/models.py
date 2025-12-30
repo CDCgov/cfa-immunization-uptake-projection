@@ -62,7 +62,7 @@ class UptakeModel(abc.ABC):
     @abc.abstractmethod
     def predict(
         self,
-        test_dates: pl.DataFrame,
+        test_data: pl.DataFrame,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,

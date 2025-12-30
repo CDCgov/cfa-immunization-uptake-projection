@@ -12,7 +12,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
     p.add_argument("--data", required=True)
-    p.add_argument("--forecasts", required=True)
+    p.add_argument("--preds", required=True)
     p.add_argument("--scores", required=True)
     p.add_argument("--output", required=True)
     args = p.parse_args()
@@ -21,7 +21,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     obs_raw = pl.read_parquet(args.data)
-    forecasts_raw = pl.read_parquet(args.forecasts)
+    pred_samples = pl.read_parquet(args.preds)
     scores = pl.read_parquet(args.scores)
 
     out_dir = Path(args.output).parent
@@ -30,25 +30,33 @@ if __name__ == "__main__":
 
     # get the forecast cone
     half_alpha = (1.0 - CI_LEVEL) / 2
-    forecasts = forecasts_raw.group_by(
+    preds = pred_samples.group_by(
         ["season", "geography", "time_end", "model", "forecast_start"]
     ).agg(
-        pl.col("estimate").median().alias("fc_estimate"),
-        pl.col("estimate").quantile(half_alpha).alias("fc_lci"),
-        pl.col("estimate").quantile(1.0 - half_alpha).alias("fc_uci"),
+        pl.col("estimate").median().alias("pred_estimate"),
+        pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
+        pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
     )
 
     obs = obs_raw.select(
         ["season", "geography", "time_end", "estimate", "lci", "uci"]
     ).rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
 
-    # combine obs and fc's into "data", which is an abuse of terminology
-    data = forecasts.join(obs, on=["season", "geography", "time_end"], how="left")
+    # combine obs and fc's into plot "data" (which is an abuse of terminology)
+    data = preds.join(obs, on=["season", "geography", "time_end"], how="left")
+
+    # interpret the predictions are forecasts: include only predicted values that
+    # are after the forecast date
+    forecasts = data.with_columns(
+        pl.when(pl.col("forecast_start") >= pl.col("time_end"))
+        .then(pl.col("fc_estimate"))
+        .otherwise(None)
+    )
 
     # for one state, show forecasts (which are only one season)
-    base = alt.Chart(data.filter(pl.col("geography") == pl.lit("New Jersey"))).encode(
-        alt.X("time_end")
-    )
+    base = alt.Chart(
+        forecasts.filter(pl.col("geography") == pl.lit("New Jersey"))
+    ).encode(alt.X("time_end"))
 
     fc_cone = base.mark_area().encode(alt.Y("fc_lci"), alt.Y2("fc_uci"))
     fc_points = base.mark_line(color="red").encode(alt.Y("fc_estimate"))

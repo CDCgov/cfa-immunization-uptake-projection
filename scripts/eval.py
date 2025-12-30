@@ -69,14 +69,14 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
     p.add_argument("--data", help="observed data", required=True)
-    p.add_argument("--forecasts", help="forecasts parquet", required=True)
+    p.add_argument("--preds", help="predictions parquet", required=True)
     p.add_argument("--output", help="output scores parquet", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    pred = pl.read_parquet(args.forecasts)
+    pred = pl.read_parquet(args.preds)
     data = pl.read_parquet(args.data)
 
     eval_all_forecasts(data, pred, config).write_parquet(args.output)
