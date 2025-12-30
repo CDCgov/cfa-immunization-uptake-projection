@@ -17,7 +17,7 @@ PLOT_FORECAST = $(OUTPUT_DIR)/plots/forecast_example.png
 
 .PHONY: clean viz
 
-all: $(SETTINGS) $(DATA) $(FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PLOT_DATA) $(PLOT_FORECAST)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(PLOT_DATA) $(PLOT_FORECAST)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -26,8 +26,8 @@ viz:
 $(SCORES): scripts/eval.py $(FORECASTS) $(DATA)
 	python $< --forecasts=$(FORECASTS) --data=$(DATA) --config=$(CONFIG) --output=$@
 
-$(PLOT_FORECAST): scripts/plot_forecast.py $(CONFIG) $(DATA) $(FORECASTS)
-	python $< --config=$(CONFIG) --data=$(DATA) --forecasts=$(FORECASTS) --output_dir=output/diagnostics/$(RUN_ID)/
+$(PLOT_FORECAST): scripts/plot_forecast.py $(CONFIG) $(DATA) $(FORECASTS) $(SCORES)
+	python $< --config=$(CONFIG) --data=$(DATA) --forecasts=$(FORECASTS) --scores=$(SCORES) --output=$@
 
 $(FORECASTS): scripts/forecast.py $(DATA) $(FITS) $(CONFIG)
 	python $< --data=$(DATA) --fits=$(FITS) --config=$(CONFIG) --output=$@
@@ -39,14 +39,14 @@ $(FITS): scripts/fit.py $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --config=$(CONFIG) --output=$@
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA)
-	python $< --config=$(CONFIG) --data=$(DATA) --output_dir=$(OUTPUT_DIR)/plots
+	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
 
 $(DATA): scripts/preprocess.py $(RAW_DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --input=$(RAW_DATA) --output=$@
 
 $(CONFIG_COPY): $(CONFIG)
 	mkdir -p $(OUTPUT_DIR)
-	cp $(CONFIG) $(CONFIG_COPY)
+	cp $(CONFIG) $@
 
 clean:
 	rm -rf $(OUTPUT_DIR)

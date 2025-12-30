@@ -57,18 +57,21 @@ def month_order(season_start_month: int) -> List[str]:
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
-    p.add_argument("--input", required=True)
-    p.add_argument("--output_dir", required=True)
+    p.add_argument("--data", required=True)
+    p.add_argument("--output", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    data = pl.read_parquet(args.input)
-    out_dir = Path(args.output_dir)
+    data = pl.read_parquet(args.data)
 
     # ensure output directory exists
+    out_dir = Path(args.output).parent
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ensure the path is what we expect
+    assert Path(args.output).name == "data_one_season_by_state.png"
 
     # for one season, show each state's trajectory
     alt.Chart(
@@ -79,7 +82,7 @@ if __name__ == "__main__":
         alt.X("month", sort=month_order(config["season"]["start_month"])),
         alt.Y("estimate"),
         alt.Detail("geography"),
-    ).mark_line().save(out_dir / "data_one_season_by_state.png")
+    ).mark_line().save(args.output)
 
     # end of season data
     eos = data.filter((pl.col("time_end") == pl.col("time_end").max()).over("season"))
