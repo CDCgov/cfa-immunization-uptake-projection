@@ -89,16 +89,25 @@ def select_model_to_diagnose(
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file")
-    p.add_argument("--input", help="fitted model directory")
-    p.add_argument("--output", help="output directory")
+    p.add_argument("--fits", help="fits pickle")
+    p.add_argument(
+        "--output", help="output status file; other files put in the same directory"
+    )
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    with open(Path(args.input, "model_fits.pkl"), "rb") as f:
+    with open(args.fits, "rb") as f:
         models = pickle.load(f)
 
-    Path(args.output).mkdir(parents=True, exist_ok=True)
-    diagnostic_plot(models, config, args.output)
-    diagnostic_table(models, config, args.output)
+    output_dir = Path(args.output).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # write the other plots to the same folder
+    diagnostic_plot(models, config, output_dir)
+    diagnostic_table(models, config, output_dir)
+
+    # write the status file
+    with open(args.output, "w") as f:
+        f.write(dt.datetime.now().isoformat())
