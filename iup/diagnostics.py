@@ -65,7 +65,6 @@ def print_posterior_dist(model: iup.models.UptakeModel) -> pl.DataFrame:
 def print_model_summary(model: iup.models.UptakeModel) -> pl.DataFrame:
     idata = az.from_numpyro(model.mcmc)
     summary_pd = az.summary(idata)
-    print(summary_pd.shape)
     summary = pl.DataFrame(summary_pd)
     summary = summary.with_columns(params=pl.Series(summary_pd.index)).select(
         ["params"] + [col for col in summary.columns if col != "params"]

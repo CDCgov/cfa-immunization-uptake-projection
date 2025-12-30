@@ -171,10 +171,14 @@ class LPLModel(UptakeModel):
             A_tot = np.sum(A_devs[groups], axis=1) + A
             M_tot = np.sum(M_devs[groups], axis=1) + M
             # Calculate latent true uptake at each datum
-            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            )
         else:
             # Calculate latent true uptake at each datum if no grouping factors
-            mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            )
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d
@@ -300,7 +304,7 @@ class LPLModel(UptakeModel):
             d_rate=params["d_rate"],
         )
 
-        print(self.mcmc.print_summary())
+        self.mcmc.print_summary()
 
         return self
 

@@ -40,6 +40,8 @@ def preprocess(
             ),
         )
         .filter(
+            # drop the nation
+            pl.col("geography_type") == pl.lit("admin1"),
             # remove territories
             pl.col("geography")
             .is_in(["Puerto Rico", "U.S. Virgin Islands", "Guam"])
