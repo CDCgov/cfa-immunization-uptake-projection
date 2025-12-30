@@ -306,7 +306,10 @@ class LPLModel(UptakeModel):
 
     @staticmethod
     def augment_scaffold(
-        scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
+        scaffold: pl.DataFrame,
+        season_start_month: int,
+        season_start_day: int,
+        N_tot: int = 10_000,
     ) -> pl.DataFrame:
         """
         Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
@@ -318,21 +321,22 @@ class LPLModel(UptakeModel):
             first month of the overwinter disease season
         season_start_day: int
             first day of the first month of the overwinter disease season
+        N_tot:
+            Predictions are made as if 10,000 individuals are sampled.
 
         Returns:
             Scaffold with extra columns required by the Logistic Plus Linear model.
 
         Details
         An extra column is added for the time elapsed since the season start.
-        Predictions are made as if 10,000 individuals are sampled.
         """
         scaffold = scaffold.with_columns(
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
             / 365,
-            N_tot=pl.lit(10000),
-        ).drop("estimate")
+            N_tot=N_tot,
+        )
 
         return scaffold
 
@@ -367,10 +371,18 @@ class LPLModel(UptakeModel):
         Forecasts are the made for each date in this scaffold.
         """
         assert "time_end" in test_data.columns
-        scaffold = build_scaffold(test_data, self.group_combos)
+
+        if groups is None:
+            scaffold_cols = ["time_end", "season"]
+        elif "season" in groups:
+            scaffold_cols = ["time_end"] + groups
+        else:
+            scaffold_cols = ["time_end", "season"] + groups
 
         scaffold = LPLModel.augment_scaffold(
-            scaffold, season_start_month, season_start_day
+            test_data.select(scaffold_cols).unique(),
+            season_start_month,
+            season_start_day,
         )
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
@@ -449,46 +461,3 @@ def extract_group_combos(
         return data.select(groups).unique()
     else:
         return None
-
-
-def build_scaffold(
-    test_dates: pl.DataFrame, group_combos: pl.DataFrame | None
-) -> pl.DataFrame:
-    """
-    Build a scaffold data frame to hold forecasts.
-
-    Parameters
-    test_dates pl.DataFrame | None
-        exact target dates to use, when test data exists
-    group_combos: pl.DataFrame | None
-        all unique combinations of grouping factors in the data
-    season_start_month: int
-        first month of the overwinter disease season
-    season_start_day: int
-        first day of the first month of the overwinter disease season
-
-    Returns
-    pl.DataFrame
-        scaffold to hold model forecasts.
-
-    Details
-    The desired time frame for projections is repeated over grouping factors,
-    if any grouping factors exist. This is required by multiple models.
-    """
-
-    scaffold = (
-        test_dates.select(["time_end"]).with_columns(estimate=pl.lit(0.0)).unique()
-    )
-
-    if group_combos is not None:
-        # Even if season is a grouping factor, predictions should not
-        # be made for every season
-        if "season" in group_combos.columns:
-            group_combos = group_combos.drop("season").unique()
-
-        # Only include grouping factors in the scaffold if season
-        # wasn't the only grouping factor
-        if group_combos.shape[1] > 0:
-            scaffold = scaffold.join(group_combos, how="cross")
-
-    return scaffold

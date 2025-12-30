@@ -17,7 +17,7 @@ PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
 
 .PHONY: clean viz
 
-all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_FORECAST)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -26,7 +26,7 @@ viz:
 $(SCORES): scripts/eval.py $(PREDS) $(DATA)
 	python $< --preds=$(PREDS) --data=$(DATA) --config=$(CONFIG) --output=$@
 
-$(PLOT_PREDS): scripts/plot_pred.py $(CONFIG) $(DATA) $(PREDS) $(SCORES)
+$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS) $(SCORES)
 	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PREDS) --scores=$(SCORES) --output=$@
 
 $(PREDS): scripts/predict.py $(DATA) $(FITS) $(CONFIG)

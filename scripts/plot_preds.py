@@ -42,24 +42,27 @@ if __name__ == "__main__":
         ["season", "geography", "time_end", "estimate", "lci", "uci"]
     ).rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
 
-    # combine obs and fc's into plot "data" (which is an abuse of terminology)
-    data = preds.join(obs, on=["season", "geography", "time_end"], how="left")
+    forecasts = preds.filter(pl.col("time_end") > pl.col("forecast_start"))
 
-    # interpret the predictions are forecasts: include only predicted values that
-    # are after the forecast date
-    forecasts = data.with_columns(
-        pl.when(pl.col("forecast_start") >= pl.col("time_end"))
-        .then(pl.col("fc_estimate"))
-        .otherwise(None)
+    # get all the target dates & forecast dates
+    fc_plot = obs.join(
+        forecasts.select(pl.col("forecast_start").unique()), how="cross"
+    ).join(
+        forecasts,
+        on=["season", "geography", "time_end", "forecast_start"],
+        how="left",
     )
 
     # for one state, show forecasts (which are only one season)
     base = alt.Chart(
-        forecasts.filter(pl.col("geography") == pl.lit("New Jersey"))
+        fc_plot.filter(
+            pl.col("geography") == pl.lit("New Jersey"),
+            pl.col("season") == pl.col("season").max(),
+        )
     ).encode(alt.X("time_end"))
 
-    fc_cone = base.mark_area().encode(alt.Y("fc_lci"), alt.Y2("fc_uci"))
-    fc_points = base.mark_line(color="red").encode(alt.Y("fc_estimate"))
+    fc_cone = base.mark_area().encode(alt.Y("pred_lci"), alt.Y2("pred_uci"))
+    fc_points = base.mark_line(color="red").encode(alt.Y("pred_estimate"))
     fc_data = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
     fc_data_error = base.mark_rule(color="black").encode(
         alt.X2("time_end"), alt.Y("obs_lci"), alt.Y2("obs_uci")
@@ -69,4 +72,49 @@ if __name__ == "__main__":
         args.output
     )
 
-    print(scores.filter(pl.col("forecast_start") == pl.col("forecast_start").max()))
+    # scores across seasons & states
+    fit_scores = scores.filter(
+        pl.col("forecast_start") == pl.col("forecast_start").max(),
+        pl.col("score_type") == pl.lit("fit"),
+        pl.col("score_fun") == pl.lit("mspe"),
+    ).with_columns(pl.col("score_value").log())
+
+    alt.Chart(fit_scores).mark_point().encode(
+        alt.X("season"), alt.Y("score_value")
+    ).save(out_dir / "score_by_season.png")
+
+    alt.Chart(fit_scores).mark_point().encode(
+        alt.X("geography"), alt.Y("score_value")
+    ).save(out_dir / "score_by_geo.png")
+
+    # scores increasing through the season?
+    alt.Chart(
+        scores.filter(
+            pl.col("score_type") == pl.lit("forecast"),
+            pl.col("score_fun") == pl.lit("eos_abs_diff"),
+        )
+    ).mark_line().encode(
+        alt.X("forecast_start"), alt.Y("score_value"), alt.Color("geography")
+    ).save(out_dir / "scores_increasing.png")
+
+    # score vs. forecast
+    avg_fit = (
+        fit_scores.group_by(["model", "geography"])
+        .agg(pl.col("score_value").median())
+        .rename({"score_value": "fit_score"})
+    )
+    fc_goodness = (
+        scores.filter(
+            pl.col("score_type") == pl.lit("forecast"),
+            pl.col("score_fun") == pl.lit("eos_abs_diff"),
+            pl.col("forecast_start") == pl.col("forecast_start").min(),
+        )
+        .select(["geography", "model", "score_value"])
+        .rename({"score_value": "fc_score"})
+    )
+
+    alt.Chart(
+        avg_fit.join(fc_goodness, on=["model", "geography"], how="inner")
+    ).mark_point().encode(alt.X("fit_score"), alt.Y("fc_score")).save(
+        out_dir / "fc_fit_compare.png"
+    )
