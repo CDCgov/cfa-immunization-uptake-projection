@@ -54,7 +54,20 @@ def month_order(season_start_month: int) -> List[str]:
     ]
 
 
-assert month_order(7) == [7, 8, 9, 10, 11, 12, 1, 1, 2, 3, 4, 5, 6]
+assert month_order(7) == [
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+]
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
