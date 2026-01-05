@@ -1,5 +1,4 @@
 import abc
-import datetime as dt
 from typing import List
 
 import jax.numpy as jnp
@@ -63,10 +62,7 @@ class UptakeModel(abc.ABC):
     @abc.abstractmethod
     def predict(
         self,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_dates: pl.DataFrame | None,
+        test_data: pl.DataFrame,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -171,14 +167,18 @@ class LPLModel(UptakeModel):
             A_tot = np.sum(A_devs[groups], axis=1) + A
             M_tot = np.sum(M_devs[groups], axis=1) + M
             # Calculate latent true uptake at each datum
-            mu = A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            )
         else:
             # Calculate latent true uptake at each datum if no grouping factors
-            mu = A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            mu = numpyro.deterministic(
+                "mu", A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
+            )
         # Calculate the shape parameters for the beta-binomial likelihood
         S1 = mu * d
         S2 = (1 - mu) * d
-        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)
+        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
@@ -300,13 +300,16 @@ class LPLModel(UptakeModel):
             d_rate=params["d_rate"],
         )
 
-        print(self.mcmc.print_summary())
+        self.mcmc.print_summary()
 
         return self
 
     @staticmethod
     def augment_scaffold(
-        scaffold: pl.DataFrame, season_start_month: int, season_start_day: int
+        scaffold: pl.DataFrame,
+        season_start_month: int,
+        season_start_day: int,
+        N_tot: int = 10_000,
     ) -> pl.DataFrame:
         """
         Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
@@ -318,30 +321,23 @@ class LPLModel(UptakeModel):
             first month of the overwinter disease season
         season_start_day: int
             first day of the first month of the overwinter disease season
+        N_tot:
+            Predictions are made as if 10,000 individuals are sampled.
 
         Returns:
             Scaffold with extra columns required by the Logistic Plus Linear model.
-
-        Details
-        An extra column is added for the time elapsed since the season start.
-        Predictions are made as if 10,000 individuals are sampled.
         """
-        scaffold = scaffold.with_columns(
+        return scaffold.with_columns(
             elapsed=iup.utils.date_to_elapsed(
                 pl.col("time_end"), season_start_month, season_start_day
             )
             / 365,
-            N_tot=pl.lit(10000),
-        ).drop("estimate")
-
-        return scaffold
+            N_tot=N_tot,
+        )
 
     def predict(
         self,
-        start_date: dt.date,
-        end_date: dt.date,
-        interval: str,
-        test_dates: pl.DataFrame | None,
+        test_data: pl.DataFrame,
         groups: List[str,] | None,
         season_start_month: int,
         season_start_day: int,
@@ -350,13 +346,6 @@ class LPLModel(UptakeModel):
         Make projections from a fit Logistic Plus Linear model.
 
         Parameters
-        start_date: dt.date
-            the date on which projections should begin
-        end_date: dt.date
-            the date on which projections should end
-        interval: str
-            the time interval between projection dates,
-            following timedelta convention (e.g. '7d' = seven days)
         test_dates: pl.DataFrame | None
             exact target dates to use, when test data exists
         groups: (str,) | None
@@ -376,18 +365,19 @@ class LPLModel(UptakeModel):
 
         Forecasts are the made for each date in this scaffold.
         """
-        scaffold = build_scaffold(
-            start_date,
-            end_date,
-            interval,
-            test_dates,
-            self.group_combos,
-            season_start_month,
-            season_start_day,
-        )
+        assert "time_end" in test_data.columns
+
+        if groups is None:
+            scaffold_cols = ["time_end", "season"]
+        elif "season" in groups:
+            scaffold_cols = ["time_end"] + groups
+        else:
+            scaffold_cols = ["time_end", "season"] + groups
 
         scaffold = LPLModel.augment_scaffold(
-            scaffold, season_start_month, season_start_day
+            test_data.select(scaffold_cols).unique(),
+            season_start_month,
+            season_start_day,
         )
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
@@ -395,6 +385,7 @@ class LPLModel(UptakeModel):
         if groups is not None:
             # Make a numpy array of numeric codes for grouping factor levels
             # that matches the same codes used when fitting the model
+            assert self.value_to_index is not None
             group_codes = iup.utils.value_to_index(
                 scaffold.select(groups), self.value_to_index, self.num_group_levels
             )
@@ -465,81 +456,3 @@ def extract_group_combos(
         return data.select(groups).unique()
     else:
         return None
-
-
-def build_scaffold(
-    start_date: dt.date,
-    end_date: dt.date,
-    interval: str,
-    test_dates: pl.DataFrame | None,
-    group_combos: pl.DataFrame | None,
-    season_start_month: int,
-    season_start_day: int,
-) -> pl.DataFrame:
-    """
-    Build a scaffold data frame to hold forecasts.
-
-    Parameters
-    start_date: dt.date
-        the date on which projections should begin
-    end_date: dt.date
-        the date on which projections should end
-    interval: str
-        the time interval between projection dates,
-        following timedelta convention (e.g. '7d' = seven days)
-    test_dates pl.DataFrame | None
-        exact target dates to use, when test data exists
-    group_combos: pl.DataFrame | None
-        all unique combinations of grouping factors in the data
-    season_start_month: int
-        first month of the overwinter disease season
-    season_start_day: int
-        first day of the first month of the overwinter disease season
-
-    Returns
-    pl.DataFrame
-        scaffold to hold model forecasts.
-
-    Details
-    The desired time frame for projections is repeated over grouping factors,
-    if any grouping factors exist. This is required by multiple models.
-    """
-    # If there is test data such that evaluation will be performed,
-    # use exactly the dates that are in the test data
-    if test_dates is not None:
-        scaffold = (
-            test_dates.filter((pl.col("time_end").is_between(start_date, end_date)))
-            .with_columns(estimate=pl.lit(0.0))
-            .unique()
-        )
-    # If there are no test data, use exactly the dates that were provided
-    else:
-        scaffold = (
-            pl.date_range(
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                eager=True,
-            )
-            .alias("time_end")
-            .to_frame()
-            .with_columns(
-                estimate=pl.lit(0.0),
-                season=iup.utils.date_to_season(
-                    pl.col("time_end"), season_start_month, season_start_day
-                ),
-            )
-        )
-
-    if group_combos is not None:
-        # Even if season is a grouping factor, predictions should not
-        # be made for every season
-        if "season" in group_combos.columns:
-            group_combos = group_combos.drop("season").unique()
-
-        # Only include grouping factors in the scaffold if season
-        # wasn't the only grouping factor
-        if group_combos.shape[1] > 0:
-            scaffold = scaffold.join(group_combos, how="cross")
-
-    return scaffold

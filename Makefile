@@ -7,25 +7,29 @@ OUTPUT_DIR = output/$(RUN_ID)
 CONFIG_COPY = $(OUTPUT_DIR)/config.yaml
 DATA = $(OUTPUT_DIR)/nis.parquet
 FITS = $(OUTPUT_DIR)/fits.pkl
-FORECASTS = $(OUTPUT_DIR)/forecasts.parquet
+PREDS = $(OUTPUT_DIR)/predictions.parquet
 DIAGNOSTICS = $(OUTPUT_DIR)/diagnostics/status.txt
 SCORES = $(OUTPUT_DIR)/scores.parquet
 
-DATA_PLOT = $(OUTPUT_DIR)/plots/data_national.png
+PLOT_DATA = $(OUTPUT_DIR)/plots/data_one_season_by_state.png
+PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
 
 
 .PHONY: clean viz
 
-all: $(SETTINGS) $(DATA) $(FITS) $(DIAGNOSTICS) $(FORECASTS) $(SCORES) $(DATA_PLOT)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
 
 viz:
 	streamlit run scripts/viz.py -- \
-		--data=$(DATA) --forecasts=$(FORECASTS) --scores=$(SCORES) --config=$(CONFIG)
+		--data=$(DATA) --preds=$(PREDS) --scores=$(SCORES) --config=$(CONFIG)
 
-$(SCORES): scripts/eval.py $(FORECASTS) $(DATA)
-	python $< --forecasts=$(FORECASTS) --data=$(DATA) --config=$(CONFIG) --output=$@
+$(SCORES): scripts/eval.py $(PREDS) $(DATA)
+	python $< --preds=$(PREDS) --data=$(DATA) --config=$(CONFIG) --output=$@
 
-$(FORECASTS): scripts/forecast.py $(DATA) $(FITS) $(CONFIG)
+$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS) $(SCORES)
+	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PREDS) --scores=$(SCORES) --output=$@
+
+$(PREDS): scripts/predict.py $(DATA) $(FITS) $(CONFIG)
 	python $< --data=$(DATA) --fits=$(FITS) --config=$(CONFIG) --output=$@
 
 $(DIAGNOSTICS): scripts/diagnostics.py $(FITS) $(CONFIG)
@@ -34,15 +38,15 @@ $(DIAGNOSTICS): scripts/diagnostics.py $(FITS) $(CONFIG)
 $(FITS): scripts/fit.py $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --config=$(CONFIG) --output=$@
 
-$(DATA_PLOT): scripts/describe_data.py $(DATA)
-	python $< --input=$(DATA) --output_dir=$(OUTPUT_DIR)/plots
+$(PLOT_DATA): scripts/plot_data.py $(DATA)
+	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
 
 $(DATA): scripts/preprocess.py $(RAW_DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --input=$(RAW_DATA) --output=$@
 
 $(CONFIG_COPY): $(CONFIG)
 	mkdir -p $(OUTPUT_DIR)
-	cp $(CONFIG) $(CONFIG_COPY)
+	cp $(CONFIG) $@
 
 clean:
 	rm -rf $(OUTPUT_DIR)
