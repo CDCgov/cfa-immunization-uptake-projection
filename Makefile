@@ -15,14 +15,16 @@ PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
 
 FORECAST_STARTS = $(shell python scripts/get_forecast_starts.py --config=$(CONFIG))
 PREDS = $(foreach date,$(FORECAST_STARTS),$(PRED_DIR)/forecast_start=$(date)/part-0.parquet)
+FITS = $(foreach date,$(FORECAST_STARTS),$(OUTPUT_DIR)/fits/fit_$(date).pkl)
 
-# needed because the forecast_date=2020-01-01 pattern confuses make;
-# it thinks =% is variable assignment, not pattern matching
+# This variable because the pattern `forecast_date=2020-01-01` confuses make.
+# It thinks `=%` is variable assignment, not pattern matching.
+# So we need `forecast_date$(EQ)%`.
 EQ = =
 
 .PHONY: clean viz
 
-all: $(CONFIG_COPY) $(PLOT_DATA) $(PLOT_PREDS)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -40,8 +42,7 @@ $(PLOT_DATA): scripts/plot_data.py $(DATA)
 $(PREDS_FLAG): $(PREDS)
 	touch $@
 
-# e.g., output/run_id/pred/forecast_start=2021-01-01/part-0.parquet
-# which depends on output/fits/fit_2021-01-01.pkl
+# output/run_id/pred/forecast_start=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_start$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --config=$(CONFIG) --output=$@
 

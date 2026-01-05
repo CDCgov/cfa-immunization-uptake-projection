@@ -1,3 +1,8 @@
+import os
+
+# silence Jax CPU warning
+os.environ["JAX_PLATFORMS"] = "cpu"
+
 import argparse
 import datetime as dt
 import pickle as pkl
