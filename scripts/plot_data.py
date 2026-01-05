@@ -54,6 +54,8 @@ def month_order(season_start_month: int) -> List[str]:
     ]
 
 
+assert month_order(7) == [7, 8, 9, 10, 11, 12, 1, 1, 2, 3, 4, 5, 6]
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
@@ -97,10 +99,10 @@ if __name__ == "__main__":
     points = alt.Chart(eos).mark_point().encode(alt.X("season"), alt.Y("estimate"))
 
     alt.Chart(add_medians(eos, "season")).mark_point().encode(
-        alt.X("season", sort=alt.EncodingSortField("estimate", "median", "descending")),
+        alt.X("season"),
         alt.Y("estimate"),
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "data_eos_by_state.png")
+    ).save(out_dir / "data_eos_by_season.png")
 
     # for each state, show eos spread over seasons
     alt.Chart(add_medians(eos, "geography")).mark_point().encode(
@@ -109,4 +111,4 @@ if __name__ == "__main__":
         ),
         alt.Y("estimate"),
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "data_eos_by_season.png")
+    ).save(out_dir / "data_eos_by_state.png")

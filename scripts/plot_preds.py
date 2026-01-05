@@ -84,7 +84,10 @@ if __name__ == "__main__":
     ).save(out_dir / "score_by_season.png")
 
     alt.Chart(fit_scores).mark_point().encode(
-        alt.X("geography"), alt.Y("score_value")
+        alt.X(
+            "geography", sort=alt.EncodingSortField("estimate", "median", "descending")
+        ),
+        alt.Y("score_value"),
     ).save(out_dir / "score_by_geo.png")
 
     # scores increasing through the season?
