@@ -271,12 +271,7 @@ class LPLModel(UptakeModel):
         N_tot = data["N_tot"].to_numpy()
 
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(
-            self.kernel,
-            num_warmup=mcmc["num_warmup"],
-            num_samples=mcmc["num_samples"],
-            num_chains=mcmc["num_chains"],
-        )
+        self.mcmc = MCMC(self.kernel, **mcmc)
 
         self.mcmc.run(
             self.fit_key,
@@ -300,7 +295,8 @@ class LPLModel(UptakeModel):
             d_rate=params["d_rate"],
         )
 
-        self.mcmc.print_summary()
+        if "progress_bar" in mcmc and mcmc["progress_bar"]:
+            self.mcmc.print_summary()
 
         return self
 

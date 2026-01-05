@@ -1,6 +1,7 @@
 import argparse
 import datetime as dt
 import pickle
+from pathlib import Path
 from typing import Any, Dict
 
 import polars as pl
@@ -80,4 +81,5 @@ if __name__ == "__main__":
 
     forecasts = run_all_forecasts(input_data, models, config)
 
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     forecasts.write_parquet(args.output)

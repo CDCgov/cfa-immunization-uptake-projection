@@ -31,6 +31,7 @@ mcmc:
   num_warmup: 1000
   num_samples: 1000
   num_chains: 4
+  progress_bar: false
 
 forecasts:
   start_date:
@@ -49,7 +50,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  forecast_date:
+  forecast_date: []
   model: [LPLModel]
   plot: [posterior_density_plot, parameter_trace_plot]
   table: [print_posterior_dist, print_model_summary]
