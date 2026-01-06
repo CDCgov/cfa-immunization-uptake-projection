@@ -1,4 +1,4 @@
-RUN_ID = test
+RUN_ID = full3
 
 RAW_DATA = data/raw.parquet
 CONFIG = scripts/config.yaml
@@ -30,7 +30,7 @@ viz:
 	streamlit run scripts/viz.py -- \
 		--data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --config=$(CONFIG)
 
-$(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA)
+$(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA) $(CONFIG)
 	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
 
 $(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG) $(SCORES)
@@ -39,8 +39,11 @@ $(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG) $(SCORES)
 $(PLOT_DATA): scripts/plot_data.py $(DATA)
 	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
 
-$(PREDS_FLAG): $(PREDS)
-	touch $@
+$(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
+	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
+
+$(DIAGNOSTICS): scripts/diagnostics.py $(FITS) $(CONFIG)
+	python $< --fits=$(FITS) --config=$(CONFIG) --output=$@
 
 # output/run_id/pred/forecast_start=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_start$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
