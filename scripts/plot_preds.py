@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from typing import List
 
 import altair as alt
 import polars as pl
@@ -14,6 +15,48 @@ from plot_data import (
 )
 
 LINE_OPACITY = 0.4
+
+
+def plot_forecast(
+    data: pl.DataFrame, geography: str, sort_month: List[str]
+) -> alt.FacetChart:
+    # remove forecast dates that have no actual forecasts
+    # .filter(pl.col("forecast_date") < pl.col("time_end").max())
+
+    # hack: at the last forecast date, we make a forecast for only one date, but we
+    # can't show this with .mark_line(), and so it ends up blank. So remove those
+    # dates
+    good_fc_dates = (
+        data.filter(pl.col("pred_estimate").is_not_null())
+        .group_by("forecast_date")
+        .agg(n=pl.col("time_end").unique().len())
+        .filter(pl.col("n") >= 2)
+        .select("forecast_date")
+        .to_series()
+        .to_list()
+    )
+
+    base = alt.Chart(
+        data.filter(
+            pl.col("geography") == pl.lit(geography),
+            pl.col("forecast_date").is_in(good_fc_dates),
+        )
+    ).encode(alt.X("month", title=None, sort=sort_month))
+
+    fc_cone = base.mark_area(fill="black", opacity=0.25).encode(
+        alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT), alt.Y2("pred_uci")
+    )
+    fc_points = base.mark_line(color="black", opacity=0.75).encode(
+        alt.Y("pred_estimate")
+    )
+    fc_data = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
+    fc_data_error = base.mark_rule(color="black").encode(
+        alt.X2("month"), alt.Y("obs_lci"), alt.Y2("obs_uci")
+    )
+
+    return (fc_cone + fc_points + fc_data + fc_data_error).facet(
+        column=alt.Column("forecast_date", header=None)
+    )
 
 
 if __name__ == "__main__":
@@ -60,35 +103,19 @@ if __name__ == "__main__":
             on=["season", "geography", "time_end", "forecast_date"],
             how="left",
         )
+        # keep only the last season
+        .filter(pl.col("season") == pl.col("season").max())
         .with_columns(month=pl.col("time_end").dt.to_string("%b"))
     )
 
-    enc_x_month = alt.X(
-        "month", title=None, sort=month_order(config["season"]["start_month"])
-    )
+    sort_month = month_order(config["season"]["start_month"])
+    enc_x_month = alt.X("month", title=None, sort=sort_month)
 
     # for one state, show forecasts (which are only one season)
-    base = alt.Chart(
-        fc_plot.filter(
-            pl.col("geography") == pl.lit(config["plots"]["example_forecast_geo"]),
-            pl.col("season") == pl.col("season").max(),
+    for geo in config["plots"]["example_forecast_geos"]:
+        plot_forecast(data=fc_plot, geography=geo, sort_month=sort_month).save(
+            out_dir / f"forecast_{geo}.png"
         )
-    ).encode(enc_x_month)
-
-    fc_cone = base.mark_area(fill="black", opacity=0.25).encode(
-        alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT), alt.Y2("pred_uci")
-    )
-    fc_points = base.mark_line(color="black", opacity=0.75).encode(
-        alt.Y("pred_estimate")
-    )
-    fc_data = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
-    fc_data_error = base.mark_rule(color="black").encode(
-        alt.X2("month"), alt.Y("obs_lci"), alt.Y2("obs_uci")
-    )
-
-    (fc_cone + fc_points + fc_data + fc_data_error).facet(
-        column=alt.Column("forecast_date", header=None)
-    ).save(out_dir / "forecast_example.png")
 
     # scores across seasons & states
     fit_scores = scores.filter(
