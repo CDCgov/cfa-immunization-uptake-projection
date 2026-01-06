@@ -5,9 +5,6 @@ import altair as alt
 import polars as pl
 import yaml
 
-CI_LEVEL = 0.95
-
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
@@ -29,7 +26,7 @@ if __name__ == "__main__":
     assert Path(args.output).name == "forecast_example.png"
 
     # get the forecast cone
-    half_alpha = (1.0 - CI_LEVEL) / 2
+    half_alpha = (1.0 - config["forecast_plots"]["ci_level"]) / 2
     preds = pred_samples.group_by(
         ["season", "geography", "time_end", "model", "forecast_start"]
     ).agg(

@@ -8,32 +8,77 @@ import streamlit as st
 import yaml
 
 
-def app():
+@st.cache_data
+def load_parquet(path: str) -> pl.DataFrame:
+    return pl.read_parquet(path)
+
+
+@st.cache_data
+def load_config(path: str) -> Dict[str, Any]:
+    with open(path) as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+
+@st.cache_data
+def summarize_preds(
+    path: str, groups_to_include: tuple, ci_level: float
+) -> pl.DataFrame:
+    half_alpha = (1.0 - ci_level) / 2
+
+    return (
+        pl.scan_parquet(path)
+        .group_by(groups_to_include)
+        .agg(
+            lower=pl.col("estimate").quantile(half_alpha),
+            upper=pl.col("estimate").quantile(1.0 - half_alpha),
+            mean=pl.col("estimate").mean(),
+        )
+        .sort("time_end")
+        .collect()
+    )
+
+
+@st.cache_data
+def sample_preds(path: str, n_samples: int, seed: int = 42) -> pl.DataFrame:
+    preds = pl.scan_parquet(path).with_columns(pl.col("sample_id").cast(pl.Int64))
+
+    max_id = preds.select(pl.col("sample_id").max()).collect().item()
+    min_id = preds.select(pl.col("sample_id").min()).collect().item()
+    assert isinstance(min_id, int)
+    assert isinstance(max_id, int)
+
+    # draw indices of trajectories randomly #
+    rng = np.random.default_rng(seed=seed)
+
+    selected_ids = rng.integers(low=min_id, high=max_id + 1, size=n_samples)
+
+    return preds.filter(pl.col("sample_id").is_in(selected_ids)).collect()
+
+
+def app(data_path: str, config_path: str, scores_path: str, preds_path: str):
+    # load data from caches
+    obs = load_parquet(data_path)
+    scores = load_parquet(scores_path)
+    config = load_config(config_path)
+
     st.title("Vaccine Uptake Forecasts")
-
-    # data prepare
-    # load data
-    data = load_data()
-    obs = data["observed"]
-    pred = data["preds"]
-
-    # load config
-    config = load_config()
 
     # multiple tabs
     tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])
 
     with tab1:
-        plot_trajectories(obs, pred, config)
+        plot_trajectories(obs=obs, preds_path=preds_path, config=config)
 
     with tab2:
-        plot_summary(obs=obs, pred=pred, config=config)
+        plot_summary(obs=obs, preds_path=preds_path, config=config)
 
     with tab3:
-        plot_evaluation(load_scores(), config)
+        plot_evaluation(scores=scores, config=config)
 
 
-def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
+def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     """
     Plot the individual trajectories of the forecasts with data, with user options to select
     the dimensions to group the data, including: column and row. Other grouping factors that
@@ -42,8 +87,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     Arguments
     obs: pl.DataFrame
         The observed data.
-    pred: pl.DataFrame
-        The forecast made by model.
+    preds_path: Path to preds data
     config: Dict[str, Any]
         The configuration yaml file.
 
@@ -58,6 +102,12 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
+
+    # how many trajectories to show?
+    n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
+
+    pred = sample_preds(preds_path, n_samples=n_samples)
+
     st.subheader("Data channels")
     dimensions = ["model", "forecast_start"] + config["groups"]
     default_channels = {
@@ -84,28 +134,12 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     # filter for specific values of the remaining dimensions
     st.header("Data filters")
 
+    if missing_columns := set(dimensions) - set(pred.columns):
+        raise RuntimeError(f"Missing columns: {missing_columns}")
+
     for dim in dimensions:
         filter_val = st.selectbox(dim, options=pred[dim].unique().sort().to_list())
         pred = pred.filter(pl.col(dim) == pl.lit(filter_val))
-
-    # how many trajectories to show?
-    n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
-
-    # draw indices of trajectories randomly #
-    rng = np.random.default_rng()
-
-    min_id = pred["sample_id"].cast(pl.Int64).min()
-    max_id = pred["sample_id"].cast(pl.Int64).max()
-    assert isinstance(min_id, int)
-    assert isinstance(max_id, int)
-
-    selected_ids = rng.integers(
-        low=min_id,
-        high=max_id + 1,
-        size=n_samples,
-    )
-
-    pred = pred.filter(pl.col("sample_id").cast(pl.Int32).is_in(selected_ids))
 
     # merge observed data with prediction by the combination of models and forecast starts
     model_forecast_starts = pred.select(["model", "forecast_start"]).unique()
@@ -153,7 +187,7 @@ def plot_trajectories(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, A
     st.altair_chart(chart)
 
 
-def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
+def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     """
     Plot the 95% PI with mean estimate of forecasts with data, with user options to select
     the dimensions to group the data, including: row, column, and color. Other grouping
@@ -162,11 +196,18 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     Arguments
     obs: pl.DataFrame
         The observed data.
-    pred: pl.DataFrame
-        The forecast made by model.
+    preds_path: path to preds data
     config: Dict[str, Any]
         The configuration yaml file.
     """
+    # summarize sample predictions by grouping factors
+    groups_to_include = ["model", "forecast_start", "time_end"] + config["groups"]
+    pred = summarize_preds(
+        path=preds_path,
+        groups_to_include=tuple(groups_to_include),
+        ci_level=config["forecast_plots"]["ci_level"],
+    )
+
     encodings = {}
 
     # data process: merge observed data with prediction by combinations of model and forecast start #
@@ -176,24 +217,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
         for factor in config["groups"]
     )
 
-    # summarize sample predictions by grouping factors #
-    groups_to_include = ["model", "forecast_start", "time_end"] + config["groups"]
-
-    plot_pred = (
-        pred.group_by(groups_to_include)
-        .agg(
-            lower=pl.col("estimate").quantile(
-                config["forecast_plots"]["interval"]["lower"]
-            ),
-            upper=pl.col("estimate").quantile(
-                config["forecast_plots"]["interval"]["upper"]
-            ),
-            mean=pl.col("estimate").mean(),
-        )
-        .sort("time_end")
-    )
-
-    data = plot_pred.join(plot_obs, on=groups_to_include)
+    data = pred.join(plot_obs, on=groups_to_include)
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
@@ -234,7 +258,7 @@ def plot_summary(obs: pl.DataFrame, pred: pl.DataFrame, config: Dict[str, Any]):
     for idx, dim in enumerate(dimensions):
         filter_val = st.selectbox(
             dim,
-            options=plot_pred[dim].unique().sort().to_list(),
+            options=pred[dim].unique().sort().to_list(),
             key=f"{dim}_{idx}_summary",
         )
 
@@ -418,22 +442,9 @@ if __name__ == "__main__":
     p.add_argument("--config", help="config yaml file", required=True)
     args = p.parse_args()
 
-    @st.cache_data
-    def load_data():
-        return {
-            "observed": pl.read_parquet(args.data),
-            "preds": pl.read_parquet(args.preds),
-        }
-
-    @st.cache_data
-    def load_scores():
-        return pl.read_parquet(args.scores)
-
-    @st.cache_data
-    def load_config():
-        with open(args.config) as f:
-            config = yaml.safe_load(f)
-
-        return config
-
-    app()
+    app(
+        config_path=args.config,
+        scores_path=args.scores,
+        data_path=args.data,
+        preds_path=args.preds,
+    )
