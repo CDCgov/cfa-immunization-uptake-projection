@@ -50,7 +50,7 @@ forecast_plots:
   n_trajectories: 20
 
 diagnostics:
-  forecast_date: []
-  model: [LPLModel]
-  plot: [posterior_density_plot, parameter_trace_plot]
-  table: [print_posterior_dist, print_model_summary]
+  forecast_starts: [2021-07-01]
+  models: [LPLModel]
+  plots: [posterior_density_plot, parameter_trace_plot]
+  tables: [print_posterior_dist, print_model_summary]
