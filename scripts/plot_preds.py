@@ -28,7 +28,7 @@ if __name__ == "__main__":
     # get the forecast cone
     half_alpha = (1.0 - config["forecast_plots"]["ci_level"]) / 2
     preds = pred_samples.group_by(
-        ["season", "geography", "time_end", "model", "forecast_start"]
+        ["season", "geography", "time_end", "model", "forecast_date"]
     ).agg(
         pl.col("estimate").median().alias("pred_estimate"),
         pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
@@ -39,14 +39,14 @@ if __name__ == "__main__":
         ["season", "geography", "time_end", "estimate", "lci", "uci"]
     ).rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
 
-    forecasts = preds.filter(pl.col("time_end") > pl.col("forecast_start"))
+    forecasts = preds.filter(pl.col("time_end") > pl.col("forecast_date"))
 
     # get all the target dates & forecast dates
     fc_plot = obs.join(
-        forecasts.select(pl.col("forecast_start").unique()), how="cross"
+        forecasts.select(pl.col("forecast_date").unique()), how="cross"
     ).join(
         forecasts,
-        on=["season", "geography", "time_end", "forecast_start"],
+        on=["season", "geography", "time_end", "forecast_date"],
         how="left",
     )
 
@@ -65,13 +65,13 @@ if __name__ == "__main__":
         alt.X2("time_end"), alt.Y("obs_lci"), alt.Y2("obs_uci")
     )
 
-    (fc_cone + fc_points + fc_data + fc_data_error).facet(column="forecast_start").save(
+    (fc_cone + fc_points + fc_data + fc_data_error).facet(column="forecast_date").save(
         args.output
     )
 
     # scores across seasons & states
     fit_scores = scores.filter(
-        pl.col("forecast_start") == pl.col("forecast_start").max(),
+        pl.col("forecast_date") == pl.col("forecast_date").max(),
         pl.col("score_type") == pl.lit("fit"),
         pl.col("score_fun") == pl.lit("mspe"),
     ).with_columns(pl.col("score_value").log())
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             pl.col("score_fun") == pl.lit("eos_abs_diff"),
         )
     ).mark_line().encode(
-        alt.X("forecast_start"), alt.Y("score_value"), alt.Color("geography")
+        alt.X("forecast_date"), alt.Y("score_value"), alt.Color("geography")
     ).save(out_dir / "scores_increasing.png")
 
     # score vs. forecast
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         scores.filter(
             pl.col("score_type") == pl.lit("forecast"),
             pl.col("score_fun") == pl.lit("eos_abs_diff"),
-            pl.col("forecast_start") == pl.col("forecast_start").min(),
+            pl.col("forecast_date") == pl.col("forecast_date").min(),
         )
         .select(["geography", "model", "score_value"])
         .rename({"score_value": "fc_score"})

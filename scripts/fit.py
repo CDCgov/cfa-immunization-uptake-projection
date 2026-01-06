@@ -18,7 +18,7 @@ import iup.models
 
 
 def fit_all_models(
-    data, forecast_start: dt.date, config
+    data, forecast_date: dt.date, config
 ) -> Dict[str, iup.models.UptakeModel]:
     """
     Run all forecasts
@@ -50,10 +50,10 @@ def fit_all_models(
             params=config_model["params"],
             mcmc=config["mcmc"],
             grouping_factors=config["groups"],
-            forecast_start=forecast_start,
+            forecast_date=forecast_date,
         )
 
-        label = (model_name, forecast_start)
+        label = (model_name, forecast_date)
         all_models[label] = fitted_model
 
     return all_models
@@ -66,10 +66,10 @@ def fit_model(
     params: dict[str, Any],
     mcmc: dict[str, Any],
     grouping_factors: List[str] | None,
-    forecast_start: dt.date,
+    forecast_date: dt.date,
 ) -> iup.models.UptakeModel:
     """Run a single model for a single forecast date"""
-    train_data = iup.UptakeData(data.filter(pl.col("time_end") <= forecast_start))
+    train_data = iup.UptakeData(data.filter(pl.col("time_end") <= forecast_date))
 
     # Make an instance of the model, fit it using training data, and make projections
     fit_model = model_class(seed).fit(
@@ -86,18 +86,18 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
     p.add_argument("--data", help="input data", required=True)
-    p.add_argument("--forecast_start", required=True)
+    p.add_argument("--forecast_date", required=True)
     p.add_argument("--output", help="output pickle path", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    forecast_start = dt.date.fromisoformat(args.forecast_start)
+    forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
 
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
-    all_models = fit_all_models(data=data, forecast_start=forecast_start, config=config)
+    all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:

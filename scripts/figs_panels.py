@@ -79,7 +79,7 @@ def load_data(path):
 
 
 def load_pred(path, data):
-    pred = pl.read_parquet(path).drop(["forecast_start", "forecast_end", "model"])
+    pred = pl.read_parquet(path).drop(["forecast_date", "forecast_end", "model"])
     return (
         pred.group_by(["time_end", "geography", "season"])
         .agg(
@@ -222,7 +222,7 @@ def plot_uptake(data, color="green", season_start_month=7, upper_bound=0.6):
         alt.layer(*plot_list).facet("geography", columns=9).configure_header(
             labelFontSize=40
         ).configure_axis(labelFontSize=30, titleFontSize=30).display()
-    elif "forecast_start" in data.columns:
+    elif "forecast_date" in data.columns:
         alt.layer(*plot_list).facet("forecast_start", columns=4).configure_header(
             labelFontSize=40
         ).configure_axis(labelFontSize=30, titleFontSize=30).display()

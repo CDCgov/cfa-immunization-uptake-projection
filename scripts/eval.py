@@ -16,14 +16,14 @@ def eval_all_forecasts(
     data:
         observed data with at least "time_end" and "estimate" columns
     pred:
-        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_start" and "estimate",
+        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_date" and "estimate",
     config:
         config file to specify the expected quantile from the sample distribution and evaluation metrics to calculate
 
     Returns:
         A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
     """
-    forecast_starts = pred["forecast_start"].unique()
+    forecast_dates = pred["forecast_date"].unique()
 
     assert "score_funs" in config, (
         f"`score_funs` not among config keys: {config.keys()}"
@@ -33,7 +33,7 @@ def eval_all_forecasts(
     assert config["groups"] is not None
     cols = config["groups"] + [
         "model",
-        "forecast_start",
+        "forecast_date",
         "score_value",
         "score_fun",
         "score_type",
@@ -41,13 +41,13 @@ def eval_all_forecasts(
 
     all_scores = pl.DataFrame()
 
-    for forecast_start in forecast_starts:
+    for forecast_date in forecast_dates:
         # get a fit score
-        fit_data = data.filter(pl.col("time_end") <= forecast_start)
-        fit_pred = pred.filter(pl.col("time_end") <= forecast_start)
+        fit_data = data.filter(pl.col("time_end") <= forecast_date)
+        fit_pred = pred.filter(pl.col("time_end") <= forecast_date)
 
-        fc_data = data.filter(pl.col("time_end") > forecast_start)
-        fc_pred = pred.filter(pl.col("time_end") > forecast_start)
+        fc_data = data.filter(pl.col("time_end") > forecast_date)
+        fc_pred = pred.filter(pl.col("time_end") > forecast_date)
 
         for score_fun in score_funs:
             fit_scores = (

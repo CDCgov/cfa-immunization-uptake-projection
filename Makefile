@@ -13,9 +13,9 @@ SCORES = $(OUTPUT_DIR)/scores.parquet
 PLOT_DATA = $(OUTPUT_DIR)/plots/data_one_season_by_state.png
 PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
 
-FORECAST_STARTS = $(shell python scripts/get_forecast_starts.py --config=$(CONFIG))
-PREDS = $(foreach date,$(FORECAST_STARTS),$(PRED_DIR)/forecast_start=$(date)/part-0.parquet)
-FITS = $(foreach date,$(FORECAST_STARTS),$(OUTPUT_DIR)/fits/fit_$(date).pkl)
+FORECAST_DATES = $(shell python scripts/get_forecast_dates.py --config=$(CONFIG))
+PREDS = $(foreach date,$(FORECAST_DATES),$(PRED_DIR)/forecast_date=$(date)/part-0.parquet)
+FITS = $(foreach date,$(FORECAST_DATES),$(OUTPUT_DIR)/fits/fit_$(date).pkl)
 
 # This variable because the pattern `forecast_date=2020-01-01` confuses make.
 # It thinks `=%` is variable assignment, not pattern matching.
@@ -45,12 +45,12 @@ $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
 $(PREDS_FLAG): $(PREDS)
 	touch $@
 
-# output/run_id/pred/forecast_start=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
-$(PRED_DIR)/forecast_start$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
+# output/run_id/pred/forecast_date=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
+$(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --config=$(CONFIG) --output=$@
 
 $(OUTPUT_DIR)/fits/fit_%.pkl: scripts/fit.py $(DATA) $(CONFIG)
-	python $< --data=$(DATA) --forecast_start=$* --config=$(CONFIG) --output=$@
+	python $< --data=$(DATA) --forecast_date=$* --config=$(CONFIG) --output=$@
 
 $(DATA): scripts/preprocess.py $(RAW_DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --input=$(RAW_DATA) --output=$@
