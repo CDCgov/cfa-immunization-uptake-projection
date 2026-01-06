@@ -10,6 +10,34 @@ import iup
 import iup.utils
 
 
+def season_filter(
+    df: pl.LazyFrame,
+    start_month: int,
+    start_day: int,
+    end_month: int,
+    end_day: int,
+    col_name="time_end",
+) -> pl.LazyFrame:
+    """
+    Filter a data frame for dates that are before the season end or after the
+    season start (i.e., we assume that some summer months are "out of season").
+    """
+    assert (end_month, end_day) < (start_month, start_day), (
+        "Only summer-ending seasons are supported"
+    )
+
+    col = pl.col(col_name)
+    month = col.dt.month()
+    day = col.dt.day()
+
+    return df.filter(
+        (month < end_month)
+        | ((month == end_month) & (day <= end_day))
+        | (month > start_month)
+        | ((month == start_month) & (day >= start_day))
+    )
+
+
 def preprocess(
     raw_data: pl.LazyFrame,
     groups: List[str] | None,
@@ -39,14 +67,15 @@ def preprocess(
                 season_start_day=season_start_day,
             ),
         )
+        # remove nation and territories
         .filter(
-            # drop the nation
             pl.col("geography_type") == pl.lit("admin1"),
-            # remove territories
             pl.col("geography")
             .is_in(["Puerto Rico", "U.S. Virgin Islands", "Guam"])
             .not_(),
-            # remove data that don't fit nicely into seasons
+        )
+        # remove dates from outside the entire range
+        .filter(
             pl.col("time_end").is_between(
                 date(
                     config["season"]["first_year"],
@@ -59,6 +88,14 @@ def preprocess(
                     config["season"]["end_day"],
                 ),
             ),
+        )
+        # remove out-of-season dates
+        .pipe(
+            season_filter,
+            start_month=config["season"]["start_month"],
+            start_day=config["season"]["start_day"],
+            end_month=config["season"]["end_month"],
+            end_day=config["season"]["end_day"],
         )
         .pipe(geo_filter)
         .sort("time_end")
