@@ -8,7 +8,6 @@ import numpy as np
 import polars as pl
 import yaml
 
-EXAMPLE_SEASON = "2020/2021"
 AXIS_PERCENT = alt.Axis(format=".0%")
 LINE_OPACITY = 0.25
 
@@ -112,9 +111,9 @@ if __name__ == "__main__":
 
     # for one season, show each state's trajectory
     # exs = example season
-    exs_data = data.filter(pl.col("season") == pl.lit(EXAMPLE_SEASON)).with_columns(
-        month=pl.col("time_end").dt.to_string("%b")
-    )
+    exs_data = data.filter(
+        pl.col("season") == pl.lit(config["forecasts"]["example_data_season"])
+    ).with_columns(month=pl.col("time_end").dt.to_string("%b"))
 
     enc_x_exs = alt.X(
         "month", title=None, sort=month_order(config["season"]["start_month"])

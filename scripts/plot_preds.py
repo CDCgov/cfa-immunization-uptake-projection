@@ -13,7 +13,6 @@ from plot_data import (
     month_order,
 )
 
-EXAMPLE_STATE = "New Jersey"
 LINE_OPACITY = 0.4
 
 
@@ -37,7 +36,7 @@ if __name__ == "__main__":
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # get the forecast cone
-    half_alpha = (1.0 - config["forecast_plots"]["ci_level"]) / 2
+    half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
     forecasts = (
         preds.filter(pl.col("time_end") > pl.col("forecast_date"))
         .group_by(["season", "geography", "time_end", "model", "forecast_date"])
@@ -71,7 +70,7 @@ if __name__ == "__main__":
     # for one state, show forecasts (which are only one season)
     base = alt.Chart(
         fc_plot.filter(
-            pl.col("geography") == pl.lit(EXAMPLE_STATE),
+            pl.col("geography") == pl.lit(config["plots"]["example_forecast_geo"]),
             pl.col("season") == pl.col("season").max(),
         )
     ).encode(enc_x_month)

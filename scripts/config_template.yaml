@@ -46,7 +46,9 @@ forecast_dates:
 
 score_funs: [mspe, eos_abs_diff]
 
-forecast_plots:
+plots:
+  example_data_season: "2020/2021"
+  example_forecast_geo: "New Jersey"
   ci_level: 0.95
   n_trajectories: 20
 
