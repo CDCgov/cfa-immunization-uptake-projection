@@ -2,7 +2,6 @@ import argparse
 import datetime as dt
 import pickle
 from pathlib import Path
-from typing import Any, Dict, Tuple
 
 import yaml
 
@@ -12,102 +11,64 @@ import iup.models
 
 
 def diagnostic_plot(
-    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel],
-    config: Dict[str, Any],
-    output_dir,
+    plot_name: str, fit: iup.models.UptakeModel, output_path: str | Path
 ):
-    """select the fitted model using model name and training end date
-    and generate selected diagnostic plots"""
-
-    sel_model_dict = select_model_to_diagnose(models, config)
-
-    diagnose_plot_names = config["diagnostics"]["plot"]
-
-    for key, model in sel_model_dict.items():
-        for plot_name in diagnose_plot_names:
-            plot_func = getattr(iup.diagnostics, plot_name)
-            axes = plot_func(model)
-            fig = axes.ravel()[0].figure
-            fig.savefig(
-                Path(
-                    output_dir,
-                    f"model={key[0]}_forecast_start={str(key[1])}_{plot_name}.png",
-                )
-            )
+    plot_func = getattr(iup.diagnostics, plot_name)
+    axes = plot_func(fit)
+    fig = axes.ravel()[0].figure
+    fig.savefig(output_path)
 
 
 def diagnostic_table(
-    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel],
-    config: Dict[str, Any],
-    output_dir,
+    table_name: str, fit: iup.models.UptakeModel, output_path: str | Path
 ):
-    """select the fitted model using model name and training end date
-    and generate selected diagnostics: summary/posterior as parquet"""
-
-    sel_model_dict = select_model_to_diagnose(models, config)
-
-    diagnose_table_names = config["diagnostics"]["table"]
-
-    for key, model in sel_model_dict.items():
-        for table_name in diagnose_table_names:
-            table_func = getattr(iup.diagnostics, table_name)
-            output = table_func(model)
-
-            output.write_parquet(
-                Path(
-                    output_dir,
-                    f"model={key[0]}_forecast_start={str(key[1])}_{table_name}.parquet",
-                )
-            )
-
-
-def select_model_to_diagnose(
-    models: Dict[Tuple[str, dt.date], iup.models.UptakeModel], config
-) -> dict:
-    """Select the model to diagnose based on the model name and the training end date"""
-
-    forecast_dates = config["diagnostics"]["forecast_date"]
-
-    if forecast_dates is None:
-        sel_keys = [
-            (model, date)
-            for model, date in models.keys()
-            if model in config["diagnostics"]["model"]
-        ]
-    else:
-        assert isinstance(forecast_dates, list)
-        assert all(isinstance(x, dt.date) for x in forecast_dates)
-        sel_keys = [
-            (model, date)
-            for model, date in models.keys()
-            if model in config["diagnostics"]["model"] and date in forecast_dates
-        ]
-
-    return {key: models[key] for key in sel_keys}
+    table_func = getattr(iup.diagnostics, table_name)
+    output = table_func(fit)
+    output.write_csv(output_path)
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", help="config file")
-    p.add_argument("--fits", help="fits pickle")
-    p.add_argument(
-        "--output", help="output status file; other files put in the same directory"
-    )
+    p.add_argument("--config", help="config file", required=True)
+    p.add_argument("--fits_dir", help="directory with fit pickles", required=True)
+    p.add_argument("--output_dir", required=True)
     args = p.parse_args()
+
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    with open(args.fits, "rb") as f:
-        models = pickle.load(f)
+    for key in ["forecast_starts", "models", "tables", "plots"]:
+        assert isinstance(config["diagnostics"][key], list), (
+            f"config['diagnostics']['{key}'] should be a list"
+        )
 
-    output_dir = Path(args.output).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
+    for forecast_start in config["diagnostics"]["forecast_starts"]:
+        fc_date = dt.date.fromisoformat(forecast_start)
 
-    # write the other plots to the same folder
-    diagnostic_plot(models, config, output_dir)
-    diagnostic_table(models, config, output_dir)
+        for model in config["diagnostics"]["models"]:
+            with open(Path(args.fits_dir) / f"fit_{fc_date}.pkl", "rb") as f:
+                fits = pickle.load(f)
 
-    # write the status file
-    with open(args.output, "w") as f:
-        f.write(dt.datetime.now().isoformat())
+            fit = fits[(model, fc_date)]
+
+            for table in config["diagnostics"]["tables"]:
+                diagnostic_table(
+                    table_name=table,
+                    fit=fit,
+                    output_path=Path(
+                        args.output_dir,
+                        f"model={model}_forecast_start={fc_date}_{table}.csv",
+                    ),
+                )
+
+            for plot in config["diagnostics"]["plots"]:
+                diagnostic_plot(
+                    plot_name=plot,
+                    fit=fit,
+                    output_path=Path(
+                        args.output_dir,
+                        f"model={model}_forecast_start={fc_date}_{plot}.png",
+                    ),
+                )

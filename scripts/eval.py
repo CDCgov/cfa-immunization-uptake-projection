@@ -24,6 +24,10 @@ def eval_all_forecasts(
         A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
     """
     forecast_starts = pred["forecast_start"].unique()
+
+    assert "score_funs" in config, (
+        f"`score_funs` not among config keys: {config.keys()}"
+    )
     score_funs = [getattr(iup.eval, fun_name) for fun_name in config["score_funs"]]
 
     assert config["groups"] is not None

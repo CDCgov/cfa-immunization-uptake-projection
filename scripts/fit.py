@@ -1,6 +1,12 @@
+import os
+
+# silence Jax CPU warning
+os.environ["JAX_PLATFORMS"] = "cpu"
+
 import argparse
 import datetime as dt
 import pickle as pkl
+from pathlib import Path
 from typing import Any, Dict, List, Type
 
 import numpyro
@@ -11,19 +17,15 @@ import iup
 import iup.models
 
 
-def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
-    """Run all forecasts
+def fit_all_models(
+    data, forecast_start: dt.date, config
+) -> Dict[str, iup.models.UptakeModel]:
+    """
+    Run all forecasts
 
     Returns:
         pl.DataFrame: data frame of forecasts, organized by model and forecast date
     """
-
-    forecast_dates = pl.date_range(
-        config["forecasts"]["start_date"]["start"],
-        config["forecasts"]["start_date"]["end"],
-        config["forecasts"]["start_date"]["interval"],
-        eager=True,
-    )
 
     all_models = {}
 
@@ -41,19 +43,18 @@ def fit_all_models(data, config) -> Dict[str, iup.models.UptakeModel]:
             config["season"]["start_day"],
         )
 
-        for forecast_date in forecast_dates:
-            fitted_model = fit_model(
-                data=augmented_data,
-                model_class=model_class,
-                seed=config_model["seed"],
-                params=config_model["params"],
-                mcmc=config["mcmc"],
-                grouping_factors=config["groups"],
-                forecast_start=forecast_date,
-            )
+        fitted_model = fit_model(
+            data=augmented_data,
+            model_class=model_class,
+            seed=config_model["seed"],
+            params=config_model["params"],
+            mcmc=config["mcmc"],
+            grouping_factors=config["groups"],
+            forecast_start=forecast_start,
+        )
 
-            label = (model_name, forecast_date)
-            all_models[label] = fitted_model
+        label = (model_name, forecast_start)
+        all_models[label] = fitted_model
 
     return all_models
 
@@ -85,17 +86,19 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
     p.add_argument("--data", help="input data", required=True)
-    p.add_argument("--output", help="output directory", required=True)
+    p.add_argument("--forecast_start", required=True)
+    p.add_argument("--output", help="output pickle path", required=True)
     args = p.parse_args()
 
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
+    forecast_start = dt.date.fromisoformat(args.forecast_start)
+    data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
+
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
+    all_models = fit_all_models(data=data, forecast_start=forecast_start, config=config)
 
-    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
-
-    all_models = fit_all_models(input_data, config)
-
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:
         pkl.dump(all_models, f)
