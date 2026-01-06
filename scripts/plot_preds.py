@@ -4,9 +4,18 @@ from pathlib import Path
 import altair as alt
 import polars as pl
 import yaml
-from plot_data import AXIS_PERCENT, MEDIAN_ENCODINGS, add_medians, month_order
+from plot_data import (
+    AXIS_PERCENT,
+    MEDIAN_ENCODINGS,
+    TICK_KWARGS,
+    add_medians,
+    gather_n,
+    month_order,
+)
 
-ENC_Y_SCORE = alt.Y("score_value", title="Score (MSPE)")
+EXAMPLE_STATE = "New Jersey"
+LINE_OPACITY = 0.4
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -21,7 +30,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     obs_raw = pl.read_parquet(args.data)
-    pred_samples = pl.read_parquet(args.preds)
+    preds = pl.scan_parquet(args.preds)
     scores = pl.read_parquet(args.scores)
 
     out_dir = Path(args.output_dir)
@@ -29,19 +38,20 @@ if __name__ == "__main__":
 
     # get the forecast cone
     half_alpha = (1.0 - config["forecast_plots"]["ci_level"]) / 2
-    preds = pred_samples.group_by(
-        ["season", "geography", "time_end", "model", "forecast_date"]
-    ).agg(
-        pl.col("estimate").median().alias("pred_estimate"),
-        pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
-        pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
+    forecasts = (
+        preds.filter(pl.col("time_end") > pl.col("forecast_date"))
+        .group_by(["season", "geography", "time_end", "model", "forecast_date"])
+        .agg(
+            pl.col("estimate").median().alias("pred_estimate"),
+            pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
+            pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
+        )
+        .collect()
     )
 
     obs = obs_raw.select(
         ["season", "geography", "time_end", "estimate", "lci", "uci"]
     ).rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
-
-    forecasts = preds.filter(pl.col("time_end") > pl.col("forecast_date"))
 
     # get all the target dates & forecast dates
     fc_plot = (
@@ -61,7 +71,7 @@ if __name__ == "__main__":
     # for one state, show forecasts (which are only one season)
     base = alt.Chart(
         fc_plot.filter(
-            pl.col("geography") == pl.lit("New Jersey"),
+            pl.col("geography") == pl.lit(EXAMPLE_STATE),
             pl.col("season") == pl.col("season").max(),
         )
     ).encode(enc_x_month)
@@ -91,7 +101,9 @@ if __name__ == "__main__":
     alt.Chart(
         add_medians(fit_scores, group_by="season", value_col="score_value")
     ).mark_point().encode(
-        alt.X("season", title=None), ENC_Y_SCORE, *MEDIAN_ENCODINGS
+        alt.X("season", title=None),
+        alt.Y("score_value", title="Score (MSPE)"),
+        *MEDIAN_ENCODINGS,
     ).save(out_dir / "score_by_season.png")
 
     alt.Chart(
@@ -100,9 +112,9 @@ if __name__ == "__main__":
         alt.X(
             "geography",
             title=None,
-            sort=alt.EncodingSortField("estimate", "median", "descending"),
+            sort=alt.EncodingSortField("score_value", "median", "descending"),
         ),
-        ENC_Y_SCORE,
+        alt.Y("score_value", title="Score (MSPE)"),
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "score_by_geo.png")
 
@@ -115,21 +127,24 @@ if __name__ == "__main__":
 
     sis_line = (
         alt.Chart(sis_data)
-        .mark_line(
-            color="black", opacity=0.5, point={"stroke": "black", "fill": "white"}
+        .mark_line(color="black", opacity=LINE_OPACITY)
+        .encode(
+            enc_x_month,
+            alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
+            alt.Detail("geography"),
         )
-        .encode(enc_x_month, ENC_Y_SCORE, alt.Detail("geography"))
     )
 
-    sis_text = (
-        alt.Chart(
-            sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
-        )
-        .mark_text(align="left", dx=15)
-        .encode(enc_x_month, ENC_Y_SCORE, alt.Text("geography"))
-    )
+    sis_tick_base = alt.Chart(
+        sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
+        .sort("score_value")
+        .pipe(gather_n, 5)
+    ).encode(enc_x_month, alt.Y("score_value"), alt.Text("geography"))
 
-    (sis_line + sis_text).save(out_dir / "scores_increasing.png")
+    sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
+    sis_text = sis_tick_base.mark_text(align="left", dx=15)
+
+    (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.png")
 
     # score vs. forecast
     avg_fit = (

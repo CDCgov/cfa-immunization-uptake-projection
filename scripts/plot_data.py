@@ -4,11 +4,13 @@ from pathlib import Path
 from typing import List
 
 import altair as alt
+import numpy as np
 import polars as pl
 import yaml
 
 EXAMPLE_SEASON = "2020/2021"
 AXIS_PERCENT = alt.Axis(format=".0%")
+LINE_OPACITY = 0.25
 
 MEDIAN_POINT_KWARGS = {
     "color": "black",
@@ -29,6 +31,14 @@ MEDIAN_ENCODINGS = [
     ),
     alt.Size("type", scale=alt.Scale(domain=["datum", "median"], range=[20, 200])),
 ]
+
+TICK_KWARGS = {
+    "shape": "stroke",
+    "size": 50,
+    "color": "black",
+    "strokeWidth": 2,
+    "opacity": 1,
+}
 
 
 def add_medians(
@@ -72,6 +82,18 @@ assert month_order(7) == [
     "Jun",
 ]
 
+
+def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
+    """Take `n` evenly spaced rows from `df`, including the first and last"""
+    assert n > 2
+    assert df.height >= n
+    return (
+        df.with_row_index(col_name)
+        .filter(pl.col(col_name).is_in(np.linspace(0, df.height - 1, num=n).round()))
+        .drop(col_name)
+    )
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
@@ -89,17 +111,35 @@ if __name__ == "__main__":
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # for one season, show each state's trajectory
-    alt.Chart(
-        data.filter(pl.col("season") == pl.lit(EXAMPLE_SEASON)).with_columns(
-            month=pl.col("time_end").dt.to_string("%b")
+    # exs = example season
+    exs_data = data.filter(pl.col("season") == pl.lit(EXAMPLE_SEASON)).with_columns(
+        month=pl.col("time_end").dt.to_string("%b")
+    )
+
+    enc_x_exs = alt.X(
+        "month", title=None, sort=month_order(config["season"]["start_month"])
+    )
+
+    exs_line = (
+        alt.Chart(exs_data)
+        .mark_line(color="black", opacity=LINE_OPACITY)
+        .encode(
+            enc_x_exs,
+            alt.Y("estimate", title="Coverage", axis=AXIS_PERCENT),
+            alt.Detail("geography"),
         )
-    ).mark_line(
-        color="black", point={"stroke": "black", "fill": "white"}, opacity=0.5
-    ).encode(
-        alt.X("month", title=None, sort=month_order(config["season"]["start_month"])),
-        alt.Y("estimate", title="Coverage", axis=AXIS_PERCENT),
-        alt.Detail("geography"),
-    ).save(out_dir / "data_one_season_by_state.png")
+    )
+
+    exs_tick_base = alt.Chart(
+        exs_data.filter(pl.col("time_end") == pl.col("time_end").max())
+        .sort("estimate")
+        .pipe(gather_n, 5)
+    ).encode(enc_x_exs, alt.Y("estimate"), alt.Text("geography"))
+
+    exs_text = exs_tick_base.mark_text(align="left", dx=15)
+    exs_tick = exs_tick_base.mark_point(**TICK_KWARGS)
+
+    (exs_line + exs_tick + exs_text).save(out_dir / "data_one_season_by_state.png")
 
     # end of season data
     eos = data.filter((pl.col("time_end") == pl.col("time_end").max()).over("season"))
