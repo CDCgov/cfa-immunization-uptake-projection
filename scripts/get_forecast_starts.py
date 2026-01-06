@@ -12,9 +12,9 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     forecast_starts = pl.date_range(
-        config["forecasts"]["start_date"]["start"],
-        config["forecasts"]["start_date"]["end"],
-        config["forecasts"]["start_date"]["interval"],
+        config["forecast_starts"]["start"],
+        config["forecast_starts"]["end"],
+        config["forecast_starts"]["interval"],
         eager=True,
     )
 
