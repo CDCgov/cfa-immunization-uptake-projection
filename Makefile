@@ -37,7 +37,7 @@ $(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA) $(CONFIG)
 	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
 
 $(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG) $(SCORES)
-	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --output=$@
+	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --output_dir=$(OUTPUT_DIR)/plots
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --data=$(DATA) --output_dir=$(OUTPUT_DIR)/plots
