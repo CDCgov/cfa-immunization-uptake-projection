@@ -22,13 +22,16 @@ FITS = $(foreach date,$(FORECAST_STARTS),$(OUTPUT_DIR)/fits/fit_$(date).pkl)
 # So we need `forecast_date$(EQ)%`.
 EQ = =
 
-.PHONY: clean viz
+.PHONY: clean viz dx
 
-all: $(CONFIG_COPY) $(DATA) $(FITS) $(DIAGNOSTICS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
+all: $(CONFIG_COPY) $(DATA) $(FITS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
 
 viz:
 	streamlit run scripts/viz.py -- \
 		--data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --config=$(CONFIG)
+
+dx: scripts.diagnostics $(FITS) $(CONFIG)
+	python $< --fit_dir=$(OUTPUT_DIR)/fits --output_dir=$(OUTPUT_DIR)/diagnostics --config=$(CONFIG)
 
 $(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA) $(CONFIG)
 	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
@@ -41,9 +44,6 @@ $(PLOT_DATA): scripts/plot_data.py $(DATA)
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
-
-$(DIAGNOSTICS): scripts/diagnostics.py $(FITS) $(CONFIG)
-	python $< --fits=$(FITS) --config=$(CONFIG) --output=$@
 
 # output/run_id/pred/forecast_start=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_start$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
