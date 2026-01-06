@@ -11,11 +11,11 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    forecast_starts = pl.date_range(
-        config["forecast_starts"]["start"],
-        config["forecast_starts"]["end"],
-        config["forecast_starts"]["interval"],
+    forecast_dates = pl.date_range(
+        config["forecast_dates"]["start"],
+        config["forecast_dates"]["end"],
+        config["forecast_dates"]["interval"],
         eager=True,
     )
 
-    print(*forecast_starts, sep=" ")
+    print(*forecast_dates, sep=" ")

@@ -39,13 +39,13 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    for key in ["forecast_starts", "models", "tables", "plots"]:
+    for key in ["forecast_dates", "models", "tables", "plots"]:
         assert isinstance(config["diagnostics"][key], list), (
             f"config['diagnostics']['{key}'] should be a list"
         )
 
-    for forecast_start in config["diagnostics"]["forecast_starts"]:
-        fc_date = dt.date.fromisoformat(forecast_start)
+    for forecast_date in config["diagnostics"]["forecast_dates"]:
+        fc_date = dt.date.fromisoformat(forecast_date)
 
         for model in config["diagnostics"]["models"]:
             with open(Path(args.fits_dir) / f"fit_{fc_date}.pkl", "rb") as f:
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                     fit=fit,
                     output_path=Path(
                         args.output_dir,
-                        f"model={model}_forecast_start={fc_date}_{table}.csv",
+                        f"model={model}_forecast_date={fc_date}_{table}.csv",
                     ),
                 )
 
@@ -69,6 +69,6 @@ if __name__ == "__main__":
                     fit=fit,
                     output_path=Path(
                         args.output_dir,
-                        f"model={model}_forecast_start={fc_date}_{plot}.png",
+                        f"model={model}_forecast_date={fc_date}_{plot}.png",
                     ),
                 )

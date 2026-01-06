@@ -56,7 +56,7 @@ def run_all_forecasts(
             groups=config["groups"],
             season_start_month=config["season"]["start_month"],
             season_start_day=config["season"]["start_day"],
-        ).with_columns(forecast_start=forecast_date, model=pl.lit(model_name))
+        ).with_columns(forecast_date=forecast_date, model=pl.lit(model_name))
 
         all_forecasts = pl.concat([all_forecasts, forecast])
 

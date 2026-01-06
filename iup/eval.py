@@ -7,11 +7,11 @@ def mspe(
     obs: pl.DataFrame, pred: pl.DataFrame, grouping_factors: List[str]
 ) -> pl.DataFrame:
     return (
-        pred.group_by(["model", "time_end", "forecast_start"] + grouping_factors)
+        pred.group_by(["model", "time_end", "forecast_date"] + grouping_factors)
         .agg(pred_median=pl.col("estimate").median())
         .join(obs, on=["time_end"] + grouping_factors, how="right")
         .with_columns(score_value=(pl.col("estimate") - pl.col("pred_median")) ** 2)
-        .group_by(["model", "forecast_start"] + grouping_factors)
+        .group_by(["model", "forecast_date"] + grouping_factors)
         .agg(pl.col("score_value").mean())
         .with_columns(score_fun=pl.lit("mspe"))
     )
@@ -36,7 +36,7 @@ def eos_abs_diff(
     assert "season" in grouping_factors
 
     median_pred = pred.group_by(
-        ["model", "time_end", "forecast_start"] + grouping_factors
+        ["model", "time_end", "forecast_date"] + grouping_factors
     ).agg(pred_median=pl.col("estimate").median())
 
     return (

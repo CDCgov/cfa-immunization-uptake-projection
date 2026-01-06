@@ -42,7 +42,7 @@ You can modify `config.yaml` or point to a new config file to produce different 
 flowchart TB;
 
 data[output/RUN_ID/data.parquet];
-pred[output/RUN_ID/pred/forecast_start=DATE/part-0.parquet];
+pred[output/RUN_ID/pred/forecast_date=DATE/part-0.parquet];
 scores[output/RUN_ID/scores.parquet];
 preprocess[/scripts/preprocess.py/];
 fit[/scripts/fit.py/];

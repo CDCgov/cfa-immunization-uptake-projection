@@ -39,7 +39,7 @@ mcmc:
   num_chains: 4
   progress_bar: false
 
-forecast_starts:
+forecast_dates:
   start: 2021-09-01
   end: 2021-11-01
   interval: 1mo
@@ -52,7 +52,7 @@ forecast_plots:
 
 # diagnostics are not produced by default
 diagnostics:
-  forecast_starts: [2021-07-01]
+  forecast_dates: [2021-07-01]
   models: [LPLModel]
   plots: [posterior_density_plot, parameter_trace_plot]
   tables: [print_posterior_dist, print_model_summary]
