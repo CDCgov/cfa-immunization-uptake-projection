@@ -1,3 +1,4 @@
+# results will be placed in output/RUN_ID/
 run_id: vignette
 
 season:
@@ -5,11 +6,14 @@ season:
   start_day: 1
   end_month: 4 # April
   end_day: 1
+  # filter the data to between these years
   first_year: 2018 # 2009 for full data
   last_year: 2022
 
+# prediction features
 groups: [season, geography]
 
+# include only these geographies. remove to use all geographies.
 geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
 
 models:
@@ -44,11 +48,11 @@ forecasts:
 
 score_funs: [mspe, eos_abs_diff]
 
-# Prediction credible interval plot
 forecast_plots:
   ci_level: 0.95
   n_trajectories: 20
 
+# diagnostics are not produced by default
 diagnostics:
   forecast_starts: [2021-07-01]
   models: [LPLModel]

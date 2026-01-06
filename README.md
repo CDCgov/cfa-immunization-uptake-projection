@@ -22,107 +22,42 @@ For convenience, the raw data are tracked in this repo under `data/`, which incl
 
 ### Running the vignette
 
-1. Copy `scripts/config_template.yaml` to `scripts/config.yaml`. This config can be modified; see the [file structure](#config-file-structure) below.
-1. Run `make` to run the model fitting and forecasting pipeline. Each run of the pipeline is assigned a `RUN_ID`. When a new `RUN_ID` is given, a new subfolder will be created inside each of the above six folders to store the corresponding outputs. When an existing `RUN_ID` is given, the contents of that `RUN_ID`'s existing subfolders will be overwritten, assuming the pipeline inputs have changed since the last run. `RUN_ID` can be assigned in line 1 of the Makefile or directly in the command line `make RUN_ID=name_of_run`.
-1. Inspect the `output/` subfolders:
-   - `settings`: a copy of the config.
-   - `data`: the pre-processed data.
-   - `fits`: the fit model object(s).
-   - `diagnostics`: diagnostic plots and tables for the desired model(s) and forecast date(s).
-   - `forecasts`: posterior predictions and forecasts.
-   - `scores`: evaluation scores comparing model structures and/or forecast dates.
-1. Run `make viz` to open a streamlit app in web browser, which shows the individual forecast trajectories, credible intervals, and evaluation scores, with options of dimensions and filters to customize the visualization.
-1. Optionally, `make clean` to remove all outputs for a particular `RUN_ID` .
+1. Set up the config:
+   - Copy `scripts/config_template.yaml` to `scripts/config.yaml` or
+   - in the next step, specify `CONFIG=you_path` when calling `make`.
+2. Run the pipeline with `make`.
+3. Inspect `output/vignette/`:
+   - `config.yaml`: a copy of the input config
+   - `data.parquet`: the preprocessed, observed data
+   - `fits/`: pickled model fits, organized by forecast date
+   - `pred/`: model predictions, in Hive-partitioned parquet files
+   - `scores.parquet`: model scores
+4. Run `make viz` for interactive visualization of those results.
 
-### Config file structure
-
-- data: specify the vaccination uptake data to use, including a de facto annual start of the disease season, filters for rows and columns to keep, and grouping factors by which to partition forecasts.
-- forecast_timeframe: specify the start and the end of the forecast period and the interval between reference dates in the forecast (using the [polars string language](https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.date_range.html), e.g., `7d`).
-- evaluation_timeframe: specify the interval between forecast dates if multiple forecasts are desired (sharing the same end of the forecast period). This will create different forecast horizons, which can be compared with evaluation scores. If blank, no evaluation score will not be computed.
-- models: specify the name of the model (refer to `iup.models`), random seed, initial values of parameters, and parameters to use NUTS kernel in MCMC run.
-- scores: specify the quantile of the posterior forecasts to use for evaluation, the date(s) on which to compute absolute difference, and any additional evaluation metrics (e.g. mean squared prediction error as `mspe`).
-- forecast_plots: specify the credible interval (in fractional terms) and number of randomly chosen trajectories to show on forecast plots.
-- diagnostics: specify the model (refer to `iup.models`) and the range of forecast dates (i.e. a list of earliest and latest) on which to perform diagnostics, as well as the types of plots and tables to create (refer to `iup.diagnostics`).
+You can modify `config.yaml` or point to a new config file to produce different results.
 
 ### Vignette workflow
 
 ```mermaid
+flowchart TB;
 
-flowchart TB
+data[output/RUN_ID/data.parquet];
+pred[output/RUN_ID/pred/forecast_start=DATE/part-0.parquet];
+scores[output/RUN_ID/scores.parquet];
+preprocess[/scripts/preprocess.py/];
+fit[/scripts/fit.py/];
+predict[/scripts/predict.py/];
+eval[/scripts/eval.py/];
+viz[/Streamlit and other viz/];
 
-nis_data(nis_raw.parquet)
-fits(model_fits.pkl)
-diagnostic_table(diagnostic_tables.parquet)
-diagnostic_plot(diagnostic_plots.png)
-forecast(forecasts.parquet)
-scores(scores.parquet)
-config{{config.yaml}}
-proj_plot[forecast_trajectories]
-pred_summary[prediction intervals]
-score_plot[evaluation score]
+data/raw.parquet --> preprocess --> data --> fit --> output/RUN_ID/fits/fit_DATE.pkl --> predict --> pred;
 
-subgraph raw data
-NIS
-end
+data --> eval;
+pred--> eval -->scores;
 
-subgraph clean data with groups
-nis_data
-end
-
-subgraph model fits
-fits
-end
-
-subgraph diagnostics
-diagnostic_table
-diagnostic_plot
-end
-
-subgraph forecasts with groups
-forecast
-end
-
-subgraph evaluation scores
-scores
-end
-
-subgraph streamlit
-direction LR
-proj_plot~~~pred_summary~~~score_plot
-end
-
-NIS -->preprocess.py --> nis_data
-nis_data --> fit.py --> fits
-fits --> forecast.py
-fits --> diagnostics.py
-diagnostics.py --> diagnostic_table
-diagnostics.py --> diagnostic_plot
-nis_data --> forecast.py --> forecast
-forecast --> streamlit
-forecast --> eval.py --> scores
-scores --> streamlit
-nis_data --> streamlit
-
-config --> preprocess.py
-config --> fit.py
-config --> diagnostics.py
-config --> forecast.py
-config --> eval.py
-
-style nis_data fill: #8451b5
-style forecast fill: #8451b5
-style scores fill: #8451b5
-style diagnostic_table fill: #8451b5
-style config fill: #da661e
-style preprocess.py fill: #4c7eaf
-style forecast.py fill: #4c7eaf
-style eval.py fill: #4c7eaf
-style fit.py fill: #4c7eaf
-style diagnostics.py fill: #4c7eaf
-style diagnostic_plot fill: #b46060
-style proj_plot fill: #b46060
-style pred_summary fill: #b46060
-style score_plot fill: #b46060
+data --> viz;
+pred --> viz;
+scores --> viz;
 ```
 
 ## Project admins
