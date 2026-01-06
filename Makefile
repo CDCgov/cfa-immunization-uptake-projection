@@ -40,7 +40,7 @@ $(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG) $(SCORES)
 	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --output=$@
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
-	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
+	python $< --config=$(CONFIG) --data=$(DATA) --output_dir=$(OUTPUT_DIR)/plots
 
 $(PREDS_FLAG): $(PREDS)
 	touch $@
