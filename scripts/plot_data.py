@@ -42,7 +42,7 @@ def add_medians(
             df.with_columns(pl.lit("datum").alias(type_col)).select(
                 [group_by, value_col, type_col]
             ),
-            eos.group_by(group_by)
+            df.group_by(group_by)
             .agg(pl.col(value_col).median())
             .with_columns(pl.lit("median").alias(type_col)),
         ]
@@ -105,14 +105,6 @@ if __name__ == "__main__":
     eos = data.filter((pl.col("time_end") == pl.col("time_end").max()).over("season"))
 
     # for each season, show eos spread over states
-    medians = (
-        alt.Chart(eos.group_by("season").agg(pl.col("estimate").median()))
-        .mark_point(**MEDIAN_POINT_KWARGS)
-        .encode(alt.X("season"), alt.Y("estimate"))
-    )
-
-    points = alt.Chart(eos).mark_point().encode(alt.X("season"), alt.Y("estimate"))
-
     alt.Chart(add_medians(eos, "season")).mark_point().encode(
         alt.X("season", title=None),
         alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),

@@ -4,6 +4,9 @@ from pathlib import Path
 import altair as alt
 import polars as pl
 import yaml
+from plot_data import MEDIAN_ENCODINGS, add_medians, month_order
+
+ENC_Y_SCORE = alt.Y("score_value", title="Score (MSPE)")
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -76,26 +79,52 @@ if __name__ == "__main__":
         pl.col("score_fun") == pl.lit("mspe"),
     ).with_columns(pl.col("score_value").log())
 
-    alt.Chart(fit_scores).mark_point().encode(
-        alt.X("season"), alt.Y("score_value")
+    alt.Chart(
+        add_medians(fit_scores, group_by="season", value_col="score_value")
+    ).mark_point().encode(
+        alt.X("season", title=None), ENC_Y_SCORE, *MEDIAN_ENCODINGS
     ).save(out_dir / "score_by_season.png")
 
-    alt.Chart(fit_scores).mark_point().encode(
+    alt.Chart(
+        add_medians(fit_scores, group_by="geography", value_col="score_value")
+    ).mark_point().encode(
         alt.X(
-            "geography", sort=alt.EncodingSortField("estimate", "median", "descending")
+            "geography",
+            title=None,
+            sort=alt.EncodingSortField("estimate", "median", "descending"),
         ),
-        alt.Y("score_value"),
+        ENC_Y_SCORE,
+        *MEDIAN_ENCODINGS,
     ).save(out_dir / "score_by_geo.png")
 
     # scores increasing through the season?
-    alt.Chart(
-        scores.filter(
-            pl.col("score_type") == pl.lit("forecast"),
-            pl.col("score_fun") == pl.lit("eos_abs_diff"),
+    # sis = score in season
+    sis_data = scores.filter(
+        pl.col("score_type") == pl.lit("forecast"),
+        pl.col("score_fun") == pl.lit("eos_abs_diff"),
+    ).with_columns(month=pl.col("forecast_date").dt.to_string("%b"))
+
+    enc_x_sis = alt.X(
+        "month", title=None, sort=month_order(config["season"]["start_month"])
+    )
+
+    sis_line = (
+        alt.Chart(sis_data)
+        .mark_line(
+            color="black", opacity=0.5, point={"stroke": "black", "fill": "white"}
         )
-    ).mark_line().encode(
-        alt.X("forecast_date"), alt.Y("score_value"), alt.Color("geography")
-    ).save(out_dir / "scores_increasing.png")
+        .encode(enc_x_sis, ENC_Y_SCORE, alt.Detail("geography"))
+    )
+
+    sis_text = (
+        alt.Chart(
+            sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
+        )
+        .mark_text(align="left", dx=15)
+        .encode(enc_x_sis, ENC_Y_SCORE, alt.Text("geography"))
+    )
+
+    (sis_line + sis_text).save(out_dir / "scores_increasing.png")
 
     # score vs. forecast
     avg_fit = (
@@ -116,5 +145,5 @@ if __name__ == "__main__":
     alt.Chart(
         avg_fit.join(fc_goodness, on=["model", "geography"], how="inner")
     ).mark_point().encode(alt.X("fit_score"), alt.Y("fc_score")).save(
-        out_dir / "fc_fit_compare.png"
+        out_dir / "forecast_fit_compare.png"
     )
