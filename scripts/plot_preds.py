@@ -97,11 +97,13 @@ if __name__ == "__main__":
         pl.col("score_fun") == pl.lit("mspe"),
     ).with_columns(pl.col("score_value").log())
 
+    enc_y_mspe = alt.Y("score_value", title="Score (MSPE)", scale=alt.Scale(zero=False))
+
     alt.Chart(
         add_medians(fit_scores, group_by="season", value_col="score_value")
     ).mark_point().encode(
         alt.X("season", title=None),
-        alt.Y("score_value", title="Score (MSPE)"),
+        enc_y_mspe,
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "score_by_season.png")
 
@@ -113,7 +115,7 @@ if __name__ == "__main__":
             title=None,
             sort=alt.EncodingSortField("score_value", "median", "descending"),
         ),
-        alt.Y("score_value", title="Score (MSPE)"),
+        enc_y_mspe,
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "score_by_geo.png")
 
