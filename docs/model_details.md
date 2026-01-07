@@ -12,9 +12,9 @@ The following notation will be used for the LPL model:
 - $n_{gt}$: number of people in group $g$, surveyed at time $t$
 - $x_{gt}$: number of people in group $g$, surveyed at time $t$, who are vaccinated
 - $v_g(t)$: latent true coverage among group $g$ at time $t$
-- $\mathcal{X}_{gj}$: integer index indicating the level of the $j$-th feature (e.g., season, geography) for group $g$.
+- $z_{gj}$: integer index indicating the level of the $j$-th feature (e.g., season, geography) for group $g$.
 
-For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season (say, 2018/2019) and the third geography (say, Alaska). Then $\mathcal{X}_{51} = 4$ and $\mathcal{X}_{52} = 3$.
+For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season (say, 2018/2019) and the third geography (say, Alaska). Then $z_{51} = 4$ and $z_{52} = 3$.
 
 ### Data source
 
@@ -23,7 +23,7 @@ For example, let the features be season and geography, in that order. Let group 
 
 ### Summary
 
-For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,\mathcal{X}_{gj}}$ for each feature $j$ and value $\mathcal{X}_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
+For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
 
 The slopes $M_g$ follow a similar pattern.
 
@@ -35,7 +35,7 @@ The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $
 \begin{align*}
 x_{gt} &\sim \mathrm{BetaBinom}\big(v_g(t) \cdot D, [1-v_g(t)] \cdot D, n_{gt}\big) \\
 v_g(t) &= \frac{A_g}{1 + \exp\{- K \cdot (t - \tau)\}} + M_g t \\
-A_g &= \mu_A + \sum_j \delta_{Aj \mathcal{X}_{gj}} \\
+A_g &= \mu_A + \sum_j \delta_{Aj z_{gj}} \\
 M_g &= \mu_M + \sum_j \delta_{Mj} \\
 \mu_A &\sim \text{Beta}(100.0, 180.0) \\
 \mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
