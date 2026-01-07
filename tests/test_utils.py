@@ -9,7 +9,9 @@ def test_date_to_season(frame):
     Season is extracted from a column of dates
     """
     frame = frame.with_columns(
-        season2=pl.col("time_end").pipe(iup.utils.date_to_season)
+        season2=pl.col("time_end").pipe(
+            iup.utils.date_to_season, season_start_month=9, season_start_day=1
+        )
     )
 
     assert all(frame["season"] == frame["season2"])
