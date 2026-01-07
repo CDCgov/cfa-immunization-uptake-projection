@@ -36,7 +36,7 @@ The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $
 x_{gt} &\sim \mathrm{BetaBinom}\big(v_g(t) \cdot D, [1-v_g(t)] \cdot D, n_{gt}\big) \\
 v_g(t) &= \frac{A_g}{1 + \exp\{- K \cdot (t - \tau)\}} + M_g t \\
 A_g &= \mu_A + \sum_j \delta_{Aj z_{gj}} \\
-M_g &= \mu_M + \sum_j \delta_{Mj} \\
+M_g &= \mu_M + \sum_j \delta_{Mj z_{gj}} \\
 \mu_A &\sim \text{Beta}(100.0, 180.0) \\
 \mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
 \delta_{Ajk} &\sim \mathcal{N}(0, \sigma_{Aj}) \\
