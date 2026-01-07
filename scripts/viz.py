@@ -205,7 +205,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     pred = summarize_preds(
         path=preds_path,
         groups_to_include=tuple(groups_to_include),
-        ci_level=config["forecast_plots"]["ci_level"],
+        ci_level=config["plots"]["ci_level"],
     )
 
     encodings = {}

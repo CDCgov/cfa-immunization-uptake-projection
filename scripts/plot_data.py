@@ -4,8 +4,12 @@ from pathlib import Path
 from typing import List
 
 import altair as alt
+import numpy as np
 import polars as pl
 import yaml
+
+AXIS_PERCENT = alt.Axis(format=".0%")
+LINE_OPACITY = 0.25
 
 MEDIAN_POINT_KWARGS = {
     "color": "black",
@@ -27,6 +31,14 @@ MEDIAN_ENCODINGS = [
     alt.Size("type", scale=alt.Scale(domain=["datum", "median"], range=[20, 200])),
 ]
 
+TICK_KWARGS = {
+    "shape": "stroke",
+    "size": 50,
+    "color": "black",
+    "strokeWidth": 2,
+    "opacity": 1,
+}
+
 
 def add_medians(
     df: pl.DataFrame,
@@ -39,7 +51,7 @@ def add_medians(
             df.with_columns(pl.lit("datum").alias(type_col)).select(
                 [group_by, value_col, type_col]
             ),
-            eos.group_by(group_by)
+            df.group_by(group_by)
             .agg(pl.col(value_col).median())
             .with_columns(pl.lit("median").alias(type_col)),
         ]
@@ -69,11 +81,23 @@ assert month_order(7) == [
     "Jun",
 ]
 
+
+def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
+    """Take `n` evenly spaced rows from `df`, including the first and last"""
+    assert n > 2
+    assert df.height >= n
+    return (
+        df.with_row_index(col_name)
+        .filter(pl.col(col_name).is_in(np.linspace(0, df.height - 1, num=n).round()))
+        .drop(col_name)
+    )
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
     p.add_argument("--data", required=True)
-    p.add_argument("--output", required=True)
+    p.add_argument("--output_dir", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
@@ -82,46 +106,57 @@ if __name__ == "__main__":
     data = pl.read_parquet(args.data)
 
     # ensure output directory exists
-    out_dir = Path(args.output).parent
+    out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ensure the path is what we expect
-    assert Path(args.output).name == "data_one_season_by_state.png"
-
     # for one season, show each state's trajectory
-    alt.Chart(
-        data.filter(pl.col("season") == pl.lit("2020/2021")).with_columns(
-            month=pl.col("time_end").dt.to_string("%b")
+    # exs = example season
+    exs_data = data.filter(
+        pl.col("season") == pl.lit(config["plots"]["example_data_season"])
+    ).with_columns(month=pl.col("time_end").dt.to_string("%b"))
+
+    enc_x_exs = alt.X(
+        "month", title=None, sort=month_order(config["season"]["start_month"])
+    )
+
+    exs_line = (
+        alt.Chart(exs_data)
+        .mark_line(color="black", opacity=LINE_OPACITY)
+        .encode(
+            enc_x_exs,
+            alt.Y("estimate", title="Coverage", axis=AXIS_PERCENT),
+            alt.Detail("geography"),
         )
-    ).mark_line().encode(
-        alt.X("month", sort=month_order(config["season"]["start_month"])),
-        alt.Y("estimate"),
-        alt.Detail("geography"),
-    ).mark_line().save(args.output)
+    )
+
+    exs_tick_base = alt.Chart(
+        exs_data.filter(pl.col("time_end") == pl.col("time_end").max())
+        .sort("estimate")
+        .pipe(gather_n, 5)
+    ).encode(enc_x_exs, alt.Y("estimate"), alt.Text("geography"))
+
+    exs_text = exs_tick_base.mark_text(align="left", dx=15)
+    exs_tick = exs_tick_base.mark_point(**TICK_KWARGS)
+
+    (exs_line + exs_tick + exs_text).save(out_dir / "data_one_season_by_state.png")
 
     # end of season data
     eos = data.filter((pl.col("time_end") == pl.col("time_end").max()).over("season"))
 
     # for each season, show eos spread over states
-    medians = (
-        alt.Chart(eos.group_by("season").agg(pl.col("estimate").median()))
-        .mark_point(**MEDIAN_POINT_KWARGS)
-        .encode(alt.X("season"), alt.Y("estimate"))
-    )
-
-    points = alt.Chart(eos).mark_point().encode(alt.X("season"), alt.Y("estimate"))
-
     alt.Chart(add_medians(eos, "season")).mark_point().encode(
-        alt.X("season"),
-        alt.Y("estimate"),
+        alt.X("season", title=None),
+        alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "data_eos_by_season.png")
 
     # for each state, show eos spread over seasons
     alt.Chart(add_medians(eos, "geography")).mark_point().encode(
         alt.X(
-            "geography", sort=alt.EncodingSortField("estimate", "median", "descending")
+            "geography",
+            title=None,
+            sort=alt.EncodingSortField("estimate", "median", "descending"),
         ),
-        alt.Y("estimate"),
+        alt.Y("estimate", title="End of season uptake", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "data_eos_by_state.png")

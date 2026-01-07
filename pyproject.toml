@@ -1,6 +1,6 @@
 [project]
 name = "iup"
-version = "0.1.4"
+version = "0.1.5"
 description = ""
 authors = [
     { name = "Scott Olesen", email = "ulp7@cdc.gov" },
