@@ -10,7 +10,7 @@ def test_to_cumulative_handles_no_last(frame):
     """
     If last_cumulative is not given, then simple cumulative sums are performed
     """
-    frame = iup.IncidentUptakeData(frame.drop(["N_vax", "N_tot"]))
+    frame = iup.IncidentCoverageData(frame.drop(["N_vax", "N_tot"]))
 
     output = frame.to_cumulative(groups=["geography", "season"])
 
@@ -35,7 +35,7 @@ def test_to_cumulative_handles_last(frame):
     """
     If last_cumulative is given, then cumulative sums are augmented
     """
-    frame = iup.IncidentUptakeData(frame)
+    frame = iup.IncidentCoverageData(frame)
 
     last_cumulative = pl.DataFrame(
         {
@@ -72,7 +72,7 @@ def test_to_cumulative_handles_no_groups(frame):
     If there are no groups, cumulative sums are taken over the whole frame at once.
     Note that season is still considered a group, but there is only one unique season.
     """
-    frame = iup.IncidentUptakeData(
+    frame = iup.IncidentCoverageData(
         frame.filter(pl.col("geography") == "USA").drop(["geography", "N_vax", "N_tot"])
     )
 
@@ -81,15 +81,15 @@ def test_to_cumulative_handles_no_groups(frame):
     assert all(output["estimate"].round(10) == pl.Series([0.001, 0.101, 0.401, 0.801]))
 
 
-def test_cumulative_uptake_is_proportion(frame):
-    # should have an error if cumulative uptake is >1
+def test_cumulative_coverage_is_proportion(frame):
+    # should have an error if cumulative coverage is >1
     frame = frame.with_columns(estimate=pl.col("estimate") + 1.0)
     assert frame["estimate"].max() > 1.0
     with pytest.raises(AssertionError, match="proportion"):
-        iup.CumulativeUptakeData(frame)
+        iup.CumulativeCoverageData(frame)
 
     # should not have an error if not
-    iup.CumulativeUptakeData(frame.filter(pl.col("estimate") <= 1.0))
+    iup.CumulativeCoverageData(frame.filter(pl.col("estimate") <= 1.0))
 
 
 def test_to_incident_handles_groups(frame):
@@ -108,7 +108,7 @@ def test_to_incident_handles_no_groups(frame):
     """
     If there are no groups, successive differences are taken over the entire data frame.
     """
-    frame = iup.CumulativeUptakeData(
+    frame = iup.CumulativeCoverageData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
 

@@ -2,10 +2,9 @@ site_name: IUP
 
 nav:
   - index.md
-  - analytical_plan.md
+  - lpl.md
+  - api.md
   - gam.md
-  - model_details.md
-  - model_journal.md
 
 repo_url: https://github.com/CDCgov/cfa-immunization-uptake-projection
 repo_name: repo

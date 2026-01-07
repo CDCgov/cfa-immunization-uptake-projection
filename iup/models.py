@@ -15,11 +15,11 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
+import iup
 import iup.utils
-from iup import CumulativeUptakeData, SampleForecast, UptakeData
 
 
-class UptakeModel(abc.ABC):
+class CoverageModel(abc.ABC):
     """
     Abstract class for different types of models.
     Every subclass of model will have some core methods of the same name.
@@ -28,26 +28,40 @@ class UptakeModel(abc.ABC):
     @staticmethod
     @abc.abstractmethod
     def augment_data(
-        data: UptakeData,
+        data: iup.CoverageData,
         season_start_month: int,
         season_start_day: int,
-    ) -> UptakeData:
-        """
-        Add columns to preprocessed uptake data to provide all
-        input information that a specific model requires.
+    ) -> iup.CoverageData:
+        """Add columns to preprocessed coverage data to provide all input information that a specific model requires.
+
+        Args:
+            data: Preprocessed coverage data.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+
+        Returns:
+            Augmented coverage data.
         """
         pass
 
     @abc.abstractmethod
     def fit(
         self,
-        data: UptakeData,
+        data: iup.CoverageData,
         groups: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
-        """
-        Fit a model on its properly augmented data.
+        """Fit a model on its properly augmented data.
+
+        Args:
+            data: Training data.
+            groups: Names of columns for grouping factors.
+            params: Parameter names and values to specify prior distributions.
+            mcmc: Control parameters for MCMC fitting.
+
+        Returns:
+            Fitted model object.
         """
         pass
 
@@ -58,9 +72,15 @@ class UptakeModel(abc.ABC):
         groups: List[str] | None,
         start: pl.DataFrame,
     ) -> pl.DataFrame:
-        """
-        Add columns to a scaffold of dates for forecasting to provide all
-        input information that a specific model requires.
+        """Add columns to a scaffold of dates for forecasting to provide all input information that a specific model requires.
+
+        Args:
+            scaffold: Scaffold of dates for forecasting.
+            groups: Names of columns for grouping factors.
+            start: Starting values for forecasting.
+
+        Returns:
+            Augmented scaffold.
         """
         pass
 
@@ -72,8 +92,16 @@ class UptakeModel(abc.ABC):
         season_start_month: int,
         season_start_day: int,
     ) -> pl.DataFrame:
-        """
-        Use a fit model to fill in forecasts in a scaffold of dates.
+        """Use a fit model to fill in forecasts in a scaffold of dates.
+
+        Args:
+            test_data: Test data scaffold.
+            groups: Names of columns for grouping factors.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+
+        Returns:
+            Forecast data.
         """
         pass
 
@@ -85,19 +113,17 @@ class UptakeModel(abc.ABC):
     mcmc = None
 
 
-class LPLModel(UptakeModel):
+class LPLModel(CoverageModel):
     """
-    Subclass of UptakeModel for a mixed Logistic Plus Linear model.
-    For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
+    Subclass of CoverageModel for a mixed Logistic Plus Linear model.
+    For details, see the online docs.
     """
 
     def __init__(self, seed: int):
-        """
-        Initialize with a seed and the model structure.
+        """Initialize with a seed and the model structure.
 
-        Parameters
-        seed: int
-            The random seed for stochastic elements of the model, to be split for fitting vs. predicting.
+        Args:
+            seed: Random seed for stochastic elements of the model, to be split for fitting vs. predicting.
         """
         self.rng_key = random.key(seed)
         self.fit_key, self.pred_key = random.split(self.rng_key, 2)
@@ -124,30 +150,27 @@ class LPLModel(UptakeModel):
         D_shape=350.0,
         D_rate=1.0,
     ):
-        """
-        Fit a mixed Logistic Plus Linear model on training data.
+        """Fit a mixed Logistic Plus Linear model on training data.
 
-        Parameters
-        elapsed: np.array
-            fraction of a year elapsed since the start of season at each data point
-        N_vax: np.array | None
-            number of people vaccinated at each data point
-        N_tot: np.array | None
-            number of people contacted at each data point
-        groups: np.array | None
-            numeric codes for groups: row = data point, col = grouping factor
-        num_group_factors: Int
-            number of grouping factors
-        num_group_levels: List[Int,]
-            number of unique levels of each grouping factor
-        other parameters: float
-            parameters to specify the prior distributions
-
-        Returns
-        Nothing
-
-        Details
-        Provides the model structure and priors for a Logistic Plus Linear model.
+        Args:
+            elapsed: Fraction of a year elapsed since the start of season at each data point.
+            N_vax: Number of people vaccinated at each data point.
+            N_tot: Number of people contacted at each data point.
+            groups: Numeric codes for groups: row = data point, col = grouping factor.
+            num_group_factors: Number of grouping factors.
+            num_group_levels: Number of unique levels of each grouping factor.
+            muA_shape1: Beta distribution shape1 parameter for muA prior.
+            muA_shape2: Beta distribution shape2 parameter for muA prior.
+            sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
+            tau_shape1: Beta distribution shape1 parameter for tau prior.
+            tau_shape2: Beta distribution shape2 parameter for tau prior.
+            K_shape: Gamma distribution shape parameter for K prior.
+            K_rate: Gamma distribution rate parameter for K prior.
+            muM_shape: Gamma distribution shape parameter for muM prior.
+            muM_rate: Gamma distribution rate parameter for muM prior.
+            sigmaM_rate: Exponential distribution rate parameter for sigmaM prior.
+            D_shape: Gamma distribution shape parameter for D prior.
+            D_rate: Gamma distribution rate parameter for D prior.
         """
         # Sample the overall average value for each parameter
         muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
@@ -188,38 +211,33 @@ class LPLModel(UptakeModel):
             A = muA
             M = muM
 
-        # Calculate latent true uptake at each datum
+        # Calculate latent true coverage at each datum
         v = A / (1 + jnp.exp(0 - K * (elapsed - tau))) + (M * elapsed)
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
-        data: CumulativeUptakeData,
+        data: iup.CumulativeCoverageData,
         season_start_month: int,
         season_start_day: int,
-    ) -> CumulativeUptakeData:
-        """
-        Format preprocessed data for fitting a Logistic Plus Linear model.
+    ) -> iup.CumulativeCoverageData:
+        """Format preprocessed data for fitting a Logistic Plus Linear model.
 
-        Parameters:
-        data: CumulativeUptakeData
-            training data for fitting a Logistic Plus Linear model
-         season_start_month: int
-            first month of the overwinter disease season
-        season_start_day: int
-            first day of the first month of the overwinter disease season
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident coverage model:
+        - Add an extra column for time elapsed since start-of-season
+        - Rescale this time elapsed to a proportion of the year
+
+        Args:
+            data: Training data for fitting a Logistic Plus Linear model.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
 
         Returns:
-            Cumulative uptake data ready for fitting a Logistic Plus Linear model.
-
-        Details
-        The following steps are required to prepare preprocessed data
-        for fitting a linear incident uptake model:
-        - Add an extra columns for time elapsed since start-of-season
-        - Rescale this time elapsed to a proportion of the year
+            Cumulative coverage data ready for fitting a Logistic Plus Linear model.
         """
-        data = CumulativeUptakeData(
+        data = iup.CumulativeCoverageData(
             data.with_columns(
                 elapsed=iup.utils.date_to_elapsed(
                     pl.col("time_end"),
@@ -234,33 +252,25 @@ class LPLModel(UptakeModel):
 
     def fit(
         self,
-        data: CumulativeUptakeData,
+        data: iup.CumulativeCoverageData,
         groups: List[str,] | None,
         params: dict,
         mcmc: dict,
     ) -> Self:
-        """
-        Fit a mixed Logistic Plus Linear model on training data.
+        """Fit a mixed Logistic Plus Linear model on training data.
 
-        Parameters
-        data: CumulativeUptakeData
-            training data on which to fit the model
-        group_cols: (str,) | None
-            name(s) of the columns for the grouping factors
-        params: dict
-            parameter names and values to specify prior distributions
-        mcmc: dict
-            control parameters for mcmc fitting
-
-        Returns
-        LPLModel
-            model object with grouping factor combinaions
-            and the model fit all stored as attributes
-
-        Details
         If grouping factors are specified, a hierarchical model will be built with
         group-specific parameters for the logistic maximum and linear slope,
         drawn from a shared distribution. Other parameters are non-hierarchical.
+
+        Args:
+            data: Training data on which to fit the model.
+            groups: Names of the columns for the grouping factors.
+            params: Parameter names and values to specify prior distributions.
+            mcmc: Control parameters for MCMC fitting.
+
+        Returns:
+            Model object with grouping factor combinations and the model fit stored as attributes.
         """
         self.group_combos = extract_group_combos(data, groups)
 
@@ -320,18 +330,13 @@ class LPLModel(UptakeModel):
         season_start_day: int,
         N_tot: int = 10_000,
     ) -> pl.DataFrame:
-        """
-        Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
+        """Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
 
-        Parameters:
-        scaffold: pl.DataFrame
-            scaffold of dates for forecasting
-        season_start_month: int
-            first month of the overwinter disease season
-        season_start_day: int
-            first day of the first month of the overwinter disease season
-        N_tot:
-            Predictions are made as if 10,000 individuals are sampled.
+        Args:
+            scaffold: Scaffold of dates for forecasting.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+            N_tot: Predictions are made as if this many individuals are sampled.
 
         Returns:
             Scaffold with extra columns required by the Logistic Plus Linear model.
@@ -351,28 +356,20 @@ class LPLModel(UptakeModel):
         season_start_month: int,
         season_start_day: int,
     ) -> pl.DataFrame:
-        """
-        Make projections from a fit Logistic Plus Linear model.
+        """Make projections from a fit Logistic Plus Linear model.
 
-        Parameters
-        test_dates: pl.DataFrame | None
-            exact target dates to use, when test data exists
-        groups: (str,) | None
-            name(s) of the columns for the grouping factors
-        season_start_month: int
-            first month of the overwinter disease season
-        season_start_day: int
-            first day of the first month of the overwinter disease season
-
-        Returns
-        LPLModel
-            the model with incident and cumulative projections as attributes
-
-        Details
         A data frame is set up to house the projections over the
         desired time window with the desired intervals.
+        Forecasts are then made for each date in this scaffold.
 
-        Forecasts are the made for each date in this scaffold.
+        Args:
+            test_data: Exact target dates to use, when test data exists.
+            groups: Names of the columns for the grouping factors.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+
+        Returns:
+            Model with incident and cumulative projections as attributes.
         """
         assert "time_end" in test_data.columns
 
@@ -439,27 +436,20 @@ class LPLModel(UptakeModel):
             .drop(["elapsed", "N_tot"])
         )
 
-        return SampleForecast(pred)
+        return iup.SampleForecast(pred)
 
 
 def extract_group_combos(
     data: pl.DataFrame, groups: List[str,] | None
 ) -> pl.DataFrame | None:
-    """
-    Extract from uptake data all combinations of grouping factors.
+    """Extract from coverage data all combinations of grouping factors.
 
-    Parameters
-    data: pl.DataFrame
-        uptake data possibly containing grouping factors
-    groups: (str,) | None
-        name(s) of the columns for the grouping factors
+    Args:
+        data: Coverage data possibly containing grouping factors.
+        groups: Names of the columns for the grouping factors.
 
-    Returns
-    pl.DataFrame
-        all combinations of grouping factors
-
-    Details
-    This is required by multiple models.
+    Returns:
+        All combinations of grouping factors.
     """
     if groups is not None:
         return data.select(groups).unique()

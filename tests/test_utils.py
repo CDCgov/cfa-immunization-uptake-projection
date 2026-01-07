@@ -17,19 +17,6 @@ def test_date_to_season(frame):
     assert all(frame["season"] == frame["season2"])
 
 
-def test_date_to_elapsed_handles_no_season_start(frame):
-    """
-    Return the time elapsed since the first date by grouping factor.
-    """
-    output = frame.sort(["time_end", "geography"]).with_columns(
-        elapsed=iup.utils.date_to_elapsed(pl.col("time_end")).over("geography")
-    )
-
-    expected = pl.Series([0.0, 0.0, 7.0, 7.0, 14.0, 14.0, 21.0, 21.0])
-
-    assert (output["elapsed"] == expected).all()
-
-
 def test_date_to_elapsed_handles_season_start(frame):
     """
     Return the time elapsed since the first date by grouping factor.

@@ -19,6 +19,17 @@ def mspe(
     pred: pl.DataFrame | pl.LazyFrame,
     grouping_factors: List[str],
 ) -> pl.DataFrame:
+    """Mean square prediction error
+
+    Args:
+        obs: Data frame with columns `time_end`, `estimate`, and the grouping factors
+        pred: Data frame columns `model`, `time_end`, `forecast_date`, `estimate`, and
+            the grouping factors.
+        grouping_factors: Grouping factor column names.
+
+    Returns:
+        Data frame with scores.
+    """
     obs = _ensure_lazy(obs)
     pred = _ensure_lazy(pred)
 
@@ -40,16 +51,15 @@ def eos_abs_diff(
     pred: pl.DataFrame | pl.LazyFrame,
     grouping_factors: List[str],
 ) -> pl.DataFrame:
-    """
-    Generate a function that calculates the absolute difference between
-    observed data and prediction for the last date in a season
+    """Calculate the absolute difference between observed data and prediction for the last date in a season.
 
-    Arguments:
-    selected_date: a datetime date object to specify which date to do the calculation
-    date_col: a polars column expression used to select the date
+    Args:
+        obs: Observed data.
+        pred: Predicted data.
+        grouping_factors: Grouping factor column names (must include 'season').
 
-    Return:
-        A function that takes two polars column expressions to do the calculation.
+    Returns:
+        Data frame with absolute difference scores for end-of-season dates.
     """
     assert "season" in grouping_factors
     obs = _ensure_lazy(obs)

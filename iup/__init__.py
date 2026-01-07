@@ -17,12 +17,10 @@ class Data(pl.DataFrame):
         raise NotImplementedError("Subclasses must implement this method.")
 
     def assert_in_schema(self, names_types: dict[str, DataTypeClass]):
-        """
-        Verify that column of the expected types are present in the data frame.
+        """Verify that columns of the expected types are present in the data frame.
 
-        Parameters
-        names_types (dict[str, pl.DataType]):
-            Column names and types
+        Args:
+            names_types: Column names and types mapping.
         """
         for name, type_ in names_types.items():
             if name not in self.schema.names():
@@ -38,15 +36,13 @@ class Data(pl.DataFrame):
                 assert (name, type_) in self.schema.items()
 
 
-class UptakeData(Data):
+class CoverageData(Data):
     def validate(self):
-        """
-        Must have time_end and estimate columns; can have more
-        """
+        """Must have time_end and estimate columns; can have more."""
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
 
-class IncidentUptakeData(UptakeData):
+class IncidentCoverageData(CoverageData):
     def validate(self):
         super().validate()
         if not self["estimate"].is_between(-1.0, 1.0).all():
@@ -56,31 +52,28 @@ class IncidentUptakeData(UptakeData):
                 .to_list()
             )
             raise ValueError(
-                f"Incident uptake `estimate` must be have values between -1 and +1. "
+                f"Incident coverage `estimate` must be have values between -1 and +1. "
                 f"Values included {bad_values}"
             )
 
     def to_cumulative(
-        self, groups: List[str,] | None, prev_cumulative=None
-    ) -> "CumulativeUptakeData":
-        """
-        Convert incident to cumulative uptake data.
+        self, groups: List[str,] | None, prev_cumulative: pl.DataFrame | None = None
+    ) -> "CumulativeCoverageData":
+        """Convert incident to cumulative coverage data.
 
-        Parameters
-        groups: List[str,] | None
-            name(s) of the columns of grouping factors
-        last_cumulative: pl.DataFrame
-            cumulative from before the start of the incident data, for each group
-
-        Returns
-        CumulativeUptakeData
-            cumulative uptake on each date in the input incident uptake data
-
-        Details
-        Cumulative sum of incident uptake gives the cumulative uptake.
-        Optionally, additional cumulative uptake from before the start of
+        Cumulative sum of incident coverage gives the cumulative coverage.
+        Optionally, additional cumulative coverage from before the start of
         the incident data may be provided.
         Even if no groups are specified, the data must at least be grouped by season.
+
+        Args:
+            groups: Names of the columns of grouping factors. If `None`, then data
+                will be grouped by `"season"`.
+            prev_cumulative: Cumulative coverage from before the start of the incident
+                data, for each group. If `None`, do nothing.
+
+        Returns:
+            Cumulative coverage on each date in the input incident coverage data.
         """
         if groups is None:
             groups = ["season"]
@@ -94,32 +87,28 @@ class IncidentUptakeData(UptakeData):
                 estimate=pl.col("estimate") + pl.col("last_cumulative")
             ).drop("last_cumulative")
 
-        return CumulativeUptakeData(out)
+        return CumulativeCoverageData(out)
 
 
-class CumulativeUptakeData(UptakeData):
+class CumulativeCoverageData(CoverageData):
     def validate(self):
         super().validate()
         assert self["estimate"].is_between(0.0, 1.0).all(), (
-            "Cumulative uptake `estimate` must be a proportion"
+            "Cumulative coverage `estimate` must be a proportion"
         )
 
-    def to_incident(self, groups: List[str,] | None) -> IncidentUptakeData:
-        """
-        Convert cumulative to incident uptake data.
+    def to_incident(self, groups: List[str,] | None) -> IncidentCoverageData:
+        """Convert cumulative to incident coverage data.
 
-        Parameters
-        groups: (str,) | None
-            name(s) of the columns of grouping factors
-
-        Returns
-        IncidentUptakeData
-            incident uptake on each date in the input cumulative uptake data
-
-        Details
         Because the first report date for each group is often rollout,
-        incident uptake on the first report date is 0.
-        Even if no groups are specified, the data must at least be grouped by season.
+        incident coverage on the first report date is 0.
+
+        Args:
+            groups: Names of the columns of grouping factors. If `None`, then data
+                will be grouped by `"season"`.
+
+        Returns:
+            Incident coverage on each date in the input cumulative coverage data.
         """
         if groups is None:
             groups = ["season"]
@@ -128,7 +117,7 @@ class CumulativeUptakeData(UptakeData):
             estimate=pl.col("estimate").diff().over(groups).fill_null(0)
         )
 
-        return IncidentUptakeData(out)
+        return IncidentCoverageData(out)
 
 
 class QuantileForecast(Data):

@@ -1,6 +1,8 @@
-# Immunization uptake projections
+# Vaccination coverage forecasting
 
-This repo contains statistical tools to predict the uptake of immunizations (primarily vaccines and boosters).
+_Formerly known as Immunization Uptake Projections, or `iup`._
+
+This repo represents an experimental prototype for forecasting the coverage of vaccinations.
 
 ## Getting started
 
@@ -12,20 +14,20 @@ This repo contains statistical tools to predict the uptake of immunizations (pri
 
 The vignette demonstrates a workflow using this package:
 
-1. Fit a model to uptake data from past seasons
-1. Use it to forecast future uptake data in the latest season
+1. Fit a model to coverage data from past seasons
+1. Use it to forecast future coverage data in the latest season
 1. Evaluate forecasts against observed values
 
 ### Data source
 
-For convenience, the raw data are tracked in this repo under `data/`, which includes the script `get_nis.py`, used to collect that data with [`nis-py-api`](https://github.com/CDCgov/nis-py-api). These are estimates of season flu vaccine coverage, tracked monthly from the 2009/2010 to 2022/2023 seasons, from the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html).
+For convenience, the raw data are tracked in this repo under `data/`, which includes the script `get_nis.py`, used to collect that data with [`nis-py-api`](https://github.com/CDCgov/nis-py-api). These are estimates of season flu vaccination coverage, tracked monthly from the 2009/2010 to 2022/2023 seasons, from the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html).
 
 ### Running the vignette
 
 1. Set up the config:
    - Copy `scripts/config_template.yaml` to `scripts/config.yaml` or
    - in the next step, specify `CONFIG=you_path` when calling `make`.
-2. Run the pipeline with `make`.
+2. Run the pipeline with `make`. (You can run steps in parallel with, e.g., `make -j4`.)
 3. Inspect `output/vignette/`:
    - `config.yaml`: a copy of the input config
    - `data.parquet`: the preprocessed, observed data

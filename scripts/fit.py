@@ -7,7 +7,7 @@ import argparse
 import datetime as dt
 import pickle as pkl
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Tuple, Type
 
 import numpyro
 import polars as pl
@@ -19,12 +19,16 @@ import iup.models
 
 def fit_all_models(
     data, forecast_date: dt.date, config
-) -> Dict[str, iup.models.UptakeModel]:
-    """
-    Run all forecasts
+) -> Dict[Tuple[str, dt.date], iup.models.CoverageModel]:
+    """Run all forecasts.
+
+    Args:
+        data: Input data to fit models on.
+        forecast_date: Forecast date to use as training cutoff.
+        config: Configuration dictionary.
 
     Returns:
-        pl.DataFrame: data frame of forecasts, organized by model and forecast date
+        Dictionary of fitted models organized by model name and forecast date.
     """
 
     all_models = {}
@@ -33,7 +37,7 @@ def fit_all_models(
         model_name = config_model["name"]
         model_class = getattr(iup.models, model_name)
 
-        assert issubclass(model_class, iup.models.UptakeModel), (
+        assert issubclass(model_class, iup.models.CoverageModel), (
             f"{model_name} is not a valid model type!"
         )
 
@@ -60,16 +64,29 @@ def fit_all_models(
 
 
 def fit_model(
-    data: iup.UptakeData,
-    model_class: Type[iup.models.UptakeModel],
+    data: iup.CoverageData,
+    model_class: Type[iup.models.CoverageModel],
     seed: int,
     params: dict[str, Any],
     mcmc: dict[str, Any],
     grouping_factors: List[str] | None,
     forecast_date: dt.date,
-) -> iup.models.UptakeModel:
-    """Run a single model for a single forecast date"""
-    train_data = iup.UptakeData(data.filter(pl.col("time_end") <= forecast_date))
+) -> iup.models.CoverageModel:
+    """Run a single model for a single forecast date.
+
+    Args:
+        data: Coverage data to train on.
+        model_class: Class of model to fit.
+        seed: Random seed for model initialization.
+        params: Model parameters for prior distributions.
+        mcmc: MCMC configuration parameters.
+        grouping_factors: Names of columns for grouping factors.
+        forecast_date: Forecast date to use as training cutoff.
+
+    Returns:
+        Fitted model object.
+    """
+    train_data = iup.CoverageData(data.filter(pl.col("time_end") <= forecast_date))
 
     # Make an instance of the model, fit it using training data, and make projections
     fit_model = model_class(seed).fit(
@@ -94,7 +111,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     forecast_date = dt.date.fromisoformat(args.forecast_date)
-    data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
+    data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
     numpyro.set_host_device_count(config["mcmc"]["num_chains"])
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
