@@ -116,7 +116,7 @@ class UptakeModel(abc.ABC):
 class LPLModel(UptakeModel):
     """
     Subclass of UptakeModel for a mixed Logistic Plus Linear model.
-    For details, see: <https://github.com/CDCgov/cfa-immunization-uptake-projection/blob/main/docs/model_details.md>
+    For details, see the online docs.
     """
 
     def __init__(self, seed: int):
@@ -171,9 +171,6 @@ class LPLModel(UptakeModel):
             sigmaM_rate: Exponential distribution rate parameter for sigmaM prior.
             D_shape: Gamma distribution shape parameter for D prior.
             D_rate: Gamma distribution rate parameter for D prior.
-
-        Note:
-            Provides the model structure and priors for a Logistic Plus Linear model.
         """
         # Sample the overall average value for each parameter
         muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
@@ -341,7 +338,7 @@ class LPLModel(UptakeModel):
             scaffold: Scaffold of dates for forecasting.
             season_start_month: First month of the overwinter disease season.
             season_start_day: First day of the first month of the overwinter disease season.
-            N_tot: Predictions are made as if this many individuals are sampled. Defaults to 10,000.
+            N_tot: Predictions are made as if this many individuals are sampled.
 
         Returns:
             Scaffold with extra columns required by the Logistic Plus Linear model.

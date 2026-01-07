@@ -35,7 +35,7 @@ def date_to_season(
 
 
 def date_to_elapsed(
-    date_col: pl.Expr, season_start_month=0, season_start_day=0
+    date_col: pl.Expr, season_start_month: int, season_start_day: int
 ) -> pl.Expr:
     """Extract a time elapsed column from a date column, as polars expressions.
 

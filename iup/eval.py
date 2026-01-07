@@ -19,6 +19,17 @@ def mspe(
     pred: pl.DataFrame | pl.LazyFrame,
     grouping_factors: List[str],
 ) -> pl.DataFrame:
+    """Mean square prediction error
+
+    Args:
+        obs: Data frame with columns `time_end`, `estimate`, and the grouping factors
+        pred: Data frame columns `model`, `time_end`, `forecast_date`, `estimate`, and
+            the grouping factors.
+        grouping_factors: Grouping factor column names.
+
+    Returns:
+        Data frame with scores.
+    """
     obs = _ensure_lazy(obs)
     pred = _ensure_lazy(pred)
 
@@ -45,7 +56,7 @@ def eos_abs_diff(
     Args:
         obs: Observed data.
         pred: Predicted data.
-        grouping_factors: List of grouping factor column names (must include 'season').
+        grouping_factors: Grouping factor column names (must include 'season').
 
     Returns:
         Data frame with absolute difference scores for end-of-season dates.

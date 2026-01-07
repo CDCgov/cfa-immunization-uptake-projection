@@ -1,27 +1,20 @@
-# Model details
+# Logistic plus linear (LPL) Model
 
 These are the mathematical details of the models used to capture and forecast vaccine uptake. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true uptake curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
 
-## Logistic Plus Linear (LPL) Model
-
-### Notation
+## Notation
 
 The following notation will be used for the LPL model:
 
 - $t$: time since the start of the season, measured in $\text{year}^{-1}$
-- $n_{gt}$: number of people in group $g$, surveyed at time $t$
-- $x_{gt}$: number of people in group $g$, surveyed at time $t$, who are vaccinated
+- $n_{gt}$: number of people in group $g$, surveyed at time $t$. Drawn from the `sample_size` column of the NIS data.
+- $x_{gt}$: number of people in group $g$, surveyed at time $t$, who are vaccinated. Approximated as $\mathrm{round}(\hat{v}_{gt}, n_{gt})$, where $\hat{v}_{gt}$ is the `estimate` column.
 - $v_g(t)$: latent true coverage among group $g$ at time $t$
 - $z_{gj}$: integer index indicating the level of the $j$-th feature (e.g., season, geography) for group $g$.
 
 For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season (say, 2018/2019) and the third geography (say, Alaska). Then $z_{51} = 4$ and $z_{52} = 3$.
 
-### Data source
-
-- $n_{gt}$ is drawn from the `sample_size` column of the NIS data
-- $x_{gt}$ is approximated as $\mathrm{round}(\hat{v}_{gt}, n_{gt})$, where $\hat{v}_{gt}$ is the `estimate` column
-
-### Summary
+## Model overview
 
 For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
 
@@ -29,7 +22,7 @@ The slopes $M_g$ follow a similar pattern.
 
 The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $v_g(t) \cdot n_{gt}$, with variance modified by an extra parameter $D$.
 
-### Model equations
+## Model equations
 
 ```math
 \begin{align*}
@@ -51,9 +44,9 @@ D &\sim \text{Gamma}(\text{shape} = 350.0, \text{rate} = 1.0) \\
 
 Note that:
 
-$$
+```math
 \begin{align*}
 \mathbb{E}[x_{gt}] &= v_g(t) \cdot n_{gt} \\
 \mathrm{Var}[x_{gt}] &= v_g(t) \cdot [1-v_g(t)] \cdot \frac{n_{gt} (n_{gt} + D)}{D+1}
 \end{align*}
-$$
+```
