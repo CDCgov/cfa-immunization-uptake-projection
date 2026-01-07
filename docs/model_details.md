@@ -8,88 +8,52 @@ These are the mathematical details of the models used to capture and forecast va
 
 The following notation will be used for the LPL model:
 
-- $t$ = time since the start of the season, expressed as the fraction of a year elapsed
-- $V_t^{obs}$ = number of people surveyed at time $t$ who are vaccinated
-- $N_t^{obs}$ = total number of people surveyed at time $t$
-- $c_t$ = latent true cumulative uptake on day $t$
-- $G$ = grouping factors (e.g. season, geographic area, age group, race/ethnicity), indexed by $i$ with $I$ total factors
+- $t$: time since the start of the season, measured in $\text{year}^{-1}$
+- $n_{gt}$: number of people in group $g$, surveyed at time $t$
+- $x_{gt}$: number of people in group $g$, surveyed at time $t$, who are vaccinated
+- $v_g(t)$: latent true coverage among group $g$ at time $t$
+- $z_{gj}$: integer index indicating the level of the $j$-th feature (e.g., season, geography) for group $g$.
+
+For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season (say, 2018/2019) and the third geography (say, Alaska). Then $z_{51} = 4$ and $z_{52} = 3$.
+
+### Data source
+
+- $n_{gt}$ is drawn from the `sample_size` column of the NIS data
+- $x_{gt}$ is approximated as $\mathrm{round}(\hat{v}_{gt}, n_{gt})$, where $\hat{v}_{gt}$ is the `estimate` column
 
 ### Summary
 
-At a high level, the LPL model is structured as follows:
+For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
+
+The slopes $M_g$ follow a similar pattern.
+
+The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $v_g(t) \cdot n_{gt}$, with variance modified by an extra parameter $D$.
+
+### Model equations
 
 ```math
 \begin{align*}
-&V_{t,G}^{obs} \sim \text{Pr}(V_{t,G}^{obs}~|~c_{t,G},~N_{t,G}^{obs}) \\
-&c_{t,G} := f_{\text{Logistic + Linear}}(t,~\phi_G) \\
-&\phi_G \sim \text{Pr}(\phi_G~|~\xi) \\
-&\xi \sim \text{Pr}(\xi) \\
+x_{gt} &\sim \mathrm{BetaBinom}\big(v_g(t) \cdot D, [1-v_g(t)] \cdot D, n_{gt}\big) \\
+v_g(t) &= \frac{A_g}{1 + \exp\{- K \cdot (t - \tau)\}} + M_g t \\
+A_g &= \mu_A + \sum_j \delta_{Aj z_{gj}} \\
+M_g &= \mu_M + \sum_j \delta_{Mj z_{gj}} \\
+\mu_A &\sim \text{Beta}(100.0, 180.0) \\
+\mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
+\delta_{Ajk} &\sim \mathcal{N}(0, \sigma_{Aj}) \\
+\delta_{Mjk} &\sim \mathcal{N}(0, \sigma_{Mj}) \\
+\sigma_{Aj} &\sim \text{Exp}(40.0) \\
+\sigma_{Mj} &\sim \text{Exp}(40.0) \\
+K &\sim \text{Gamma}(\text{shape} = 25.0, \text{rate} = 1.0) \\
+\tau &\sim \text{Beta}(100.0, 225.0) \\
+D &\sim \text{Gamma}(\text{shape} = 350.0, \text{rate} = 1.0) \\
 \end{align*}
 ```
 
-Here, $t$ is rescaled by dividing by 365, so that $t$ represents the proportion of a season elapsed. Additionally, $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are inferred from $c_{t,G}^{obs}$ and its reported 95% confidence interval, by assuming the latter is a Wald interval representing $1.96$ standard errors of the mean in each direction from $c_{t,G}^{obs}$. As a result, the standard error of the mean $\sigma_{t,G}^{SEM}$ is considered known for each data point, and $V_{t,G}^{obs}$ and $N_{t,G}^{obs}$ are as follows:
+Note that:
 
-```math
+$$
 \begin{align*}
-&N_{t,G}^{obs} = \frac{c_{t,G}^{obs} \cdot (1-c_{t,G}^{obs})}{{\sigma_{t,G}^{SEM}}^2} \\
-&V_{t,G}^{obs} = N_{t,G}^{obs} \cdot c_{t,G}^{obs} \\
+\mathbb{E}[x_{gt}] &= v_g(t) \cdot n_{gt} \\
+\mathrm{Var}[x_{gt}] &= v_g(t) \cdot [1-v_g(t)] \cdot \frac{n_{gt} (n_{gt} + D)}{D+1}
 \end{align*}
-```
-
-### Observation Layer
-
-The observed uptake is considered a draw from the beta-binomial distribution, governed in part by the true latent uptake in the population.
-
-```math
-\begin{align*}
-&V_{t,G_1,...,G_I}^{obs} \sim \text{BetaBinomial}(\text{shape1 = }\alpha_{t,G_1,...,G_I}, \text{ shape2 = }\beta_{t,G_1,...,G_I}, \text{ N = }N_{t,G_1,...,G_I}^{obs}) \\
-\end{align*}
-```
-
-Note that the shape parameters $\alpha$ and $\beta$ are not declared explicitly. Rather they are implied by an alternate mean and concentration parametrization, described below.
-
-### Functional Structure
-
-The model's functional structure describes the latent true uptake curve:
-
-```math
-\begin{align*}
-&c_{t,G_1,...,G_I} = \frac{A_{G_1,...,G_I}}{1 + e^{-n \cdot (t - H)}} + M_{G_1,...,G_I} \cdot t \\
-\end{align*}
-```
-
-$c_{t,G_1,...,G_I}$ serves as the mean of the beta distribution in the beta-binomial likelihood in the observation-layer. A fixed concentration parameter $d$ is also required. From the mean and concentration, the two shape parameters of the beta distribution are as follows:
-
-```math
-\begin{align*}
-&\alpha_{t,G_1,...,G_I} = c_{t,G_1,...,G_I} \cdot d \\
-&\beta_{t,G_1,...,G_I} = (1 - c_{t,G_1,...,G_I}) \cdot d \\
-\end{align*}
-```
-
-### Hierarchical Structure
-
-Certain parameters of the latent true uptake curve have group-specific deviations, determined as follows:
-
-```math
-\begin{align*}
-&A_{G_1,...,G_I} = A + A_{G_1} + ... + A_{G_I} \\
-&\frac{A_{G_i}}{\sigma_{A_{G_i}}} \sim \text{Normal}(\text{location = }0, \text{ scale = }1) ~\forall~i~\text{ in } 1, ..., I \\
-\end{align*}
-```
-
-and similarly for $M$.
-
-### Priors
-
-```math
-\begin{align*}
-&A \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }180.0) \\
-&\sigma_{A_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&H \sim \text{Beta}(\text{shape1 = }100.0, \text{ shape2 = }225.0) \\
-&n \sim \text{Gamma}(\text{shape = }25.0, \text{ rate = }1.0) \\
-&M \sim \text{Gamma}(\text{shape = }1.0, \text{ rate = }10.0) \\
-&\sigma_{M_{G_i}} \sim \text{Exponential}(\text{rate = }40.0) ~\forall~i~\text{ in } 1, ..., I \\
-&d \sim \text{Gamma}(\text{shape = }350.0, \text{ rate = }1.0) \\
-\end{align*}
-```
+$$

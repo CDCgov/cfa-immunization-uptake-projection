@@ -111,18 +111,18 @@ class LPLModel(UptakeModel):
         groups=None,
         num_group_factors=0,
         num_group_levels=[0],
-        A_shape1=100.0,
-        A_shape2=180.0,
-        A_sig=40.0,
-        H_shape1=100.0,
-        H_shape2=225.0,
-        n_shape=25.0,
-        n_rate=1.0,
-        M_shape=1.0,
-        M_rate=10.0,
-        M_sig=40.0,
-        d_shape=350.0,
-        d_rate=1.0,
+        muA_shape1=100.0,
+        muA_shape2=180.0,
+        sigmaA_rate=40.0,
+        tau_shape1=100.0,
+        tau_shape2=225.0,
+        K_shape=25.0,
+        K_rate=1.0,
+        muM_shape=1.0,
+        muM_rate=10.0,
+        sigmaM_rate=40.0,
+        D_shape=350.0,
+        D_rate=1.0,
     ):
         """
         Fit a mixed Logistic Plus Linear model on training data.
@@ -150,40 +150,48 @@ class LPLModel(UptakeModel):
         Provides the model structure and priors for a Logistic Plus Linear model.
         """
         # Sample the overall average value for each parameter
-        A = numpyro.sample("A", dist.Beta(A_shape1, A_shape2))
-        H = numpyro.sample("H", dist.Beta(H_shape1, H_shape2))
-        n = numpyro.sample("n", dist.Gamma(n_shape, n_rate))
-        M = numpyro.sample("M", dist.Gamma(M_shape, M_rate))
-        d = numpyro.sample("d", dist.Gamma(d_shape, d_rate))
+        muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
+        muM = numpyro.sample("muM", dist.Gamma(muM_shape, muM_rate))
+        tau = numpyro.sample("tau", dist.Beta(tau_shape1, tau_shape2))
+        K = numpyro.sample("K", dist.Gamma(K_shape, K_rate))
+        D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
+
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
-            A_sigs = numpyro.sample(
-                "A_sigs", dist.Exponential(A_sig), sample_shape=(num_group_factors,)
+            sigmaA = numpyro.sample(
+                "sigmaA",
+                dist.Exponential(sigmaA_rate),
+                sample_shape=(num_group_factors,),
             )
-            M_sigs = numpyro.sample(
-                "M_sigs", dist.Exponential(M_sig), sample_shape=(num_group_factors,)
+            sigmaM = numpyro.sample(
+                "sigmaM",
+                dist.Exponential(sigmaM_rate),
+                sample_shape=(num_group_factors,),
             )
-            A_devs = numpyro.sample(
-                "A_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(A_sigs, np.array(num_group_levels))
-            M_devs = numpyro.sample(
-                "M_devs", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            ) * np.repeat(M_sigs, np.array(num_group_levels))
-            A_tot = np.sum(A_devs[groups], axis=1) + A
-            M_tot = np.sum(M_devs[groups], axis=1) + M
-            # Calculate latent true uptake at each datum
-            mu = numpyro.deterministic(
-                "mu", A_tot / (1 + jnp.exp(0 - n * (elapsed - H))) + (M_tot * elapsed)
+            zA = numpyro.sample(
+                "zA", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
             )
+            zM = numpyro.sample(
+                "zM", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+            )
+            deltaA = zA * np.repeat(sigmaA, np.array(num_group_levels))
+            deltaM = zM * np.repeat(
+                sigmaM,
+                np.array(
+                    num_group_levels,
+                ),
+            )
+
+            A = muA + np.sum(deltaA[groups], axis=1)
+            M = muM + np.sum(deltaM[groups], axis=1)
         else:
-            # Calculate latent true uptake at each datum if no grouping factors
-            mu = numpyro.deterministic(
-                "mu", A / (1 + jnp.exp(0 - n * (elapsed - H))) + (M * elapsed)
-            )
-        # Calculate the shape parameters for the beta-binomial likelihood
-        S1 = mu * d
-        S2 = (1 - mu) * d
-        numpyro.sample("obs", dist.BetaBinomial(S1, S2, N_tot), obs=N_vax)  # type: ignore
+            A = muA
+            M = muM
+
+        # Calculate latent true uptake at each datum
+        v = A / (1 + jnp.exp(0 - K * (elapsed - tau))) + (M * elapsed)
+
+        numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
@@ -286,18 +294,18 @@ class LPLModel(UptakeModel):
             groups=group_codes,
             num_group_factors=self.num_group_factors,
             num_group_levels=self.num_group_levels,
-            A_shape1=params["A_shape1"],
-            A_shape2=params["A_shape2"],
-            A_sig=params["A_sig"],
-            H_shape1=params["H_shape1"],
-            H_shape2=params["H_shape2"],
-            n_shape=params["n_shape"],
-            n_rate=params["n_rate"],
-            M_shape=params["M_shape"],
-            M_rate=params["M_rate"],
-            M_sig=params["M_sig"],
-            d_shape=params["d_shape"],
-            d_rate=params["d_rate"],
+            muA_shape1=params["muA_shape1"],
+            muA_shape2=params["muA_shape2"],
+            sigmaA_rate=params["sigmaA_rate"],
+            tau_shape1=params["tau_shape1"],
+            tau_shape2=params["tau_shape2"],
+            K_shape=params["K_shape"],
+            K_rate=params["K_rate"],
+            muM_shape=params["muM_shape"],
+            muM_rate=params["muM_rate"],
+            sigmaM_rate=params["sigmaM_rate"],
+            D_shape=params["D_shape"],
+            D_rate=params["D_rate"],
         )
 
         if "progress_bar" in mcmc and mcmc["progress_bar"]:
