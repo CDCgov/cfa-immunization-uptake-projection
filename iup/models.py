@@ -444,8 +444,6 @@ def extract_group_combos(
 ) -> pl.DataFrame | None:
     """Extract from uptake data all combinations of grouping factors.
 
-    This is required by multiple models.
-
     Args:
         data: Uptake data possibly containing grouping factors.
         groups: Names of the columns for the grouping factors.

@@ -38,13 +38,6 @@ def date_to_elapsed(
 ) -> pl.Expr:
     """Extract a time elapsed column from a date column, as polars expressions.
 
-    Date column should be chronologically sorted in advance.
-    Time difference is always in days.
-    If a season start month and day is provided,
-    time elapsed is calculated since the season start.
-    Otherwise, time elapsed is calculated since the first report date in a season.
-    This ought to be called `.over(pl.col("season"))`.
-
     Args:
         date_col: Column of dates.
         season_start_month: First month of the overwinter disease season.
@@ -52,26 +45,22 @@ def date_to_elapsed(
 
     Returns:
         Column of the number of days elapsed since the first date.
+
+    Note:
+        Dates should be chronologically sorted in advance.
     """
+    # for every date, figure out the season breakpoint in that year
+    season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
 
-    if season_start_month == 0 and season_start_day == 0:
-        return (date_col - date_col.first()).dt.total_days()
+    # for dates before the season breakpoint in year, subtract a year
+    year = date_col.dt.year()
+    season_start_year = pl.when(date_col < season_start).then(year - 1).otherwise(year)
 
-    else:
-        # for every date, figure out the season breakpoint in that year
-        season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
+    # rewrite the season breakpoints to that immediately before each date
+    season_start = pl.date(season_start_year, season_start_month, season_start_day)
 
-        # for dates before the season breakpoint in year, subtract a year
-        year = date_col.dt.year()
-        season_start_year = (
-            pl.when(date_col < season_start).then(year - 1).otherwise(year)
-        )
-
-        # rewrite the season breakpoints to that immediately before each date
-        season_start = pl.date(season_start_year, season_start_month, season_start_day)
-
-        # return the number of days from season start to each date
-        return (date_col - season_start).dt.total_days()
+    # return the number of days from season start to each date
+    return (date_col - season_start).dt.total_days()
 
 
 def map_value_to_index(groups: pl.DataFrame) -> dict[str, dict[Any, int]]:
