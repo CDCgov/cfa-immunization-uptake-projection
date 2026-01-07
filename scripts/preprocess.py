@@ -18,9 +18,18 @@ def season_filter(
     end_day: int,
     col_name="time_end",
 ) -> pl.LazyFrame:
-    """
-    Filter a data frame for dates that are before the season end or after the
-    season start (i.e., we assume that some summer months are "out of season").
+    """Filter a data frame for dates that are before the season end or after the season start.
+
+    Args:
+        df: Data frame to filter.
+        start_month: First month of the season.
+        start_day: First day of the season.
+        end_month: Last month of the season.
+        end_day: Last day of the season.
+        col_name: Name of the column containing dates. Defaults to "time_end".
+
+    Returns:
+        Filtered data frame (assumes summer months are "out of season").
     """
     assert (end_month, end_day) < (start_month, start_day), (
         "Only summer-ending seasons are supported"

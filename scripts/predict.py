@@ -19,17 +19,13 @@ def run_all_forecasts(
     """Run all forecasts for all the fitted models across model name and forecast start.
 
     Args:
-        data: iup.UptakeData
-            all available data including training and testing.
-        fitted_models: dict
-            a dictionary containing all fitted models, indexed by a
-            combo of model name and forecast start date.
-        config: yaml
-            config file to specify args in augment_data and run_forecast.
-
+        data: All available data including training and testing.
+        fitted_models: Dictionary containing all fitted models, indexed by a
+            combination of model name and forecast start date.
+        config: Configuration dictionary to specify args in augment_data and run_forecast.
 
     Returns:
-        A pl.DataFrame saving predictive distribution at each time point between
+        Data frame saving predictive distribution at each time point between
         forecast start and end, at least grouped by model name, forecast start, and forecast end.
     """
     all_forecasts = pl.DataFrame()

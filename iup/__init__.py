@@ -17,12 +17,10 @@ class Data(pl.DataFrame):
         raise NotImplementedError("Subclasses must implement this method.")
 
     def assert_in_schema(self, names_types: dict[str, DataTypeClass]):
-        """
-        Verify that column of the expected types are present in the data frame.
+        """Verify that columns of the expected types are present in the data frame.
 
-        Parameters
-        names_types (dict[str, pl.DataType]):
-            Column names and types
+        Args:
+            names_types: Column names and types mapping.
         """
         for name, type_ in names_types.items():
             if name not in self.schema.names():
@@ -40,9 +38,7 @@ class Data(pl.DataFrame):
 
 class UptakeData(Data):
     def validate(self):
-        """
-        Must have time_end and estimate columns; can have more
-        """
+        """Must have time_end and estimate columns; can have more."""
         self.assert_in_schema({"time_end": pl.Date, "estimate": pl.Float64})
 
 
@@ -61,26 +57,24 @@ class IncidentUptakeData(UptakeData):
             )
 
     def to_cumulative(
-        self, groups: List[str,] | None, prev_cumulative=None
+        self, groups: List[str,] | None, prev_cumulative: pl.DataFrame | None = None
     ) -> "CumulativeUptakeData":
-        """
-        Convert incident to cumulative uptake data.
+        """Convert incident to cumulative uptake data.
 
-        Parameters
-        groups: List[str,] | None
-            name(s) of the columns of grouping factors
-        last_cumulative: pl.DataFrame
-            cumulative from before the start of the incident data, for each group
+        Args:
+            groups: Names of the columns of grouping factors. If `None`, then data
+                will be grouped by `"season"`.
+            prev_cumulative: Cumulative uptake from before the start of the incident
+                data, for each group. If `None`, do nothing.
 
-        Returns
-        CumulativeUptakeData
-            cumulative uptake on each date in the input incident uptake data
+        Returns:
+            Cumulative uptake on each date in the input incident uptake data.
 
-        Details
-        Cumulative sum of incident uptake gives the cumulative uptake.
-        Optionally, additional cumulative uptake from before the start of
-        the incident data may be provided.
-        Even if no groups are specified, the data must at least be grouped by season.
+        Note:
+            Cumulative sum of incident uptake gives the cumulative uptake.
+            Optionally, additional cumulative uptake from before the start of
+            the incident data may be provided.
+            Even if no groups are specified, the data must at least be grouped by season.
         """
         if groups is None:
             groups = ["season"]
@@ -105,21 +99,18 @@ class CumulativeUptakeData(UptakeData):
         )
 
     def to_incident(self, groups: List[str,] | None) -> IncidentUptakeData:
-        """
-        Convert cumulative to incident uptake data.
+        """Convert cumulative to incident uptake data.
 
-        Parameters
-        groups: (str,) | None
-            name(s) of the columns of grouping factors
+        Args:
+            groups: Names of the columns of grouping factors. If `None`, then data
+                will be grouped by `"season"`.
 
-        Returns
-        IncidentUptakeData
-            incident uptake on each date in the input cumulative uptake data
+        Returns:
+            Incident uptake on each date in the input cumulative uptake data.
 
-        Details
-        Because the first report date for each group is often rollout,
-        incident uptake on the first report date is 0.
-        Even if no groups are specified, the data must at least be grouped by season.
+        Note:
+            Because the first report date for each group is often rollout,
+            incident uptake on the first report date is 0.
         """
         if groups is None:
             groups = ["season"]

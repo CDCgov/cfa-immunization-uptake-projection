@@ -7,7 +7,7 @@ import argparse
 import datetime as dt
 import pickle as pkl
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Tuple, Type
 
 import numpyro
 import polars as pl
@@ -19,12 +19,16 @@ import iup.models
 
 def fit_all_models(
     data, forecast_date: dt.date, config
-) -> Dict[str, iup.models.UptakeModel]:
-    """
-    Run all forecasts
+) -> Dict[Tuple[str, dt.date], iup.models.UptakeModel]:
+    """Run all forecasts.
+
+    Args:
+        data: Input data to fit models on.
+        forecast_date: Forecast date to use as training cutoff.
+        config: Configuration dictionary.
 
     Returns:
-        pl.DataFrame: data frame of forecasts, organized by model and forecast date
+        Dictionary of fitted models organized by model name and forecast date.
     """
 
     all_models = {}
@@ -68,7 +72,20 @@ def fit_model(
     grouping_factors: List[str] | None,
     forecast_date: dt.date,
 ) -> iup.models.UptakeModel:
-    """Run a single model for a single forecast date"""
+    """Run a single model for a single forecast date.
+
+    Args:
+        data: Uptake data to train on.
+        model_class: Class of model to fit.
+        seed: Random seed for model initialization.
+        params: Model parameters for prior distributions.
+        mcmc: MCMC configuration parameters.
+        grouping_factors: Names of columns for grouping factors.
+        forecast_date: Forecast date to use as training cutoff.
+
+    Returns:
+        Fitted model object.
+    """
     train_data = iup.UptakeData(data.filter(pl.col("time_end") <= forecast_date))
 
     # Make an instance of the model, fit it using training data, and make projections
