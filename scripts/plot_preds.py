@@ -120,7 +120,6 @@ if __name__ == "__main__":
     # scores across seasons & states
     fit_scores = scores.filter(
         pl.col("forecast_date") == pl.col("forecast_date").max(),
-        pl.col("score_type") == pl.lit("fit"),
         pl.col("score_fun") == pl.lit("mspe"),
     ).with_columns(pl.col("score_value").log())
 
@@ -149,8 +148,8 @@ if __name__ == "__main__":
     # scores increasing through the season?
     # sis = score in season
     sis_data = scores.filter(
-        pl.col("score_type") == pl.lit("forecast"),
         pl.col("score_fun") == pl.lit("eos_abs_diff"),
+        pl.col("season") == pl.col("season").max(),
     ).with_columns(month=pl.col("forecast_date").dt.to_string("%b"))
 
     sis_line = (
@@ -182,8 +181,8 @@ if __name__ == "__main__":
     )
     fc_goodness = (
         scores.filter(
-            pl.col("score_type") == pl.lit("forecast"),
             pl.col("score_fun") == pl.lit("eos_abs_diff"),
+            pl.col("season") == pl.col("season").max(),
             pl.col("forecast_date") == pl.col("forecast_date").min(),
         )
         .select(["geography", "model", "score_value"])
@@ -193,6 +192,10 @@ if __name__ == "__main__":
     alt.Chart(
         avg_fit.join(fc_goodness, on=["model", "geography"], how="inner")
     ).mark_point(color="black").encode(
-        alt.X("fit_score", title="Fit score (MSPE)", scale=alt.Scale(zero=False)),
+        alt.X(
+            "fit_score",
+            title="Fit score (median MSPE over seasons)",
+            scale=alt.Scale(zero=False),
+        ),
         alt.Y("fc_score", title="Forecast score (abs. end-of-season diff.)"),
     ).save(out_dir / "forecast_fit_compare.png")

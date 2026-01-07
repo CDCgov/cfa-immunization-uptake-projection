@@ -4,70 +4,7 @@ import polars as pl
 import yaml
 
 import iup.eval
-
-
-def eval_all_forecasts(
-    data: pl.DataFrame, pred: pl.DataFrame, config: dict
-) -> pl.DataFrame:
-    """
-    Calculates the evaluation metrics selected by config, by model and forecast start date.
-    -----------------------
-    Arguments:
-    data:
-        observed data with at least "time_end" and "estimate" columns
-    pred:
-        forecast data as sample distribution with at least "time_end", "sample_id", "model", "forecast_date" and "estimate",
-    config:
-        config file to specify the expected quantile from the sample distribution and evaluation metrics to calculate
-
-    Returns:
-        A pl.DataFrame with score name and score values, grouped by model, forecast start, quantile, and possibly other grouping factors
-    """
-    forecast_dates = pred["forecast_date"].unique()
-
-    assert "score_funs" in config, (
-        f"`score_funs` not among config keys: {config.keys()}"
-    )
-    score_funs = [getattr(iup.eval, fun_name) for fun_name in config["score_funs"]]
-
-    assert config["groups"] is not None
-    cols = config["groups"] + [
-        "model",
-        "forecast_date",
-        "score_value",
-        "score_fun",
-        "score_type",
-    ]
-
-    all_scores = pl.DataFrame()
-
-    for forecast_date in forecast_dates:
-        # get a fit score
-        fit_data = data.filter(pl.col("time_end") <= forecast_date)
-        fit_pred = pred.filter(pl.col("time_end") <= forecast_date)
-
-        fc_data = data.filter(pl.col("time_end") > forecast_date)
-        fc_pred = pred.filter(pl.col("time_end") > forecast_date)
-
-        for score_fun in score_funs:
-            fit_scores = (
-                score_fun(
-                    obs=fit_data, pred=fit_pred, grouping_factors=config["groups"]
-                )
-                .with_columns(score_type=pl.lit("fit"))
-                .select(cols)
-            )
-
-            fc_scores = (
-                score_fun(obs=fc_data, pred=fc_pred, grouping_factors=config["groups"])
-                .with_columns(score_type=pl.lit("forecast"))
-                .select(cols)
-            )
-
-            all_scores = pl.concat([all_scores, fit_scores, fc_scores])
-
-    return all_scores
-
+import iup.utils
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -80,7 +17,34 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    pred = pl.read_parquet(args.preds)
+    pred = pl.scan_parquet(args.preds)
     data = pl.read_parquet(args.data)
 
-    eval_all_forecasts(data, pred, config).write_parquet(args.output)
+    # score each season/state fit, using all available data (i.e., only the last
+    # forecast date)
+    mspe = iup.eval.mspe(
+        obs=data,
+        pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
+        grouping_factors=config["groups"],
+    )
+
+    # score the forecasts proper, only in the season that the forecasts were made
+    forecast_season = pred.select(
+        pl.col("forecast_date")
+        .pipe(
+            iup.utils.date_to_season,
+            season_start_month=config["season"]["start_month"],
+            season_start_day=config["season"]["start_day"],
+        )
+        .unique()
+    ).collect()
+    assert forecast_season.height == 1
+    forecast_season = forecast_season.item()
+
+    eos_abs_diff = iup.eval.eos_abs_diff(
+        obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
+        pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
+        grouping_factors=config["groups"],
+    )
+
+    pl.concat([mspe, eos_abs_diff]).write_parquet(args.output)

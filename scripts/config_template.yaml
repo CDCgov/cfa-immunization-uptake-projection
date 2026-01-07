@@ -44,8 +44,6 @@ forecast_dates:
   end: 2021-11-01
   interval: 1mo
 
-score_funs: [mspe, eos_abs_diff]
-
 plots:
   example_data_season: "2020/2021"
   example_forecast_geos: ["New Jersey"]
