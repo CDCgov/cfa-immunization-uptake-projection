@@ -25,7 +25,7 @@ For convenience, the raw data are tracked in this repo under `data/`, which incl
 1. Set up the config:
    - Copy `scripts/config_template.yaml` to `scripts/config.yaml` or
    - in the next step, specify `CONFIG=you_path` when calling `make`.
-2. Run the pipeline with `make`.
+2. Run the pipeline with `make`. (You can run steps in parallel with, e.g., `make -j4`.)
 3. Inspect `output/vignette/`:
    - `config.yaml`: a copy of the input config
    - `data.parquet`: the preprocessed, observed data
