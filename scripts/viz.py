@@ -63,7 +63,7 @@ def app(data_path: str, config_path: str, scores_path: str, preds_path: str):
     scores = load_parquet(scores_path)
     config = load_config(config_path)
 
-    st.title("Vaccine Uptake Forecasts")
+    st.title("Vaccine Coverage Forecasts")
 
     # multiple tabs
     tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])
@@ -94,7 +94,7 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
     # set up plot encodings
     encodings = {
         "x": alt.X("time_end:T", title="Observation date"),
-        "y": alt.Y("estimate:Q", title="Cumulative uptake estimate"),
+        "y": alt.Y("estimate:Q", title="Cumulative coverage estimate"),
         "color": alt.Color("sample_id:N", title="Trajectories"),
     }
 
@@ -157,7 +157,7 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
             y="observed:Q",
             tooltip=[
                 alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("observed", title="Observed uptake"),
+                alt.Tooltip("observed", title="Observed coverage"),
             ],
         )
         .transform_calculate(type="'observed'")
@@ -172,7 +172,7 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
             y="estimate:Q",
             tooltip=[
                 alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("estimate", title="Predicted uptake"),
+                alt.Tooltip("estimate", title="Predicted coverage"),
             ],
         )
         .transform_calculate(type="'predicted'")
@@ -268,7 +268,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
             y="estimate:Q",
             tooltip=[
                 alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("estimate", title="Observed uptake"),
+                alt.Tooltip("estimate", title="Observed coverage"),
             ],
         )
         .transform_calculate(type="'observed'")

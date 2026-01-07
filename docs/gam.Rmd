@@ -70,11 +70,11 @@ Model formula: `gam(y~x0 + s(x1),family, method, data)`.
 
 #### simple GAM
 
-Use national influenza vaccine uptake data an an example. We predict the vaccine uptake `estimate` using the days after vaccine roll-out. In this tutorial, we fixed the vaccine roll-out date to be July 1st every year.
+Use national influenza vaccine coverage data an an example. We predict the vaccine coverage `estimate` using the days after vaccine roll-out. In this tutorial, we fixed the vaccine roll-out date to be July 1st every year.
 
 Here, data is cleaned and splitted into training and testing, on July 1st, 2023.
 ```{r, results=FALSE, message=FALSE,warning=FALSE}
-rm(list=ls())
+rm(list = ls())
 library(dplyr)
 library(ggplot2)
 library(mgcv)
@@ -82,14 +82,16 @@ library(mgcv)
 ### national flu data ###
 nis <- read.csv("../data/nis_flu_national.csv")
 head(nis)
-nis$time_end = as.Date(nis$time_end)
+nis$time_end <- as.Date(nis$time_end)
 
 nis %>%
-  mutate(time_end=as.Date(time_end),
-         season_start_year= gsub("(\\d{4})/\\d{4}","\\1",season)) %>%
-  mutate(season_start=as.Date(paste0(season_start_year,"-07-01"))) %>%
-  mutate(elapsed=as.numeric(time_end-season_start))%>%
-  mutate(season=factor(season))%>%
+  mutate(
+    time_end = as.Date(time_end),
+    season_start_year = gsub("(\\d{4})/\\d{4}", "\\1", season)
+  ) %>%
+  mutate(season_start = as.Date(paste0(season_start_year, "-07-01"))) %>%
+  mutate(elapsed = as.numeric(time_end - season_start)) %>%
+  mutate(season = factor(season)) %>%
   select(-season_start_year) -> nis
 
 train_end <- as.Date("2023-07-01")
@@ -99,20 +101,17 @@ nis %>%
 
 nis %>%
   filter(time_end >= train_end) -> nis_test
-
 ```
 
 Fit a GAM model with a grouping factor `"season"`
 
 ```{r, results=FALSE, message=FALSE,warning=FALSE}
-nis_gam <- gam(estimate ~ s(elapsed,bs="bs") + s(season,bs="re"),data=nis_train,method="REML")
+nis_gam <- gam(estimate ~ s(elapsed, bs = "bs") + s(season, bs = "re"), data = nis_train, method = "REML")
 ```
 
 Get the forecast for season 2023/2024.
 ```{r,results=FALSE, message=FALSE,warning=FALSE}
-
-nis_test$pred <- predict(nis_gam,type="response",newdata=nis_test)
-
+nis_test$pred <- predict(nis_gam, type = "response", newdata = nis_test)
 ```
 
 Evaluate model fitting by comparing with training data.
@@ -122,9 +121,9 @@ nis_train$fitted <- nis_gam$fitted.values
 
 nis_train %>%
   ggplot() +
-  geom_point(aes(x=elapsed,y=estimate)) +
-  geom_line(aes(x=elapsed,y=fitted)) +
-  facet_wrap(season~.) +
+  geom_point(aes(x = elapsed, y = estimate)) +
+  geom_line(aes(x = elapsed, y = fitted)) +
+  facet_wrap(season ~ .) +
   theme_bw()
 ```
 
@@ -132,42 +131,41 @@ Evaluate forecasting by comparing with testing data.
 ```{r,results=FALSE, message=FALSE,warning=FALSE}
 nis_test %>%
   ggplot() +
-  geom_point(aes(x=elapsed,y=estimate)) +
-  geom_line(aes(x=elapsed,y=pred))+
-  facet_wrap(season~.) +
+  geom_point(aes(x = elapsed, y = estimate)) +
+  geom_line(aes(x = elapsed, y = pred)) +
+  facet_wrap(season ~ .) +
   theme_bw()
 ```
 
 #### Restrospective evaluation
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
-
 ### retrospective forecasting ###
-retro_gam <- function(forecast_start,data) {
+retro_gam <- function(forecast_start, data) {
   train <- data %>%
     filter(time_end < forecast_start)
   test <- data %>%
     filter(time_end >= forecast_start)
 
-  gam_fit <- gam(estimate ~ s(elapsed,bs="bs") +s(season,bs="re"),data=train, method="REML")
-  test$pred <- predict(gam_fit,type="response",newdata=test)
+  gam_fit <- gam(estimate ~ s(elapsed, bs = "bs") + s(season, bs = "re"), data = train, method = "REML")
+  test$pred <- predict(gam_fit, type = "response", newdata = test)
 
   return(test)
 }
 
-forecast_starts <- seq(as.Date("2023-09-01"),as.Date("2024-04-01"),"1 month")
+forecast_starts <- seq(as.Date("2023-09-01"), as.Date("2024-04-01"), "1 month")
 
-all_preds <- lapply(1:length(forecast_starts),function(x) {
-  retro_gam(forecast_start = forecast_starts[x],data=nis)
+all_preds <- lapply(1:length(forecast_starts), function(x) {
+  retro_gam(forecast_start = forecast_starts[x], data = nis)
 })
 
 names(all_preds) <- forecast_starts
 all_pred_df <- plyr::ldply(all_preds)
 
 ggplot(all_pred_df) +
-  geom_point(aes(x=time_end,y=estimate)) +
-  geom_line(aes(x=time_end,y=pred))+
-  facet_wrap(.id~.) +
+  geom_point(aes(x = time_end, y = estimate)) +
+  geom_line(aes(x = time_end, y = pred)) +
+  facet_wrap(.id ~ .) +
   theme_bw()
 ```
 
@@ -175,19 +173,21 @@ We can see GAM model captures the observed data well as forecasting through the 
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
 mspe <- function(data, pred) {
-  mean((data-pred)^2)
+  mean((data - pred)^2)
 }
 
-retro_mspe <- sapply(1:length(all_preds),function(x) {
-  mspe(all_preds[[x]]$estimate,all_preds[[x]]$pred)
+retro_mspe <- sapply(1:length(all_preds), function(x) {
+  mspe(all_preds[[x]]$estimate, all_preds[[x]]$pred)
 })
 
-mspe_df <- data.frame(date=forecast_starts,
-                      mspe=retro_mspe)
+mspe_df <- data.frame(
+  date = forecast_starts,
+  mspe = retro_mspe
+)
 
 mspe_df %>%
   ggplot() +
-  geom_point(aes(x=date,y=mspe))+
+  geom_point(aes(x = date, y = mspe)) +
   theme_bw()
 ```
 
@@ -195,17 +195,19 @@ MSPE is also pretty small.
 
 #### GAM with grouping factors
 
-How about the model that include both season and state as grouping factors? The influenza vaccine uptake data by season and state is loaded. Here are the similar data cleaning and splitting data as training and testing:
+How about the model that include both season and state as grouping factors? The influenza vaccine coverage data by season and state is loaded. Here are the similar data cleaning and splitting data as training and testing:
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
 nis_state <- read.csv("../data/nis_flu_states.csv")
 
 nis_state %>%
-  mutate(time_end=as.Date(time_end),
-         season_start_year= gsub("(\\d{4})/\\d{4}","\\1",season)) %>%
-  mutate(season_start=as.Date(paste0(season_start_year,"-07-01"))) %>%
-  mutate(elapsed=as.numeric(time_end-season_start))%>%
-  mutate(geography=factor(geography),season=factor(season))%>%
+  mutate(
+    time_end = as.Date(time_end),
+    season_start_year = gsub("(\\d{4})/\\d{4}", "\\1", season)
+  ) %>%
+  mutate(season_start = as.Date(paste0(season_start_year, "-07-01"))) %>%
+  mutate(elapsed = as.numeric(time_end - season_start)) %>%
+  mutate(geography = factor(geography), season = factor(season)) %>%
   select(-season_start_year) -> nis_state
 
 nis_state %>%
@@ -213,39 +215,40 @@ nis_state %>%
 
 nis_state %>%
   filter(time_end >= train_end) -> nis_state_test
-
 ```
 
 Fitting GAM model given the spline function is B-spline, and `"geography"` and `"season"` are random effects.
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
-nis_state_gam <- gam(estimate ~ s(elapsed,bs="bs") + s(geography, bs="re") +
-                      s(season, bs="re"),
-                  data=nis_state_train,method="REML")
+nis_state_gam <- gam(
+  estimate ~ s(elapsed, bs = "bs") + s(geography, bs = "re") +
+    s(season, bs = "re"),
+  data = nis_state_train, method = "REML"
+)
 ```
 
 Getting the in-sample comparison and out-of-sample forecasting:
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
 nis_state_train$fitted <- nis_state_gam$fitted.values
-nis_state_test$pred <- predict(nis_state_gam,newdata=nis_state_test,type="response")
+nis_state_test$pred <- predict(nis_state_gam, newdata = nis_state_test, type = "response")
 ```
 
 Compare with training data:
 ```{r,results=FALSE, message=FALSE, warning=FALSE,fig.width=10,fig.height=7}
 ggplot(nis_state_train) +
-  geom_point(aes(x=elapsed,y=estimate,color=season)) +
-  geom_line(aes(x=elapsed,y=fitted))+
-  facet_wrap(geography~.)+
+  geom_point(aes(x = elapsed, y = estimate, color = season)) +
+  geom_line(aes(x = elapsed, y = fitted)) +
+  facet_wrap(geography ~ .) +
   theme_bw()
 ```
 
 Compare with testing data:
 ```{r,results=FALSE, message=FALSE, warning=FALSE, fig.width=10,fig.height=7}
 ggplot(nis_state_test) +
-  geom_point(aes(x=elapsed,y=estimate)) +
-  geom_line(aes(x=elapsed,y=pred)) +
-  facet_wrap(geography~.) +
+  geom_point(aes(x = elapsed, y = estimate)) +
+  geom_line(aes(x = elapsed, y = pred)) +
+  facet_wrap(geography ~ .) +
   theme_bw()
 ```
 
-Given the results from `mgcv`, GAM is a promising option to forecast vaccine uptake. Next step should be incorporating this framework into our package. This requires switching to Bayesian likelihood.
+Given the results from `mgcv`, GAM is a promising option to forecast vaccine coverage. Next step should be incorporating this framework into our package. This requires switching to Bayesian likelihood.

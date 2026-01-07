@@ -14,7 +14,7 @@ def date_to_season(
     season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024".
 
     Args:
-        date: Dates in an uptake data frame.
+        date: Dates in an coverage data frame.
         season_start_month: First month of the overwinter disease season.
         season_start_day: First day of the first month of the overwinter disease season.
 

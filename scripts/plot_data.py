@@ -157,6 +157,6 @@ if __name__ == "__main__":
             title=None,
             sort=alt.EncodingSortField("estimate", "median", "descending"),
         ),
-        alt.Y("estimate", title="End of season uptake", axis=AXIS_PERCENT),
+        alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "data_eos_by_state.png")

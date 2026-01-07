@@ -1,6 +1,8 @@
-# Immunization uptake projections
+# Vaccine coverage forecasting
 
-This repo contains statistical tools to predict the uptake of immunizations (primarily vaccines and boosters).
+_Formerly known as Immunization Uptake Projections, or `iup`._
+
+This repo represents an experimental prototype for forecasting the coverage of vaccinations.
 
 ## Getting started
 
@@ -12,8 +14,8 @@ This repo contains statistical tools to predict the uptake of immunizations (pri
 
 The vignette demonstrates a workflow using this package:
 
-1. Fit a model to uptake data from past seasons
-1. Use it to forecast future uptake data in the latest season
+1. Fit a model to coverage data from past seasons
+1. Use it to forecast future coverage data in the latest season
 1. Evaluate forecasts against observed values
 
 ### Data source

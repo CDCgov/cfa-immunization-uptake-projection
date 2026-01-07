@@ -53,7 +53,7 @@ def preprocess(
     season_start_month: int,
     season_start_day: int,
     geographies: List[str] | None,
-) -> iup.CumulativeUptakeData:
+) -> iup.CumulativeCoverageData:
     # filter for specific geographies
     def geo_filter(df: pl.LazyFrame) -> pl.LazyFrame:
         if geographies is None:
@@ -61,7 +61,7 @@ def preprocess(
         else:
             return df.filter(pl.col("geography").is_in(geographies))
 
-    data = iup.CumulativeUptakeData(
+    data = iup.CumulativeCoverageData(
         raw_data.rename({"sample_size": "N_tot"})
         .with_columns(
             season=iup.utils.date_to_season(

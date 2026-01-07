@@ -29,6 +29,6 @@ def frame():
         }
     ).with_columns(time_end=pl.col("time_end").str.strptime(pl.Date, "%Y-%m-%d"))
 
-    frame = iup.CumulativeUptakeData(frame)
+    frame = iup.CumulativeCoverageData(frame)
 
     return frame

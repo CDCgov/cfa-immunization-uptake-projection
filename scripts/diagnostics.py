@@ -11,7 +11,7 @@ import iup.models
 
 
 def diagnostic_plot(
-    plot_name: str, fit: iup.models.UptakeModel, output_path: str | Path
+    plot_name: str, fit: iup.models.CoverageModel, output_path: str | Path
 ):
     plot_func = getattr(iup.diagnostics, plot_name)
     axes = plot_func(fit)
@@ -20,7 +20,7 @@ def diagnostic_plot(
 
 
 def diagnostic_table(
-    table_name: str, fit: iup.models.UptakeModel, output_path: str | Path
+    table_name: str, fit: iup.models.CoverageModel, output_path: str | Path
 ):
     table_func = getattr(iup.diagnostics, table_name)
     output = table_func(fit)

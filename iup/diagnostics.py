@@ -4,17 +4,17 @@ import polars as pl
 import iup.models
 
 
-def posterior_density_plot(model: iup.models.UptakeModel) -> dict:
+def posterior_density_plot(model: iup.models.CoverageModel) -> dict:
     idata = az.from_numpyro(model.mcmc)
     return az.plot_posterior(idata)
 
 
-def parameter_trace_plot(model: iup.models.UptakeModel) -> dict:
+def parameter_trace_plot(model: iup.models.CoverageModel) -> dict:
     idata = az.from_numpyro(model.mcmc)
     return az.plot_trace(idata)
 
 
-def parameter_pairwise_plot(model: iup.models.UptakeModel) -> dict:
+def parameter_pairwise_plot(model: iup.models.CoverageModel) -> dict:
     idata = az.from_numpyro(model.mcmc)
     if isinstance(model, iup.models.LPLModel):
         # remove A_devs and M_devs for LPL model
@@ -23,7 +23,7 @@ def parameter_pairwise_plot(model: iup.models.UptakeModel) -> dict:
         return az.plot_pair(idata)
 
 
-def print_posterior_dist(model: iup.models.UptakeModel) -> pl.DataFrame:
+def print_posterior_dist(model: iup.models.CoverageModel) -> pl.DataFrame:
     idata = az.from_numpyro(model.mcmc)
     posterior = idata.to_dataframe(groups="posterior", include_coords=False)
     posterior = pl.from_pandas(posterior)
@@ -62,7 +62,7 @@ def print_posterior_dist(model: iup.models.UptakeModel) -> pl.DataFrame:
     return posterior
 
 
-def print_model_summary(model: iup.models.UptakeModel) -> pl.DataFrame:
+def print_model_summary(model: iup.models.CoverageModel) -> pl.DataFrame:
     idata = az.from_numpyro(model.mcmc)
     summary_pd = az.summary(idata)
     summary = pl.DataFrame(summary_pd)

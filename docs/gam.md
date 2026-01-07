@@ -2,7 +2,7 @@
 
 ## Overview
 
-GAM (generalized additive model) models the relation between vaccine uptake ($y_i$) and the smooth version ($f(.)$) of elapsed variable (the number of days after vaccine roll-out) ($x_i$) and the random effect introduced by season ($u_j$) with link function $g^{-1}
+GAM (generalized additive model) models the relation between vaccine coverage ($y_i$) and the smooth version ($f(.)$) of elapsed variable (the number of days after vaccine roll-out) ($x_i$) and the random effect introduced by season ($u_j$) with link function $g^{-1}
 (.)$.
 
 ```math
@@ -21,7 +21,7 @@ Writing in matrix form, this is:
 g^{-1}(E(y)) = X\beta + Zu + \beta_0
 ```
 
-$y$ is a vector of observed vaccine uptake, $X$ is the design matrix of basis function with $N \times k$ dimension, where $N$ is the number of observations and $k$ is the number of basis functions used. Each element in $X$ is the value of the basis function evaluated at the predictor elapsed ($B_k(x_{i})$).$\beta$ is a vector of coefficients that control each basis function. $X\beta$ is the main effect that is the same across all the level in a group (in our case is season). $Z$ is a random-effect design matrix to define the relation between levels in a group. $u$ is a vector representing season-specific intercept. Here, we assume the model follows lognormal distribution and the link function is $log()$.
+$y$ is a vector of observed vaccine coverage, $X$ is the design matrix of basis function with $N \times k$ dimension, where $N$ is the number of observations and $k$ is the number of basis functions used. Each element in $X$ is the value of the basis function evaluated at the predictor elapsed ($B_k(x_{i})$).$\beta$ is a vector of coefficients that control each basis function. $X\beta$ is the main effect that is the same across all the level in a group (in our case is season). $Z$ is a random-effect design matrix to define the relation between levels in a group. $u$ is a vector representing season-specific intercept. Here, we assume the model follows lognormal distribution and the link function is $log()$.
 
 ## Bayesian framework
 

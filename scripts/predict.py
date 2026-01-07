@@ -12,8 +12,8 @@ import iup.models
 
 
 def run_all_forecasts(
-    data: iup.UptakeData,
-    fitted_models: Dict[str, iup.models.UptakeModel],
+    data: iup.CoverageData,
+    fitted_models: Dict[str, iup.models.CoverageModel],
     config: dict[str, Any],
 ) -> pl.DataFrame:
     """Run all forecasts for all the fitted models across model name and forecast start.
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    input_data = iup.CumulativeUptakeData(pl.read_parquet(args.data))
+    input_data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
     with open(args.fits, "rb") as f:
         models = pickle.load(f)

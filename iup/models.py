@@ -15,11 +15,11 @@ from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
+import iup
 import iup.utils
-from iup import CumulativeUptakeData, SampleForecast, UptakeData
 
 
-class UptakeModel(abc.ABC):
+class CoverageModel(abc.ABC):
     """
     Abstract class for different types of models.
     Every subclass of model will have some core methods of the same name.
@@ -28,26 +28,26 @@ class UptakeModel(abc.ABC):
     @staticmethod
     @abc.abstractmethod
     def augment_data(
-        data: UptakeData,
+        data: iup.CoverageData,
         season_start_month: int,
         season_start_day: int,
-    ) -> UptakeData:
-        """Add columns to preprocessed uptake data to provide all input information that a specific model requires.
+    ) -> iup.CoverageData:
+        """Add columns to preprocessed coverage data to provide all input information that a specific model requires.
 
         Args:
-            data: Preprocessed uptake data.
+            data: Preprocessed coverage data.
             season_start_month: First month of the overwinter disease season.
             season_start_day: First day of the first month of the overwinter disease season.
 
         Returns:
-            Augmented uptake data.
+            Augmented coverage data.
         """
         pass
 
     @abc.abstractmethod
     def fit(
         self,
-        data: UptakeData,
+        data: iup.CoverageData,
         groups: List[str,] | None,
         params: dict,
         mcmc: dict,
@@ -113,9 +113,9 @@ class UptakeModel(abc.ABC):
     mcmc = None
 
 
-class LPLModel(UptakeModel):
+class LPLModel(CoverageModel):
     """
-    Subclass of UptakeModel for a mixed Logistic Plus Linear model.
+    Subclass of CoverageModel for a mixed Logistic Plus Linear model.
     For details, see the online docs.
     """
 
@@ -211,21 +211,21 @@ class LPLModel(UptakeModel):
             A = muA
             M = muM
 
-        # Calculate latent true uptake at each datum
+        # Calculate latent true coverage at each datum
         v = A / (1 + jnp.exp(0 - K * (elapsed - tau))) + (M * elapsed)
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
     @staticmethod
     def augment_data(
-        data: CumulativeUptakeData,
+        data: iup.CumulativeCoverageData,
         season_start_month: int,
         season_start_day: int,
-    ) -> CumulativeUptakeData:
+    ) -> iup.CumulativeCoverageData:
         """Format preprocessed data for fitting a Logistic Plus Linear model.
 
         The following steps are required to prepare preprocessed data
-        for fitting a linear incident uptake model:
+        for fitting a linear incident coverage model:
         - Add an extra column for time elapsed since start-of-season
         - Rescale this time elapsed to a proportion of the year
 
@@ -235,9 +235,9 @@ class LPLModel(UptakeModel):
             season_start_day: First day of the first month of the overwinter disease season.
 
         Returns:
-            Cumulative uptake data ready for fitting a Logistic Plus Linear model.
+            Cumulative coverage data ready for fitting a Logistic Plus Linear model.
         """
-        data = CumulativeUptakeData(
+        data = iup.CumulativeCoverageData(
             data.with_columns(
                 elapsed=iup.utils.date_to_elapsed(
                     pl.col("time_end"),
@@ -252,7 +252,7 @@ class LPLModel(UptakeModel):
 
     def fit(
         self,
-        data: CumulativeUptakeData,
+        data: iup.CumulativeCoverageData,
         groups: List[str,] | None,
         params: dict,
         mcmc: dict,
@@ -436,16 +436,16 @@ class LPLModel(UptakeModel):
             .drop(["elapsed", "N_tot"])
         )
 
-        return SampleForecast(pred)
+        return iup.SampleForecast(pred)
 
 
 def extract_group_combos(
     data: pl.DataFrame, groups: List[str,] | None
 ) -> pl.DataFrame | None:
-    """Extract from uptake data all combinations of grouping factors.
+    """Extract from coverage data all combinations of grouping factors.
 
     Args:
-        data: Uptake data possibly containing grouping factors.
+        data: Coverage data possibly containing grouping factors.
         groups: Names of the columns for the grouping factors.
 
     Returns:

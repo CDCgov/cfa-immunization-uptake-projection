@@ -61,7 +61,7 @@ def test_fit_handles_no_groups(frame, params, mcmc_params):
     """
     Model should produce posterior samples for each parameter.
     """
-    frame = iup.CumulativeUptakeData(
+    frame = iup.CumulativeCoverageData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
     data = iup.models.LPLModel.augment_data(frame, 9, 1)
@@ -72,7 +72,7 @@ def test_fit_handles_groups(frame, params, mcmc_params):
     """
     Model should produce posterior samples for each parameter.
     """
-    frame = iup.CumulativeUptakeData(
+    frame = iup.CumulativeCoverageData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
     data = iup.models.LPLModel.augment_data(frame, 9, 1)
