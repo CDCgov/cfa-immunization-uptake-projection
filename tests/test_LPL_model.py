@@ -12,18 +12,18 @@ def params():
     """
 
     params = {
-        "A_shape1": 100.0,
-        "A_shape2": 140.0,
-        "A_sig": 40.0,
-        "H_shape1": 100.0,
-        "H_shape2": 225.0,
-        "n_shape": 20.0,
-        "n_rate": 5.0,
-        "M_shape": 1.0,
-        "M_rate": 0.1,
-        "M_sig": 40,
-        "d_shape": 5.0,
-        "d_rate": 0.01,
+        "muA_shape1": 100.0,
+        "muA_shape2": 140.0,
+        "sigmaA_rate": 40.0,
+        "tau_shape1": 100.0,
+        "tau_shape2": 225.0,
+        "K_shape": 20.0,
+        "K_rate": 5.0,
+        "muM_shape": 1.0,
+        "muM_rate": 0.1,
+        "sigmaM_rate": 40,
+        "D_shape": 5.0,
+        "D_rate": 0.01,
     }
 
     return params
