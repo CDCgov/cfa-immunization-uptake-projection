@@ -81,15 +81,14 @@ def app(data_path: str, config_path: str, scores_path: str, preds_path: str):
 def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     """Plot the individual trajectories of the forecasts with data.
 
+    User options to select the dimensions to group the data, including:
+    column and row. Other grouping factors that haven't been selected will
+    be used to filter the data.
+
     Args:
         obs: Observed data.
         preds_path: Path to predictions data.
         config: Configuration dictionary.
-
-    Note:
-        User options to select the dimensions to group the data, including:
-        column and row. Other grouping factors that haven't been selected will
-        be used to filter the data.
     """
 
     # set up plot encodings
@@ -189,15 +188,14 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
 def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     """Plot the 95% PI with mean estimate of forecasts with data.
 
+    User options to select the dimensions to group the data, including:
+    row, column, and color. Other grouping factors that haven't been
+    selected will be used to filter the data.
+
     Args:
         obs: Observed data.
         preds_path: Path to predictions data.
         config: Configuration dictionary.
-
-    Note:
-        User options to select the dimensions to group the data, including:
-        row, column, and color. Other grouping factors that haven't been
-        selected will be used to filter the data.
     """
     # summarize sample predictions by grouping factors
     groups_to_include = ["model", "forecast_date", "time_end"] + config["groups"]
@@ -320,14 +318,13 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
 def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     """Plot the evaluation scores over forecast start.
 
+    User can select the dimensions to group the data, including: row, column,
+    and color. Other grouping factors that haven't been selected will be used
+    to filter the data.
+
     Args:
         scores: Evaluation scores of the forecasts.
         config: Configuration dictionary.
-
-    Note:
-        User can select the dimensions to group the data, including: row, column,
-        and color. Other grouping factors that haven't been selected will be used
-        to filter the data.
     """
 
     encodings = {
@@ -411,6 +408,9 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
 def layer_with_facets(charts: List, encodings: Dict):
     """Layer multiple Altair charts with correct faceting and encoding.
 
+    Because alt.layer.facet() only takes row and column and .encode() only
+    takes color, this function makes sure correct arguments fall into correct command.
+
     Args:
         charts: List of alt.Chart objects to be layered.
         encodings: Encodings to be applied to the charts, including row, column,
@@ -418,10 +418,6 @@ def layer_with_facets(charts: List, encodings: Dict):
 
     Returns:
         Layered and faceted Altair chart.
-
-    Note:
-        Because alt.layer.facet() only takes row and column and .encode() only
-        takes color, this function makes sure correct arguments fall into correct command.
     """
 
     row_enc = encodings["row"]

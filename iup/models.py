@@ -224,6 +224,11 @@ class LPLModel(UptakeModel):
     ) -> CumulativeUptakeData:
         """Format preprocessed data for fitting a Logistic Plus Linear model.
 
+        The following steps are required to prepare preprocessed data
+        for fitting a linear incident uptake model:
+        - Add an extra column for time elapsed since start-of-season
+        - Rescale this time elapsed to a proportion of the year
+
         Args:
             data: Training data for fitting a Logistic Plus Linear model.
             season_start_month: First month of the overwinter disease season.
@@ -231,12 +236,6 @@ class LPLModel(UptakeModel):
 
         Returns:
             Cumulative uptake data ready for fitting a Logistic Plus Linear model.
-
-        Note:
-            The following steps are required to prepare preprocessed data
-            for fitting a linear incident uptake model:
-            - Add an extra column for time elapsed since start-of-season
-            - Rescale this time elapsed to a proportion of the year
         """
         data = CumulativeUptakeData(
             data.with_columns(
@@ -260,6 +259,10 @@ class LPLModel(UptakeModel):
     ) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
 
+        If grouping factors are specified, a hierarchical model will be built with
+        group-specific parameters for the logistic maximum and linear slope,
+        drawn from a shared distribution. Other parameters are non-hierarchical.
+
         Args:
             data: Training data on which to fit the model.
             groups: Names of the columns for the grouping factors.
@@ -268,11 +271,6 @@ class LPLModel(UptakeModel):
 
         Returns:
             Model object with grouping factor combinations and the model fit stored as attributes.
-
-        Note:
-            If grouping factors are specified, a hierarchical model will be built with
-            group-specific parameters for the logistic maximum and linear slope,
-            drawn from a shared distribution. Other parameters are non-hierarchical.
         """
         self.group_combos = extract_group_combos(data, groups)
 
@@ -360,6 +358,10 @@ class LPLModel(UptakeModel):
     ) -> pl.DataFrame:
         """Make projections from a fit Logistic Plus Linear model.
 
+        A data frame is set up to house the projections over the
+        desired time window with the desired intervals.
+        Forecasts are then made for each date in this scaffold.
+
         Args:
             test_data: Exact target dates to use, when test data exists.
             groups: Names of the columns for the grouping factors.
@@ -368,11 +370,6 @@ class LPLModel(UptakeModel):
 
         Returns:
             Model with incident and cumulative projections as attributes.
-
-        Note:
-            A data frame is set up to house the projections over the
-            desired time window with the desired intervals.
-            Forecasts are then made for each date in this scaffold.
         """
         assert "time_end" in test_data.columns
 
@@ -447,15 +444,14 @@ def extract_group_combos(
 ) -> pl.DataFrame | None:
     """Extract from uptake data all combinations of grouping factors.
 
+    This is required by multiple models.
+
     Args:
         data: Uptake data possibly containing grouping factors.
         groups: Names of the columns for the grouping factors.
 
     Returns:
         All combinations of grouping factors.
-
-    Note:
-        This is required by multiple models.
     """
     if groups is not None:
         return data.select(groups).unique()

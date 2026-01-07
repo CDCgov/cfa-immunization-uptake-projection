@@ -61,6 +61,11 @@ class IncidentUptakeData(UptakeData):
     ) -> "CumulativeUptakeData":
         """Convert incident to cumulative uptake data.
 
+        Cumulative sum of incident uptake gives the cumulative uptake.
+        Optionally, additional cumulative uptake from before the start of
+        the incident data may be provided.
+        Even if no groups are specified, the data must at least be grouped by season.
+
         Args:
             groups: Names of the columns of grouping factors. If `None`, then data
                 will be grouped by `"season"`.
@@ -69,12 +74,6 @@ class IncidentUptakeData(UptakeData):
 
         Returns:
             Cumulative uptake on each date in the input incident uptake data.
-
-        Note:
-            Cumulative sum of incident uptake gives the cumulative uptake.
-            Optionally, additional cumulative uptake from before the start of
-            the incident data may be provided.
-            Even if no groups are specified, the data must at least be grouped by season.
         """
         if groups is None:
             groups = ["season"]
@@ -101,16 +100,15 @@ class CumulativeUptakeData(UptakeData):
     def to_incident(self, groups: List[str,] | None) -> IncidentUptakeData:
         """Convert cumulative to incident uptake data.
 
+        Because the first report date for each group is often rollout,
+        incident uptake on the first report date is 0.
+
         Args:
             groups: Names of the columns of grouping factors. If `None`, then data
                 will be grouped by `"season"`.
 
         Returns:
             Incident uptake on each date in the input cumulative uptake data.
-
-        Note:
-            Because the first report date for each group is often rollout,
-            incident uptake on the first report date is 0.
         """
         if groups is None:
             groups = ["season"]
