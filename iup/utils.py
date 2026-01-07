@@ -5,7 +5,7 @@ import polars as pl
 
 
 def date_to_season(
-    date: pl.Expr, season_start_month: int = 9, season_start_day: int = 1
+    date: pl.Expr, season_start_month: int, season_start_day: int = 1
 ) -> pl.Expr:
     """
     Extract the overwinter disease season from a date
