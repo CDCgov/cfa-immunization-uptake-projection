@@ -1,4 +1,4 @@
-#### gam for covid vaccine coverage ####
+#### gam for covid vaccination coverage ####
 rm(list = ls())
 library(dplyr)
 library(ggplot2)

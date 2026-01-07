@@ -1,6 +1,6 @@
 # Logistic plus linear (LPL) Model
 
-These are the mathematical details of the models used to capture and forecast vaccine coverage. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true coverage curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
+These are the mathematical details of the models used to capture and forecast vaccination coverage. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true coverage curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
 
 ## Notation
 

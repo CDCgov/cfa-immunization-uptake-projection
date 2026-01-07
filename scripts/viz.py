@@ -63,7 +63,7 @@ def app(data_path: str, config_path: str, scores_path: str, preds_path: str):
     scores = load_parquet(scores_path)
     config = load_config(config_path)
 
-    st.title("Vaccine Coverage Forecasts")
+    st.title("Vaccination Coverage Forecasts")
 
     # multiple tabs
     tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])

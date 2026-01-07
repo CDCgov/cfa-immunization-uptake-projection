@@ -70,7 +70,7 @@ Model formula: `gam(y~x0 + s(x1),family, method, data)`.
 
 #### simple GAM
 
-Use national influenza vaccine coverage data an an example. We predict the vaccine coverage `estimate` using the days after vaccine roll-out. In this tutorial, we fixed the vaccine roll-out date to be July 1st every year.
+Use national influenza vaccination coverage data an an example. We predict the vaccination coverage `estimate` using the days after vaccination roll-out. In this tutorial, we fixed the vaccination roll-out date to be July 1st every year.
 
 Here, data is cleaned and splitted into training and testing, on July 1st, 2023.
 ```{r, results=FALSE, message=FALSE,warning=FALSE}
@@ -195,7 +195,7 @@ MSPE is also pretty small.
 
 #### GAM with grouping factors
 
-How about the model that include both season and state as grouping factors? The influenza vaccine coverage data by season and state is loaded. Here are the similar data cleaning and splitting data as training and testing:
+How about the model that include both season and state as grouping factors? The influenza vaccination coverage data by season and state is loaded. Here are the similar data cleaning and splitting data as training and testing:
 
 ```{r,results=FALSE, message=FALSE, warning=FALSE}
 nis_state <- read.csv("../data/nis_flu_states.csv")
@@ -251,4 +251,4 @@ ggplot(nis_state_test) +
   theme_bw()
 ```
 
-Given the results from `mgcv`, GAM is a promising option to forecast vaccine coverage. Next step should be incorporating this framework into our package. This requires switching to Bayesian likelihood.
+Given the results from `mgcv`, GAM is a promising option to forecast vaccination coverage. Next step should be incorporating this framework into our package. This requires switching to Bayesian likelihood.
