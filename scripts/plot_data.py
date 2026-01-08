@@ -138,7 +138,7 @@ if __name__ == "__main__":
     exs_text = exs_tick_base.mark_text(align="left", dx=15)
     exs_tick = exs_tick_base.mark_point(**TICK_KWARGS)
 
-    (exs_line + exs_tick + exs_text).save(out_dir / "coverage_trajectories.png")
+    (exs_line + exs_tick + exs_text).save(out_dir / "coverage_trajectories.svg")
 
     # end of season data
     eos = data.filter((pl.col("time_end") == pl.col("time_end").max()).over("season"))
@@ -148,7 +148,7 @@ if __name__ == "__main__":
         alt.X("season", title=None),
         alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "coverage_by_season.png")
+    ).save(out_dir / "coverage_by_season.svg")
 
     # for each state, show eos spread over seasons
     alt.Chart(add_medians(eos, "geography")).mark_point().encode(
@@ -159,4 +159,4 @@ if __name__ == "__main__":
         ),
         alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "coverage_by_state.png")
+    ).save(out_dir / "coverage_by_state.svg")

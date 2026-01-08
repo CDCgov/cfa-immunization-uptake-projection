@@ -151,10 +151,10 @@ if __name__ == "__main__":
             geography=geo,
             season=config["plots"]["example_season"],
             sort_month=sort_month,
-        ).save(out_dir / f"fit_{geo}.png")
+        ).save(out_dir / f"fit_{geo}.svg")
 
         plot_forecast(data=fc_plot_data, geography=geo, sort_month=sort_month).save(
-            out_dir / f"forecast_{geo}.png"
+            out_dir / f"forecast_{geo}.svg"
         )
 
     # scores across seasons & states
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         alt.X("season", title=None),
         enc_y_mspe,
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "score_by_season.png")
+    ).save(out_dir / "score_by_season.svg")
 
     alt.Chart(
         add_medians(fit_scores, group_by="geography", value_col="score_value")
@@ -183,7 +183,7 @@ if __name__ == "__main__":
         ),
         enc_y_mspe,
         *MEDIAN_ENCODINGS,
-    ).save(out_dir / "score_by_geo.png")
+    ).save(out_dir / "score_by_geo.svg")
 
     # scores increasing through the season?
     # sis = score in season
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
     sis_text = sis_tick_base.mark_text(align="left", dx=15)
 
-    (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.png")
+    (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
 
     # score vs. forecast
     avg_fit = (
@@ -238,4 +238,4 @@ if __name__ == "__main__":
             scale=alt.Scale(zero=False),
         ),
         alt.Y("fc_score", title="Forecast score (abs. end-of-season diff.)"),
-    ).save(out_dir / "forecast_fit_compare.png")
+    ).save(out_dir / "forecast_fit_compare.svg")
