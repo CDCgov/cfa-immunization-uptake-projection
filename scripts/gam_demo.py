@@ -155,43 +155,54 @@ def gam(
     numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
 
 
-bss = get_Bspline_basis(x=x)
-X = get_design_matrix(bss, x)
-S = get_penalty_matrix(bss)
-estimate = nis["estimate"].to_numpy()
-estimate = np.log(estimate + 1e-6)
-
-rng_key = random.PRNGKey(0)
-rng_key, rng_key_ = random.split(rng_key)
-
-kernel = NUTS(gam)
-mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
-mcmc = MCMC(
-    kernel,
-    num_warmup=mcmc_par["num_warmup"],
-    num_samples=mcmc_par["num_samples"],
-    num_chains=mcmc_par["num_chains"],
-)
-mcmc.run(rng_key_, S=S, X=X, estimate=estimate)
-
-### model output ###
-
-# model summary #
-mcmc.print_summary()
-
 # compare posterior mean with data #
-samples = mcmc.get_samples()
-beta_sample = samples["beta"]
-beta_mean = jnp.mean(beta_sample, axis=0)
-beta0_mean = jnp.mean(samples["beta0"])
+def posterior_mean(mcmc: MCMC) -> ArrayLike:
+    samples = mcmc.get_samples()
+    beta_sample = samples["beta"]
+    beta_mean = jnp.mean(beta_sample, axis=0)
+    beta0_mean = jnp.mean(samples["beta0"])
 
-mu = X @ beta_mean + beta0_mean
+    mu = X @ beta_mean + beta0_mean
 
-df = pl.DataFrame({"data": nis["estimate"], "date": np.arange(len(nis["estimate"]))})
-df = df.with_columns(mu=np.asanyarray(jnp.exp(mu)))
+    return mu
 
-charts = alt.Chart(df).mark_point().encode(x="date", y="data") + alt.Chart(
-    df
-).mark_line(color="red").encode(x="date", y="mu")
 
-charts.save("gam_fit.png")
+if __name__ == "__main__":
+    ## model fitting ##
+
+    bss = get_Bspline_basis(x=x)
+    X = get_design_matrix(bss, x)
+    S = get_penalty_matrix(bss)
+    estimate = nis["estimate"].to_numpy()
+    estimate = np.log(estimate + 1e-6)
+
+    rng_key = random.PRNGKey(0)
+    rng_key, rng_key_ = random.split(rng_key)
+
+    kernel = NUTS(gam)
+    mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
+    mcmc = MCMC(
+        kernel,
+        num_warmup=mcmc_par["num_warmup"],
+        num_samples=mcmc_par["num_samples"],
+        num_chains=mcmc_par["num_chains"],
+    )
+    mcmc.run(rng_key_, S=S, X=X, estimate=estimate)
+
+    ### model output ###
+
+    # model summary #
+    mcmc.print_summary()
+
+    # compare posterior mean with data #
+    mu = posterior_mean(mcmc)
+    df = pl.DataFrame(
+        {"data": nis["estimate"], "date": np.arange(len(nis["estimate"]))}
+    )
+    df = df.with_columns(mu=np.asanyarray(jnp.exp(mu)))
+
+    charts = alt.Chart(df).mark_point().encode(x="date", y="data") + alt.Chart(
+        df
+    ).mark_line(color="red").encode(x="date", y="mu")
+
+    charts.save("gam_fit.png")
