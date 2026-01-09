@@ -10,8 +10,8 @@ PRED_DIR = $(OUTPUT_DIR)/pred
 PREDS_FLAG = $(PRED_DIR)/.checkpoint
 SCORES = $(OUTPUT_DIR)/scores.parquet
 
-PLOT_DATA = $(OUTPUT_DIR)/plots/data_one_season_by_state.png
-PLOT_PREDS = $(OUTPUT_DIR)/plots/forecast_example.png
+PLOT_DATA = $(OUTPUT_DIR)/plots/coverage_trajectories.svg
+PLOT_PREDS = $(OUTPUT_DIR)/plots/score_by_geo.svg
 
 FORECAST_DATES = $(shell python scripts/get_forecast_dates.py --config=$(CONFIG))
 PREDS = $(foreach date,$(FORECAST_DATES),$(PRED_DIR)/forecast_date=$(date)/part-0.parquet)
