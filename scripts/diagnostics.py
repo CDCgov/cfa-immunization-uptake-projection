@@ -69,6 +69,6 @@ if __name__ == "__main__":
                     fit=fit,
                     output_path=Path(
                         args.output_dir,
-                        f"model={model}_forecast_date={fc_date}_{plot}.png",
+                        f"model={model}_forecast_date={fc_date}_{plot}.svg",
                     ),
                 )

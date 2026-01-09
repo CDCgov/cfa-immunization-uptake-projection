@@ -25,6 +25,7 @@
 *.gif
 *.pdf
 *.png
+*.svg
 
 # Compressed archives
 *.gz
