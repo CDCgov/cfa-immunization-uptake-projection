@@ -28,7 +28,7 @@ x = nis["elapsed"]
 
 
 def get_Bspline_basis(
-    x: pl.Series, p: int = 3, num_internal_knots: int = 8
+    x: pl.Series, p: int = 3, num_internal_knots: int = 6
 ) -> BSplineBasis:
     """
     Get BSplineBasis object given covariate x, degree of basis spline function,
@@ -127,8 +127,7 @@ def gam(
     estimate: ArrayLike,
     lam_shape=1.0,
     lam_rate=1.0,
-    sigma_shape=1.0,
-    sigma_rate=1.0,
+    sigma_rate=40.0,
     beta0_mean=0.0,
     beta0_sd=1.0,
 ):
@@ -136,7 +135,7 @@ def gam(
 
     # Priors
     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
-    sigma = numpyro.sample("sigma", dist.InverseGamma(sigma_shape, sigma_rate))
+    sigma = numpyro.sample("sigma", dist.Exponential(sigma_rate))
     beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
 
     # Penalized precision matrix, add 1e-6 to make sure stability
@@ -205,4 +204,4 @@ if __name__ == "__main__":
         df
     ).mark_line(color="red").encode(x="date", y="mu")
 
-    charts.save("gam_fit.png")
+    charts.save("gam_fit_k8.png")
