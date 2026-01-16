@@ -1,5 +1,5 @@
 CONFIG = scripts/config.yaml
-RAW_DATA = data/raw.parquet
+RAW_DATA = data/raw_state.parquet
 
 RUN_ID = $(shell python scripts/get_run_id.py --config=$(CONFIG))
 

@@ -22,11 +22,18 @@ if __name__ == "__main__":
 
     # score each season/state fit, using all available data (i.e., only the last
     # forecast date)
-    mspe = iup.eval.mspe(
-        obs=data,
-        pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
-        grouping_factors=config["groups"],
-    )
+    pred = pred.collect()
+    forecast_dates = pred["forecast_date"].unique()
+
+    mspe_df = pl.DataFrame()
+    for forecast_date in forecast_dates:
+        mspe = iup.eval.mspe(
+            obs=data,
+            pred=pred.filter(pl.col("forecast_date") == forecast_date),
+            grouping_factors=config["groups"],
+        )
+        mspe_df = pl.concat([mspe_df, mspe])
+        mspe_df.write_parquet("output/flu_state_all/mspe.parquet")
 
     # score the forecasts proper, only in the season that the forecasts were made
     forecast_season = pred.select(
@@ -37,7 +44,7 @@ if __name__ == "__main__":
             season_start_day=config["season"]["start_day"],
         )
         .unique()
-    ).collect()
+    )
     assert forecast_season.height == 1
     forecast_season = forecast_season.item()
 
