@@ -24,19 +24,16 @@ For convenience, the raw data are tracked in this repo under `data/`, which incl
 
 ### Running the vignette
 
-1. Set up the config:
-   - Copy `scripts/config_template.yaml` to `scripts/config.yaml` or
-   - in the next step, specify `CONFIG=you_path` when calling `make`.
-2. Run the pipeline with `make`. (You can run steps in parallel with, e.g., `make -j4`.)
-3. Inspect `output/vignette/`:
+1. Run the pipeline with `make`. (You can run steps in parallel with, e.g., `make -j4`.)
+   - By default, `make` will use `scripts/config_vignette.yaml` for its configuration.
+   - You can use different configs by running `make CONFIG=/path/to/config.yaml`
+2. Inspect `output/vignette/`:
    - `config.yaml`: a copy of the input config
    - `data.parquet`: the preprocessed, observed data
    - `fits/`: pickled model fits, organized by forecast date
    - `pred/`: model predictions, in Hive-partitioned parquet files
    - `scores.parquet`: model scores
-4. Run `make viz` for interactive visualization of those results.
-
-You can modify `config.yaml` or point to a new config file to produce different results.
+3. Run `make viz` for interactive visualization of those results.
 
 ### Vignette workflow
 
@@ -65,6 +62,8 @@ scores --> viz;
 ## Project admins
 
 - Scott Olesen (CDC/CFA/Predict) <ulp7@cdc.gov>
+
+---
 
 ## Disclaimers
 

@@ -7,16 +7,7 @@ season:
   end_month: 4 # April
   end_day: 1
   # filter the data to between these years
-# results will be placed in output/RUN_ID/
-run_id: flu_state_all_inter
-
-season:
-  start_month: 7 # July
-  start_day: 1
-  end_month: 4 # April
-  end_day: 1
-  # filter the data to between these years
-  first_year: 2009 # 2009 for full data
+  first_year: 2018
   last_year: 2022
 
 # prediction features
@@ -50,6 +41,7 @@ mcmc:
   progress_bar: false
 
 forecast_dates:
+  # run forecasts for only one date
   start: 2022-04-01
   end: 2022-04-01
   interval: 1mo
