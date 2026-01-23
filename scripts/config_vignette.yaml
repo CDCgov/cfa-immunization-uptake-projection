@@ -6,16 +6,15 @@ season:
   start_day: 1
   end_month: 4 # April
   end_day: 1
-  # filter the data to between these years
+  # use only a few years of data
   first_year: 2018
   last_year: 2022
 
 # prediction features
-groups: [season, geography, season_geo]
+groups: [season, geography]
 
-# include only these geographies. remove to use all geographies.
-# geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
-geographies:
+# include only these geographies. (remove to use all geographies.)
+geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
 
 models:
   - name: LPLModel
@@ -41,9 +40,9 @@ mcmc:
   progress_bar: false
 
 forecast_dates:
-  # run forecasts for only one date
-  start: 2022-04-01
-  end: 2022-04-01
+  # run forecasts starting Sep, Oct, Nov
+  start: 2022-09-01
+  end: 2022-11-01
   interval: 1mo
 
 plots:
