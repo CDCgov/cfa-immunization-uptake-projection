@@ -1,4 +1,4 @@
-run_id: flu_state_all_inter
+run_id: full
 
 season:
   start_month: 7
@@ -38,7 +38,7 @@ mcmc:
   progress_bar: false
 
 forecast_dates:
-  start: 2022-04-01
+  start: 2021-07-01
   end: 2022-04-01
   interval: 1mo
 

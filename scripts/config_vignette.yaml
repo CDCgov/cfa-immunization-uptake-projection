@@ -11,9 +11,9 @@ season:
   last_year: 2022
 
 # prediction features
-groups: [season, geography]
+groups: [season, geography, season_geo]
 
-# include only these geographies. (remove to use all geographies.)
+# include only these geographies
 geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
 
 models:
