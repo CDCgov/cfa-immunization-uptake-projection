@@ -16,7 +16,7 @@ def season_filter(
     start_day: int,
     end_month: int,
     end_day: int,
-    col_name="time_end",
+    col_name: str,
 ) -> pl.LazyFrame:
     """Filter a data frame for dates that are before the season end or after the season start.
 
@@ -26,7 +26,7 @@ def season_filter(
         start_day: First day of the season.
         end_month: Last month of the season.
         end_day: Last day of the season.
-        col_name: Name of the column containing dates. Defaults to "time_end".
+        col_name: Name of the column containing dates.
 
     Returns:
         Filtered data frame (assumes summer months are "out of season").
@@ -49,10 +49,10 @@ def season_filter(
 
 def preprocess(
     raw_data: pl.LazyFrame,
-    groups: List[str] | None,
     season_start_month: int,
     season_start_day: int,
     geographies: List[str] | None,
+    date_column: str = "time_end",
 ) -> iup.CumulativeCoverageData:
     # filter for specific geographies
     def geo_filter(df: pl.LazyFrame) -> pl.LazyFrame:
@@ -65,13 +65,13 @@ def preprocess(
         raw_data.rename({"sample_size": "N_tot"})
         .with_columns(
             season=iup.utils.date_to_season(
-                pl.col("time_end"),
+                pl.col(date_column),
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
             N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
             t=iup.utils.date_to_elapsed(
-                pl.col("time_end"),
+                pl.col(date_column),
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             ),
@@ -85,7 +85,7 @@ def preprocess(
         )
         # remove dates from outside the entire range
         .filter(
-            pl.col("time_end").is_between(
+            pl.col(date_column).is_between(
                 date(
                     config["season"]["first_year"],
                     config["season"]["start_month"],
@@ -101,23 +101,30 @@ def preprocess(
         # remove out-of-season dates
         .pipe(
             season_filter,
+            col_name=date_column,
             start_month=config["season"]["start_month"],
             start_day=config["season"]["start_day"],
             end_month=config["season"]["end_month"],
             end_day=config["season"]["end_day"],
         )
+        # add the time elapsed within the season
+        .with_columns(
+            elapsed=iup.utils.date_to_elapsed(
+                pl.col(date_column), season_start_month, season_start_day
+            )
+            / 365
+        )
+        # keep only the geographies mentioned in the config (or all of them)
         .pipe(geo_filter)
+        # add season-state combo
         .with_columns(
             season_geo=pl.concat_str(
                 pl.col("season"), pl.col("geography"), separator="_"
             )
         )
-        .sort("time_end")
+        .sort(date_column)
         .collect()
     )
-
-    if groups is not None:
-        assert set(data.columns).issuperset(groups)
 
     return data
 
@@ -139,7 +146,6 @@ if __name__ == "__main__":
 
     clean_data = preprocess(
         raw_data,
-        groups=config["groups"],
         season_start_month=config["season"]["start_month"],
         season_start_day=config["season"]["start_day"],
         geographies=geographies,

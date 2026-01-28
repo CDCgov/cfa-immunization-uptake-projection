@@ -19,7 +19,7 @@ geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
 models:
   - name: LPLModel
     seed: 42
-    params:
+    model_params:
       muA_shape1: 100.0
       muA_shape2: 180.0
       sigmaA_rate: 80.0
@@ -32,6 +32,7 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
+      N_tot: 10000
 
 mcmc:
   num_warmup: 1000
