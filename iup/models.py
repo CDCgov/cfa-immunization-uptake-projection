@@ -5,7 +5,7 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 
 import abc
 import datetime
-from typing import Any, List
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -17,7 +17,6 @@ from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup
-import iup.utils
 
 
 class CoverageModel(abc.ABC):
@@ -52,7 +51,7 @@ class LPLModel(CoverageModel):
         self,
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
-        groups: list[str,] | None,
+        groups: list[str,],
         model_params: dict[str, Any],
         mcmc_params: dict[str, Any],
         seed: int,
@@ -70,7 +69,7 @@ class LPLModel(CoverageModel):
                 for fitting vs. predicting.
             date_column: Name of the date column in the data. Defaults to "time_end".
         """
-        self.data = data
+        self.raw_data = data
         self.date_column = date_column
         self.forecast_date = forecast_date
         self.groups = groups
@@ -78,79 +77,101 @@ class LPLModel(CoverageModel):
         self.mcmc_params = mcmc_params
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
-        # check that the data have the expected columns
-        assert {self.date_column, "elapsed"}.issubset(self.data.columns)
+        # input validation
+        assert "season" in self.groups
+        assert {self.date_column, "elapsed", "N_vax"}.issubset(self.raw_data.columns)
+        assert set(self.groups).issubset(self.raw_data.columns)
 
         # do the indexing
-        self.group_combos = extract_group_combos(self.data, self.groups)
-
-        if self.groups is not None:
-            assert set(self.groups).issubset(self.data.columns)
-
-            self.num_group_factors = len(self.groups)
-            self.num_group_levels = iup.utils.count_unique_values(self.group_combos)
-            self.value_to_index = iup.utils.map_value_to_index(data.select(self.groups))
-            self.group_codes = iup.utils.value_to_index(
-                data.select(groups), self.value_to_index, self.num_group_levels
-            )
-        else:
-            self.group_codes = None
-            self.num_group_factors = 0
-            self.num_group_levels = [0]
-            self.value_to_index = None
+        self.n_group_levels = [
+            self.raw_data.select(pl.col(group).unique()).height for group in self.groups
+        ]
+        self.data = self._index(self.raw_data, self.groups)
 
         # split fit and prediction data
         self.fit_data = self.data.filter(pl.col(self.date_column) <= self.forecast_date)
         self.pred_data = self.data.filter(pl.col(self.date_column) > self.forecast_date)
 
+        # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
+
+    @staticmethod
+    def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
+        """
+        For each column in `groups` (e.g., `"season"`), add a new column `"{group}_idx"`
+        (e.g., `"season_idx"`) that has the values in the original column replaced by
+        integer indices.
+
+        Args:
+            data: dataframe
+            groups: names of columns
+
+        Returns: dataframe with additional columns like `"{group}_idx"`
+        """
+        for group in groups:
+            unique_values = (
+                data.select(pl.col(group).unique().sort()).get_column(group).to_list()
+            )
+            indices = list(range(len(unique_values)))
+            replace_map = {value: index for value, index in zip(unique_values, indices)}
+            data = data.with_columns(
+                pl.col(group).replace_strict(replace_map).alias(f"{group}_idx")
+            )
+
+        return data
+
+    def model(self, data: pl.DataFrame):
+        return self._logistic_plus_linear(
+            elapsed=data["elapsed"].to_numpy(),
+            N_vax=data["N_vax"].to_numpy(),
+            groups=data.select([f"{group}_idx" for group in self.groups]).to_numpy(),
+            n_groups=len(self.groups),
+            n_group_levels=self.n_group_levels,
+            **self.model_params,
+        )
 
     @staticmethod
     def _logistic_plus_linear(
         elapsed: np.ndarray,
+        N_vax: np.ndarray,
+        groups: np.ndarray,
+        n_groups: int,
+        n_group_levels: list[int],
         N_tot: int,
-        N_vax: np.ndarray | None = None,
-        groups=None,
-        num_group_factors=0,
-        num_group_levels=[0],
-        muA_shape1=100.0,
-        muA_shape2=180.0,
-        sigmaA_rate=40.0,
-        tau_shape1=100.0,
-        tau_shape2=225.0,
-        K_shape=25.0,
-        K_rate=1.0,
-        muM_shape=1.0,
-        muM_rate=10.0,
-        sigmaM_rate=40.0,
-        D_shape=350.0,
-        D_rate=1.0,
+        muA_shape1: float,
+        muA_shape2: float,
+        sigmaA_rate: float,
+        tau_shape1: float,
+        tau_shape2: float,
+        K_shape: float,
+        K_rate: float,
+        muM_shape: float,
+        muM_rate: float,
+        sigmaM_rate: float,
+        D_shape: float,
+        D_rate: float,
     ):
         """Fit a mixed Logistic Plus Linear model on training data.
 
         Args:
             elapsed: Fraction of a year elapsed since the start of season at each data point.
-            N_tot: Total number of people in the population at each data point.
             N_vax: Number of people vaccinated at each data point, or `None`.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
-                Defaults to None.
-            num_group_factors: Number of grouping factors. Defaults to 0.
-            num_group_levels: Number of unique levels of each grouping factor.
-                Defaults to [0].
-            muA_shape1: Beta distribution shape1 parameter for muA prior. Defaults to 100.0.
-            muA_shape2: Beta distribution shape2 parameter for muA prior. Defaults to 180.0.
+            n_groups: Number of grouping factors.
+            n_group_levels: Number of unique levels of each grouping factor.
+            N_tot: Total number of people in the population at each data point.
+            muA_shape1: Beta distribution shape1 parameter for muA prior.
+            muA_shape2: Beta distribution shape2 parameter for muA prior.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
-                Defaults to 40.0.
-            tau_shape1: Beta distribution shape1 parameter for tau prior. Defaults to 100.0.
-            tau_shape2: Beta distribution shape2 parameter for tau prior. Defaults to 225.0.
-            K_shape: Gamma distribution shape parameter for K prior. Defaults to 25.0.
-            K_rate: Gamma distribution rate parameter for K prior. Defaults to 1.0.
-            muM_shape: Gamma distribution shape parameter for muM prior. Defaults to 1.0.
-            muM_rate: Gamma distribution rate parameter for muM prior. Defaults to 10.0.
+            tau_shape1: Beta distribution shape1 parameter for tau prior.
+            tau_shape2: Beta distribution shape2 parameter for tau prior.
+            K_shape: Gamma distribution shape parameter for K prior.
+            K_rate: Gamma distribution rate parameter for K prior.
+            muM_shape: Gamma distribution shape parameter for muM prior.
+            muM_rate: Gamma distribution rate parameter for muM prior.
             sigmaM_rate: Exponential distribution rate parameter for sigmaM prior.
-                Defaults to 40.0.
-            D_shape: Gamma distribution shape parameter for D prior. Defaults to 350.0.
-            D_rate: Gamma distribution rate parameter for D prior. Defaults to 1.0.
+            D_shape: Gamma distribution shape parameter for D prior.
+            D_rate: Gamma distribution rate parameter for D prior.
         """
         # Sample the overall average value for each parameter
         muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
@@ -162,28 +183,19 @@ class LPLModel(CoverageModel):
         # If grouping factors are given, find the group-specific deviations for each datum
         if groups is not None:
             sigmaA = numpyro.sample(
-                "sigmaA",
-                dist.Exponential(sigmaA_rate),
-                sample_shape=(num_group_factors,),
+                "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
             )
             sigmaM = numpyro.sample(
-                "sigmaM",
-                dist.Exponential(sigmaM_rate),
-                sample_shape=(num_group_factors,),
+                "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
             )
             zA = numpyro.sample(
-                "zA", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+                "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
             )
             zM = numpyro.sample(
-                "zM", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
+                "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
             )
-            deltaA = zA * np.repeat(sigmaA, np.array(num_group_levels))
-            deltaM = zM * np.repeat(
-                sigmaM,
-                np.array(
-                    num_group_levels,
-                ),
-            )
+            deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
+            deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
 
             A = muA + np.sum(deltaA[groups], axis=1)
             M = muM + np.sum(deltaM[groups], axis=1)
@@ -209,18 +221,10 @@ class LPLModel(CoverageModel):
         Returns:
             Self with the fitted model stored in the mcmc attribute.
         """
-        self.kernel = NUTS(self._logistic_plus_linear, init_strategy=init_to_sample)
+        self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(self.kernel, **self.mcmc_params)
 
-        self.mcmc.run(
-            self.fit_key,
-            elapsed=self.fit_data["elapsed"].to_numpy(),
-            N_vax=self.fit_data["N_vax"].to_numpy(),
-            groups=self.group_codes,
-            num_group_factors=self.num_group_factors,
-            num_group_levels=self.num_group_levels,
-            **self.model_params,
-        )
+        self.mcmc.run(self.fit_key, data=self.fit_data)
 
         if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
@@ -236,25 +240,13 @@ class LPLModel(CoverageModel):
 
         assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
 
-        predictive = Predictive(self._logistic_plus_linear, self.mcmc.get_samples())
+        predictive = Predictive(self.model, self.mcmc.get_samples())
 
         predictions = np.array(
-            predictive(
-                self.pred_key,
-                elapsed=self.pred_data["elapsed"].to_numpy(),
-                groups=self.group_codes,
-                num_group_factors=self.num_group_factors,
-                num_group_levels=self.num_group_levels,
-                **self.model_params,
-            )["obs"]
+            predictive(self.pred_key, data=self.pred_data)["obs"]
         ).transpose()
 
-        if self.groups is None:
-            index_cols = [self.date_column, "season"]
-        elif "season" in self.groups:
-            index_cols = [self.date_column] + self.groups
-        else:
-            index_cols = [self.date_column, "season"] + self.groups
+        index_cols = [self.date_column] + self.groups
 
         pred = (
             pl.concat(
@@ -277,25 +269,7 @@ class LPLModel(CoverageModel):
                 sample_id=pl.col("sample_id"),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .drop(["elapsed", "N_tot"])
+            .drop(["elapsed", "N_tot"] + [f"{group}_idx" for group in self.groups])
         )
 
         return iup.SampleForecast(pred)
-
-
-def extract_group_combos(
-    data: pl.DataFrame, groups: List[str,] | None
-) -> pl.DataFrame | None:
-    """Extract from coverage data all combinations of grouping factors.
-
-    Args:
-        data: Coverage data possibly containing grouping factors.
-        groups: Names of the columns for the grouping factors, or None.
-
-    Returns:
-        All combinations of grouping factors, or None if groups is None.
-    """
-    if groups is not None:
-        return data.select(groups).unique()
-    else:
-        return None

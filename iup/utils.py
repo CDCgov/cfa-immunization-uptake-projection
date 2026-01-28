@@ -1,6 +1,3 @@
-from typing import Any, List
-
-import numpy as np
 import polars as pl
 
 
@@ -61,72 +58,3 @@ def date_to_elapsed(
 
     # return the number of days from season start to each date
     return (date_col - season_start).dt.total_days()
-
-
-def map_value_to_index(groups: pl.DataFrame) -> dict[str, dict[Any, int]]:
-    """Choose a numeric index for each level of each grouping factor in a data frame.
-
-    Args:
-        groups: Levels of grouping factors (cols) for multiple data points (rows).
-
-    Returns:
-        dictionary of dictionaries {grouping_factor => {value => integer_index}}
-    """
-    return {
-        col: {
-            value: i
-            for i, value in enumerate(
-                groups.select(pl.col(col).unique().sort()).to_series()
-            )
-        }
-        for col in groups.columns
-    }
-
-
-def value_to_index(
-    groups: pl.DataFrame, mapping: dict, num_group_levels: List[int,]
-) -> np.ndarray:
-    """Replace each level of each grouping factor in a data frame, using a pre-determined mapping.
-
-    Numeric codes will be used only once across grouping factors.
-    The keys of mapping must match the column names of groups.
-
-    Args:
-        groups: Levels of grouping factors (cols) for multiple data points (rows).
-        mapping: Mapping of each level of each grouping factor to a numeric code.
-            Dictionary of dictionaries: {grouping_factor: {value: integer_index}}.
-        num_group_levels: Total number of levels for each grouping factor.
-
-    Returns:
-        Array of group levels but with numeric codes instead of level names.
-    """
-    assert set(mapping.keys()) == set(groups.columns), (
-        "Keys of mapping do not match grouping factor names."
-    )
-
-    for col_name in groups.columns:
-        if missing_values := set(
-            groups.select(pl.col(col_name).unique()).to_series()
-        ) - set(mapping[col_name].keys()):
-            raise RuntimeError(f"Missing indices for values: {missing_values}")
-
-        groups = groups.with_columns(pl.col(col_name).replace_strict(mapping[col_name]))
-
-    array = groups.to_numpy() + np.cumsum([0] + num_group_levels[:-1])
-
-    return array
-
-
-def count_unique_values(df: pl.DataFrame | None) -> List[int,]:
-    """Count unique values in each column of a data frame.
-
-    Args:
-        df: Data frame to count unique values in.
-
-    Returns:
-        Number of unique values in each column of the data frame.
-    """
-    if df is None:
-        return [0]
-    else:
-        return [df.n_unique(subset=col) for col in df.columns]

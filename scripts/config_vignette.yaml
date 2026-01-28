@@ -14,7 +14,7 @@ season:
 groups: [season, geography, season_geo]
 
 # include only these geographies
-geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
+geographies: [Alaska, New Jersey, Nevada, District of Columbia]
 
 models:
   - name: LPLModel
@@ -43,7 +43,7 @@ mcmc:
 forecast_dates:
   # run forecasts starting Sep, Oct, Nov
   start: 2022-09-01
-  end: 2022-11-01
+  end: 2022-09-01
   interval: 1mo
 
 plots:

@@ -2,6 +2,7 @@ import datetime
 
 import numpyro.infer
 import polars as pl
+import polars.testing
 import pytest
 
 import iup
@@ -43,24 +44,25 @@ def mcmc_params():
     return mcmc
 
 
-def test_fit_handles_no_groups(frame, model_params, mcmc_params):
-    """
-    Model should produce posterior samples for each parameter.
-    """
-    data = iup.CumulativeCoverageData(
-        frame.filter(pl.col("geography") == "USA").drop("geography")
+def test_index():
+    df = pl.DataFrame(
+        {
+            "first_name": ["John", "John", "Eve", "Eve"],
+            "last_name": ["Smith", "Adams", "Fulani", "Kumar"],
+            "height": [1.1, 2.2, 3.3, 4.4],
+        }
     )
 
-    model = iup.models.LPLModel(
-        data=data,
-        forecast_date=datetime.date(2020, 1, 21),
-        groups=None,
-        model_params=model_params,
-        mcmc_params=mcmc_params,
-        seed=0,
-    )
+    out = iup.models.LPLModel._index(df, groups=["first_name", "last_name"])
+    print(out)
 
-    model.fit()
+    polars.testing.assert_frame_equal(
+        out,
+        df.with_columns(
+            pl.Series("first_name_idx", [1, 1, 0, 0]),
+            pl.Series("last_name_idx", [3, 0, 1, 2]),
+        ),
+    )
 
 
 def test_fit_handles_groups(frame, model_params, mcmc_params):

@@ -70,7 +70,7 @@ class IncidentCoverageData(CoverageData):
             groups: Names of the columns of grouping factors, or None. If `None`, then
                 data will be grouped by `"season"`.
             prev_cumulative: Cumulative coverage from before the start of the incident
-                data, for each group, or None. If `None`, do nothing.
+                data, for each group, or None. If `None`, group by `"season"`.
 
         Returns:
             Cumulative coverage on each date in the input incident coverage data.
