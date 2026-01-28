@@ -94,6 +94,7 @@ def value_to_index(
     Args:
         groups: Levels of grouping factors (cols) for multiple data points (rows).
         mapping: Mapping of each level of each grouping factor to a numeric code.
+            Dictionary of dictionaries: {grouping_factor: {value: integer_index}}.
         num_group_levels: Total number of levels for each grouping factor.
 
     Returns:

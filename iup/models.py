@@ -61,7 +61,14 @@ class LPLModel(CoverageModel):
         """Initialize with a seed and the model structure.
 
         Args:
-            seed: Random seed for stochastic elements of the model, to be split for fitting vs. predicting.
+            data: Cumulative coverage data for fitting and prediction.
+            forecast_date: Date from which to start making forecasts.
+            groups: Names of the columns of grouping factors, or None for no grouping.
+            model_params: Parameter names and values to specify prior distributions.
+            mcmc_params: Control parameters for MCMC fitting.
+            seed: Random seed for stochastic elements of the model, to be split
+                for fitting vs. predicting.
+            date_column: Name of the date column in the data. Defaults to "time_end".
         """
         self.data = data
         self.date_column = date_column
@@ -123,23 +130,27 @@ class LPLModel(CoverageModel):
 
         Args:
             elapsed: Fraction of a year elapsed since the start of season at each data point.
-            N_vax: Number of people vaccinated at each data point.
-            N_tot: Number of people contacted at each data point.
+            N_tot: Total number of people in the population at each data point.
+            N_vax: Number of people vaccinated at each data point, or None.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
-            num_group_factors: Number of grouping factors.
+                Defaults to None.
+            num_group_factors: Number of grouping factors. Defaults to 0.
             num_group_levels: Number of unique levels of each grouping factor.
-            muA_shape1: Beta distribution shape1 parameter for muA prior.
-            muA_shape2: Beta distribution shape2 parameter for muA prior.
+                Defaults to [0].
+            muA_shape1: Beta distribution shape1 parameter for muA prior. Defaults to 100.0.
+            muA_shape2: Beta distribution shape2 parameter for muA prior. Defaults to 180.0.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
-            tau_shape1: Beta distribution shape1 parameter for tau prior.
-            tau_shape2: Beta distribution shape2 parameter for tau prior.
-            K_shape: Gamma distribution shape parameter for K prior.
-            K_rate: Gamma distribution rate parameter for K prior.
-            muM_shape: Gamma distribution shape parameter for muM prior.
-            muM_rate: Gamma distribution rate parameter for muM prior.
+                Defaults to 40.0.
+            tau_shape1: Beta distribution shape1 parameter for tau prior. Defaults to 100.0.
+            tau_shape2: Beta distribution shape2 parameter for tau prior. Defaults to 225.0.
+            K_shape: Gamma distribution shape parameter for K prior. Defaults to 25.0.
+            K_rate: Gamma distribution rate parameter for K prior. Defaults to 1.0.
+            muM_shape: Gamma distribution shape parameter for muM prior. Defaults to 1.0.
+            muM_rate: Gamma distribution rate parameter for muM prior. Defaults to 10.0.
             sigmaM_rate: Exponential distribution rate parameter for sigmaM prior.
-            D_shape: Gamma distribution shape parameter for D prior.
-            D_rate: Gamma distribution rate parameter for D prior.
+                Defaults to 40.0.
+            D_shape: Gamma distribution shape parameter for D prior. Defaults to 350.0.
+            D_rate: Gamma distribution rate parameter for D prior. Defaults to 1.0.
         """
         # Sample the overall average value for each parameter
         muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
@@ -192,14 +203,11 @@ class LPLModel(CoverageModel):
         group-specific parameters for the logistic maximum and linear slope,
         drawn from a shared distribution. Other parameters are non-hierarchical.
 
-        Args:
-            data: Training data on which to fit the model.
-            groups: Names of the columns for the grouping factors.
-            params: Parameter names and values to specify prior distributions.
-            mcmc: Control parameters for MCMC fitting.
+        Uses the data, groups, model_params, and mcmc_params specified during
+        initialization.
 
         Returns:
-            Model object with grouping factor combinations and the model fit stored as attributes.
+            Self with the fitted model stored in the mcmc attribute.
         """
         self.kernel = NUTS(self._logistic_plus_linear, init_strategy=init_to_sample)
         self.mcmc = MCMC(self.kernel, **self.mcmc_params)
@@ -220,9 +228,13 @@ class LPLModel(CoverageModel):
         return self
 
     def predict(self) -> pl.DataFrame:
-        """Make projections from a fit Logistic Plus Linear model"""
+        """Make projections from a fit Logistic Plus Linear model.
 
-        assert self.mcmc is not None, "Need to fit() first"
+        Returns:
+            Sample forecast data frame with predictions for dates after forecast_date.
+        """
+
+        assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
 
         predictive = Predictive(self._logistic_plus_linear, self.mcmc.get_samples())
 
@@ -277,10 +289,10 @@ def extract_group_combos(
 
     Args:
         data: Coverage data possibly containing grouping factors.
-        groups: Names of the columns for the grouping factors.
+        groups: Names of the columns for the grouping factors, or None.
 
     Returns:
-        All combinations of grouping factors.
+        All combinations of grouping factors, or None if groups is None.
     """
     if groups is not None:
         return data.select(groups).unique()

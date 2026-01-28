@@ -67,10 +67,10 @@ class IncidentCoverageData(CoverageData):
         Even if no groups are specified, the data must at least be grouped by season.
 
         Args:
-            groups: Names of the columns of grouping factors. If `None`, then data
-                will be grouped by `"season"`.
+            groups: Names of the columns of grouping factors, or None. If `None`, then
+                data will be grouped by `"season"`.
             prev_cumulative: Cumulative coverage from before the start of the incident
-                data, for each group. If `None`, do nothing.
+                data, for each group, or None. If `None`, do nothing.
 
         Returns:
             Cumulative coverage on each date in the input incident coverage data.
@@ -104,8 +104,8 @@ class CumulativeCoverageData(CoverageData):
         incident coverage on the first report date is 0.
 
         Args:
-            groups: Names of the columns of grouping factors. If `None`, then data
-                will be grouped by `"season"`.
+            groups: Names of the columns of grouping factors, or None. If `None`,
+                then data will be grouped by `"season"`.
 
         Returns:
             Incident coverage on each date in the input cumulative coverage data.
