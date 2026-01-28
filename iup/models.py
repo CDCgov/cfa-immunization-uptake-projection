@@ -79,7 +79,9 @@ class LPLModel(CoverageModel):
 
         # input validation
         assert "season" in self.groups
-        assert {self.date_column, "elapsed", "N_vax"}.issubset(self.raw_data.columns)
+        assert {self.date_column, "elapsed", "N_vax", "N_tot"}.issubset(
+            self.raw_data.columns
+        )
         assert set(self.groups).issubset(self.raw_data.columns)
 
         # do the indexing
