@@ -28,7 +28,6 @@ def model_params():
         "sigmaM_rate": 40,
         "D_shape": 5.0,
         "D_rate": 0.01,
-        "N_tot": 1000,
     }
 
     return params

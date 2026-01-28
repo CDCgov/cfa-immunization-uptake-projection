@@ -124,6 +124,7 @@ class LPLModel(CoverageModel):
         return self._logistic_plus_linear(
             elapsed=data["elapsed"].to_numpy(),
             N_vax=data["N_vax"].to_numpy(),
+            N_tot=data["N_tot"].to_numpy(),
             groups=data.select([f"{group}_idx" for group in self.groups]).to_numpy(),
             n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
@@ -134,10 +135,10 @@ class LPLModel(CoverageModel):
     def _logistic_plus_linear(
         elapsed: np.ndarray,
         N_vax: np.ndarray,
+        N_tot: np.ndarray,
         groups: np.ndarray,
         n_groups: int,
         n_group_levels: list[int],
-        N_tot: int,
         muA_shape1: float,
         muA_shape2: float,
         sigmaA_rate: float,
@@ -156,10 +157,10 @@ class LPLModel(CoverageModel):
         Args:
             elapsed: Fraction of a year elapsed since the start of season at each data point.
             N_vax: Number of people vaccinated at each data point, or `None`.
+            N_tot: Total number of people in the population at each data point.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
             n_groups: Number of grouping factors.
             n_group_levels: Number of unique levels of each grouping factor.
-            N_tot: Total number of people in the population at each data point.
             muA_shape1: Beta distribution shape1 parameter for muA prior.
             muA_shape2: Beta distribution shape2 parameter for muA prior.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.

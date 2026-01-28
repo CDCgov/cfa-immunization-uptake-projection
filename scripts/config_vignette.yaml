@@ -32,7 +32,6 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
-      N_tot: 10000
 
 mcmc:
   num_warmup: 1000
