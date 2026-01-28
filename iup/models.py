@@ -90,10 +90,6 @@ class LPLModel(CoverageModel):
         ]
         self.data = self._index(self.raw_data, self.groups)
 
-        # split fit and prediction data
-        self.fit_data = self.data.filter(pl.col(self.date_column) <= self.forecast_date)
-        self.pred_data = self.data.filter(pl.col(self.date_column) > self.forecast_date)
-
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
 
@@ -227,7 +223,11 @@ class LPLModel(CoverageModel):
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(self.kernel, **self.mcmc_params)
 
-        self.mcmc.run(self.fit_key, data=self.fit_data)
+        # fit using only data from up through the forecast date
+        self.mcmc.run(
+            self.fit_key,
+            data=self.data.filter(pl.col(self.date_column) <= self.forecast_date),
+        )
 
         if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
@@ -246,7 +246,7 @@ class LPLModel(CoverageModel):
         predictive = Predictive(self.model, self.mcmc.get_samples())
 
         predictions = np.array(
-            predictive(self.pred_key, data=self.pred_data)["obs"]
+            predictive(self.pred_key, data=self.data)["obs"]
         ).transpose()
 
         index_cols = [self.date_column] + self.groups
@@ -254,7 +254,7 @@ class LPLModel(CoverageModel):
         pred = (
             pl.concat(
                 [
-                    self.pred_data,
+                    self.data,
                     pl.DataFrame(
                         predictions,
                         schema=[f"{i + 1}" for i in range(predictions.shape[1])],
