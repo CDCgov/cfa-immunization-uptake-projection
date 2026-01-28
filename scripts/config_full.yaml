@@ -1,20 +1,18 @@
-# results will be placed in output/RUN_ID/
-run_id: vignette
+run_id: full
 
 season:
-  start_month: 7 # July
+  start_month: 7
   start_day: 1
-  end_month: 4 # April
+  end_month: 4
   end_day: 1
-  # filter the data to between these years
-  first_year: 2018 # 2009 for full data
+  # use all data
+  first_year: 2009
   last_year: 2022
 
 # prediction features
-groups: [season, geography]
+groups: [season, geography, season_geo]
 
-# include only these geographies. remove to use all geographies.
-geographies: [Alaska, New Jersey, Connecticut, Nevada, District of Columbia]
+# include all geographies
 
 models:
   - name: LPLModel
@@ -40,8 +38,8 @@ mcmc:
   progress_bar: false
 
 forecast_dates:
-  start: 2021-09-01
-  end: 2021-11-01
+  start: 2021-07-01
+  end: 2022-04-01
   interval: 1mo
 
 plots:

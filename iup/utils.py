@@ -109,9 +109,7 @@ def value_to_index(
         ) - set(mapping[col_name].keys()):
             raise RuntimeError(f"Missing indices for values: {missing_values}")
 
-        groups = groups.with_columns(
-            pl.col(col_name).replace_strict(mapping[col_name]).cast(pl.UInt8)
-        )
+        groups = groups.with_columns(pl.col(col_name).replace_strict(mapping[col_name]))
 
     array = groups.to_numpy() + np.cumsum([0] + num_group_levels[:-1])
 

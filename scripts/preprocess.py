@@ -107,6 +107,11 @@ def preprocess(
             end_day=config["season"]["end_day"],
         )
         .pipe(geo_filter)
+        .with_columns(
+            season_geo=pl.concat_str(
+                pl.col("season"), pl.col("geography"), separator="_"
+            )
+        )
         .sort("time_end")
         .collect()
     )
