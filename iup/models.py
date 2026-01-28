@@ -62,8 +62,8 @@ class LPLModel(CoverageModel):
 
         Args:
             data: Cumulative coverage data for fitting and prediction.
-            forecast_date: Date from which to start making forecasts.
-            groups: Names of the columns of grouping factors, or None for no grouping.
+            forecast_date: Date to split fit and prediction data.
+            groups: Names of the columns of grouping factors, or `None` for no grouping.
             model_params: Parameter names and values to specify prior distributions.
             mcmc_params: Control parameters for MCMC fitting.
             seed: Random seed for stochastic elements of the model, to be split
@@ -131,7 +131,7 @@ class LPLModel(CoverageModel):
         Args:
             elapsed: Fraction of a year elapsed since the start of season at each data point.
             N_tot: Total number of people in the population at each data point.
-            N_vax: Number of people vaccinated at each data point, or None.
+            N_vax: Number of people vaccinated at each data point, or `None`.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
                 Defaults to None.
             num_group_factors: Number of grouping factors. Defaults to 0.
@@ -245,6 +245,7 @@ class LPLModel(CoverageModel):
                 groups=self.group_codes,
                 num_group_factors=self.num_group_factors,
                 num_group_levels=self.num_group_levels,
+                **self.model_params,
             )["obs"]
         ).transpose()
 
