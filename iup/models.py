@@ -249,30 +249,29 @@ class LPLModel(CoverageModel):
             predictive(self.pred_key, data=self.data)["obs"]
         ).transpose()
 
-        index_cols = [self.date_column] + self.groups
+        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
+        sample_cols = [f"_sample_{i}" for i in range(predictions.shape[1])]
 
         pred = (
             pl.concat(
-                [
-                    self.data,
-                    pl.DataFrame(
-                        predictions,
-                        schema=[f"{i + 1}" for i in range(predictions.shape[1])],
-                    ),
-                ],
+                [self.data, pl.DataFrame(predictions, schema=sample_cols)],
                 how="horizontal",
             )
             .unpivot(
+                on=sample_cols,
                 index=index_cols,
                 variable_name="sample_id",
                 value_name="estimate",
             )
             .with_columns(
                 forecast_date=self.forecast_date,
-                sample_id=pl.col("sample_id"),
+                # convert from sample_id strings to integers
+                sample_id=pl.col("sample_id")
+                .replace_strict({name: i for i, name in enumerate(sample_cols)})
+                .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .drop(["elapsed", "N_tot"] + [f"{group}_idx" for group in self.groups])
+            .drop(["elapsed", "N_tot"])
         )
 
         return iup.SampleForecast(pred)

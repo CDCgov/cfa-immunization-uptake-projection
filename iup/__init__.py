@@ -156,5 +156,5 @@ class SampleForecast(Data):
 
     def validate(self):
         self.assert_in_schema(
-            {"time_end": pl.Date, "sample_id": pl.String, "estimate": pl.Float64}
+            {"time_end": pl.Date, "sample_id": pl.UInt64, "estimate": pl.Float64}
         )
