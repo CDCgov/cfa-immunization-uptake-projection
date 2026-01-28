@@ -3,6 +3,7 @@ import os
 # silence Jax CPU warning
 os.environ["JAX_PLATFORMS"] = "cpu"
 
+import abc
 import datetime
 from typing import Any, List
 
@@ -19,8 +20,26 @@ import iup
 import iup.utils
 
 
-class CoverageModel:
-    pass
+class CoverageModel(abc.ABC):
+    @abc.abstractmethod
+    def __init__(
+        self,
+        data: pl.DataFrame,
+        forecast_date: datetime.date,
+        groups: list[str] | None,
+        model_params: dict[str, Any],
+        mcmc_params: dict[str, Any],
+        seed: int,
+    ):
+        pass
+
+    @abc.abstractmethod
+    def fit(self):
+        pass
+
+    @abc.abstractmethod
+    def predict(self) -> pl.DataFrame:
+        pass
 
 
 class LPLModel(CoverageModel):
@@ -33,7 +52,7 @@ class LPLModel(CoverageModel):
         self,
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
-        groups: List[str,] | None,
+        groups: list[str,] | None,
         model_params: dict[str, Any],
         mcmc_params: dict[str, Any],
         seed: int,
@@ -241,6 +260,7 @@ class LPLModel(CoverageModel):
                 value_name="estimate",
             )
             .with_columns(
+                forecast_date=self.forecast_date,
                 sample_id=pl.col("sample_id"),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )

@@ -1,3 +1,6 @@
+import datetime
+
+import numpyro.infer
 import polars as pl
 import pytest
 
@@ -6,7 +9,7 @@ import iup.models
 
 
 @pytest.fixture
-def params():
+def model_params():
     """
     Mock set of parameter values to specify the LIUM prior distributions.
     """
@@ -24,6 +27,7 @@ def params():
         "sigmaM_rate": 40,
         "D_shape": 5.0,
         "D_rate": 0.01,
+        "N_tot": 1000,
     }
 
     return params
@@ -39,65 +43,45 @@ def mcmc_params():
     return mcmc
 
 
-def test_augment_data(frame):
-    """
-    Add a column for time elapsed since season start
-    """
-    output = iup.models.LPLModel.augment_data(frame, 9, 1)
-
-    assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
-        121.0,
-        121.0,
-        128.0,
-        128.0,
-        135.0,
-        135.0,
-        142.0,
-        142.0,
-    ]
-
-
-def test_fit_handles_no_groups(frame, params, mcmc_params):
+def test_fit_handles_no_groups(frame, model_params, mcmc_params):
     """
     Model should produce posterior samples for each parameter.
     """
-    frame = iup.CumulativeCoverageData(
+    data = iup.CumulativeCoverageData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
-    data = iup.models.LPLModel.augment_data(frame, 9, 1)
-    iup.models.LPLModel(0).fit(data, None, params, mcmc_params)
+
+    model = iup.models.LPLModel(
+        data=data,
+        forecast_date=datetime.date(2020, 1, 21),
+        groups=None,
+        model_params=model_params,
+        mcmc_params=mcmc_params,
+        seed=0,
+    )
+
+    model.fit()
 
 
-def test_fit_handles_groups(frame, params, mcmc_params):
+def test_fit_handles_groups(frame, model_params, mcmc_params):
     """
     Model should produce posterior samples for each parameter.
     """
-    frame = iup.CumulativeCoverageData(
+    data = iup.CumulativeCoverageData(
         frame.filter(pl.col("geography") == "USA").drop("geography")
     )
-    data = iup.models.LPLModel.augment_data(frame, 9, 1)
-    model = iup.models.LPLModel(0).fit(data, ["season"], params, mcmc_params)
 
-    dimensions = [value.shape[0] for key, value in model.mcmc.get_samples().items()]
+    model = iup.models.LPLModel(
+        data=data,
+        forecast_date=datetime.date(2020, 1, 21),
+        groups=["season"],
+        model_params=model_params,
+        mcmc_params=mcmc_params,
+        seed=0,
+    )
 
+    model.fit()
+    assert isinstance(model.mcmc, numpyro.infer.MCMC)
+
+    dimensions = [value.shape[0] for _, value in model.mcmc.get_samples().items()]
     assert all(d == 10 for d in dimensions)
-
-
-def test_augment_scaffold(frame):
-    """
-    Add elapsed an elapsed column to a scaffold.
-    """
-    output = iup.models.LPLModel.augment_scaffold(frame, 9, 1)
-
-    assert output.shape == (frame.height, frame.width + 1)
-
-    assert [round(i * 365, 1) for i in output["elapsed"].to_list()] == [
-        121.0,
-        121.0,
-        128.0,
-        128.0,
-        135.0,
-        135.0,
-        142.0,
-        142.0,
-    ]
