@@ -85,7 +85,7 @@ assert month_order(7) == [
 def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
     """Take `n` evenly spaced rows from `df`, including the first and last"""
     assert n > 2
-    assert df.height >= n
+    assert df.height >= n, f"Asked for {n} rows, only have {df.height}"
     return (
         df.with_row_index(col_name)
         .filter(pl.col(col_name).is_in(np.linspace(0, df.height - 1, num=n).round()))

@@ -46,8 +46,8 @@ $(PREDS_FLAG): $(PREDS)
 	touch $@
 
 # output/run_id/pred/forecast_date=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
-$(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl $(DATA) $(CONFIG)
-	python $< --data=$(DATA) --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --config=$(CONFIG) --output=$@
+$(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl
+	python $< --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --output=$@
 
 $(OUTPUT_DIR)/fits/fit_%.pkl: scripts/fit.py $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --forecast_date=$* --config=$(CONFIG) --output=$@
