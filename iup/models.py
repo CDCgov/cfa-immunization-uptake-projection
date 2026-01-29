@@ -120,16 +120,16 @@ class LPLModel(CoverageModel):
 
     def model(self, data: pl.DataFrame):
         if "N_vax" in data.columns:
-            N_vax = data["N_vax"].to_numpy()
+            N_vax = jnp.array(data["N_vax"])
         else:
             N_vax = None
 
         return self._logistic_plus_linear(
             N_vax=N_vax,
-            elapsed=data["elapsed"].to_numpy(),
+            elapsed=jnp.array(data["elapsed"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
-            groups=data.select([f"{group}_idx" for group in self.groups]).to_numpy(),
+            groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
             n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
             **self.model_params,
@@ -137,10 +137,10 @@ class LPLModel(CoverageModel):
 
     @staticmethod
     def _logistic_plus_linear(
-        N_vax: np.ndarray | None,
-        elapsed: np.ndarray,
+        N_vax: jnp.ndarray | None,
+        elapsed: jnp.ndarray,
         N_tot: jnp.ndarray,
-        groups: np.ndarray,
+        groups: jnp.ndarray,
         n_groups: int,
         n_group_levels: list[int],
         muA_shape1: float,
