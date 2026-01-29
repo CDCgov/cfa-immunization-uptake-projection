@@ -238,20 +238,21 @@ class LPLModel(CoverageModel):
 
         assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
 
+        # make the predictions
         predictive = Predictive(self.model, self.mcmc.get_samples())
-
-        predictions = np.array(
+        pred_array = np.array(
             predictive(self.pred_key, data=self.data)["obs"]
         ).transpose()
 
-        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
-        sample_cols = [f"_sample_{i}" for i in range(predictions.shape[1])]
+        # put predictions into a dataframe
+        sample_cols = [f"_sample_{i}" for i in range(pred_array.shape[1])]
+        pred_df = pl.DataFrame(pred_array, schema=sample_cols)
 
+        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
+
+        # combine predictions
         pred = (
-            pl.concat(
-                [self.data, pl.DataFrame(predictions, schema=sample_cols)],
-                how="horizontal",
-            )
+            pl.concat([self.data, pred_df], how="horizontal")
             .unpivot(
                 on=sample_cols,
                 index=index_cols,
