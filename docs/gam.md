@@ -2,11 +2,11 @@
 
 ## Overview
 
-GAM (generalized additive model) models the relation between vaccination coverage ($y_i$) and the smooth version ($f(.)$) of elapsed variable (the number of days after vaccination roll-out) ($x_i$) and the random effect introduced by season ($u_j$) with link function $g^{-1}
+GAM (generalized additive model) models the relation between vaccination coverage ($y_i$) and the smooth version ($f(.)$) of elapsed variable (the number of days after vaccination roll-out) ($x_i$) and effects from grouping factors, including season ($u_s$) and state ($v_g$) with link function $g^{-1}
 (.)$.
 
 ```math
-g^{-1}(E(y_i)) = f(x_i) + u_j + \beta_0
+g^{-1}(E(y_{i,s,g})) = f(x_i) + u_s + v_g + \beta_0
 
 ```
 
