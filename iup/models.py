@@ -119,10 +119,16 @@ class LPLModel(CoverageModel):
         return data
 
     def model(self, data: pl.DataFrame):
+        if "N_vax" in data.columns:
+            N_vax = data["N_vax"].to_numpy()
+        else:
+            N_vax = None
+
         return self._logistic_plus_linear(
+            N_vax=N_vax,
             elapsed=data["elapsed"].to_numpy(),
-            N_vax=data["N_vax"].to_numpy(),
-            N_tot=data["N_tot"].to_numpy(),
+            # jax runs into a problem if you don't specify this type
+            N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
             groups=data.select([f"{group}_idx" for group in self.groups]).to_numpy(),
             n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
@@ -131,9 +137,9 @@ class LPLModel(CoverageModel):
 
     @staticmethod
     def _logistic_plus_linear(
+        N_vax: np.ndarray | None,
         elapsed: np.ndarray,
-        N_vax: np.ndarray,
-        N_tot: np.ndarray,
+        N_tot: jnp.ndarray,
         groups: np.ndarray,
         n_groups: int,
         n_group_levels: list[int],
@@ -217,11 +223,9 @@ class LPLModel(CoverageModel):
         """
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
         self.mcmc = MCMC(self.kernel, **self.mcmc_params)
-
-        # fit using only data from up through the forecast date
         self.mcmc.run(
             self.fit_key,
-            data=self.data.filter(pl.col(self.date_column) <= self.forecast_date),
+            self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
         if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
@@ -238,21 +242,22 @@ class LPLModel(CoverageModel):
 
         assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
 
-        # make the predictions
         predictive = Predictive(self.model, self.mcmc.get_samples())
-        pred_array = np.array(
-            predictive(self.pred_key, data=self.data)["obs"]
-        ).transpose()
+        # run the predictions, not using the observations
+        pred = predictive(self.pred_key, self.data.drop("N_vax"))
+
+        # observations are rows; posterior samples are columns
+        pred = np.array(pred["obs"]).transpose()
 
         # put predictions into a dataframe
-        sample_cols = [f"_sample_{i}" for i in range(pred_array.shape[1])]
-        pred_df = pl.DataFrame(pred_array, schema=sample_cols)
+        sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
+        pred = pl.DataFrame(pred, schema=sample_cols)
 
         index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
 
         # combine predictions
-        pred = (
-            pl.concat([self.data, pred_df], how="horizontal")
+        return iup.SampleForecast(
+            pl.concat([self.data, pred], how="horizontal")
             .unpivot(
                 on=sample_cols,
                 index=index_cols,
@@ -269,5 +274,3 @@ class LPLModel(CoverageModel):
             )
             .drop(["elapsed", "N_tot"])
         )
-
-        return iup.SampleForecast(pred)

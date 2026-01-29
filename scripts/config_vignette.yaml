@@ -34,8 +34,8 @@ models:
       D_rate: 3.0
 
 mcmc:
-  num_warmup: 1000
-  num_samples: 1000
+  num_warmup: 500
+  num_samples: 500
   num_chains: 4
   progress_bar: false
 
