@@ -1,13 +1,14 @@
-import arviz as az
+import altair as alt
 import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
 import polars as pl
 from jax import random
-from numpyro import MCMC, NUTS
+from jax.typing import ArrayLike
+from numpyro.infer import MCMC, NUTS
 from skfda.misc.operators import LinearDifferentialOperator
-from skfda.misc.regulations import L2Regularization
+from skfda.misc.regularization import L2Regularization
 
 # from scipy.interpolate import BSpline
 from skfda.representation.basis import BSplineBasis
@@ -23,13 +24,11 @@ nis = (
     )
 ).with_columns(elapsed=(pl.col("time_end") - pl.col("roll_out")).dt.total_days())
 
-print((nis["elapsed"].min(), nis["elapsed"].max()))
-
 x = nis["elapsed"]
 
 
 def get_Bspline_basis(
-    x: pl.Series, p: int = 3, num_internal_knots: int = 8
+    x: pl.Series, p: int = 3, num_internal_knots: int = 6
 ) -> BSplineBasis:
     """
     Get BSplineBasis object given covariate x, degree of basis spline function,
@@ -123,73 +122,92 @@ def get_penalty_matrix(bss: BSplineBasis) -> np.ndarray:
 
 # numpyro model
 def gam(
-    S=None,
-    X=None,
-    estimate=None,
+    S: ArrayLike,
+    X: ArrayLike,
+    estimate: ArrayLike,
+    mu_beta_shape,
+    mu_beta_rate,
+    mu_beta0_shape,
+    mu_beta0_rate,
+    sigma_beta,
+    sigma_beta0,
     lam_shape=1.0,
     lam_rate=1.0,
-    sigma_shape=1.0,
-    sigma_rate=1.0,
+    sigma_rate=40.0,
+    beta0_mean=0.0,
+    beta0_sd=1.0,
 ):
     n, p = X.shape
 
     # Priors
     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
-    sigma = numpyro.sample("sigma", dist.InverseGamma(sigma_shape, sigma_rate))
-
-    # Constraint matrix for identifiability: 1ᵀXβ = 0
-    C = X.T @ jnp.ones(n)  # Constraint vector
+    sigma = numpyro.sample("sigma", dist.Exponential(sigma_rate))
+    beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
 
     # Penalized precision matrix, add 1e-6 to make sure stability
     precision = (lam * S) + 1e-6 * jnp.eye(p)
 
     # Sample coefficients with constraint
-    beta_unconstrained = numpyro.sample(
-        "beta_unconstrained",
-        dist.MultivariateNormal(
-            jnp.zeros(p - 1), jnp.linalg.inv(precision[: p - 1, : p - 1])
-        ),
+    beta = numpyro.sample(
+        "beta",
+        dist.MultivariateNormal(jnp.zeros(p), sigma * jnp.linalg.inv(precision)),
     )
-    # because the constraint, only p - 1 beta need to estimated, the left one can be calculated
-
-    # QR decomposition: project to satisfy constraint
-    Q, R = jnp.linalg.qr(C.reshape(-1, 1))
-    P = jnp.eye(p) - Q @ Q.T  # Projection matrix
-
-    beta_full = jnp.zeros(p)
-    beta_full = beta_full.at[1:].set(
-        beta_unconstrained
-    )  # pad 0 at the start of beta_unconstrainted
-
-    # constrained beta: map unconstrained padded version to constrained direction.
-    beta = P @ beta_full
 
     # Compute mean
-    mu = X @ beta
+    mu = X @ beta + beta0
 
     # Likelihood
     numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
 
 
-bss = get_Bspline_basis(x=x)
-X = get_design_matrix(bss, x)
-S = get_penalty_matrix(bss)
-estimate = nis["estimate"].to_numpy()
+# compare posterior mean with data #
+def posterior_mean(mcmc: MCMC) -> ArrayLike:
+    samples = mcmc.get_samples()
+    beta_sample = samples["beta"]
+    beta_mean = jnp.mean(beta_sample, axis=0)
+    beta0_mean = jnp.mean(samples["beta0"])
 
-rng_key = random.PRNGKey(0)
-rng_key, rng_key_ = random.split(rng_key)
+    mu = X @ beta_mean + beta0_mean
 
-kernel = NUTS(gam)
-mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
-mcmc = MCMC(
-    kernel,
-    num_warmup=mcmc_par["num_warmup"],
-    num_samples=mcmc_par["num_samples"],
-    num_chains=mcmc_par["num_chains"],
-)
-mcmc.run(rng_key_, S=S, X=X, estimate=estimate)
+    return mu
 
 
-data = az.from_numpyro(mcmc)
-az.plot_trace(data)
-az.plot_posterior(data)
+if __name__ == "__main__":
+    ## model fitting ##
+
+    bss = get_Bspline_basis(x=x)
+    X = get_design_matrix(bss, x)
+    S = get_penalty_matrix(bss)
+    estimate = nis["estimate"].to_numpy()
+    estimate = np.log(estimate + 1e-6)
+
+    rng_key = random.PRNGKey(0)
+    rng_key, rng_key_ = random.split(rng_key)
+
+    kernel = NUTS(gam)
+    mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
+    mcmc = MCMC(
+        kernel,
+        num_warmup=mcmc_par["num_warmup"],
+        num_samples=mcmc_par["num_samples"],
+        num_chains=mcmc_par["num_chains"],
+    )
+    mcmc.run(rng_key_, S=S, X=X, estimate=estimate)
+
+    ### model output ###
+
+    # model summary #
+    mcmc.print_summary()
+
+    # compare posterior mean with data #
+    mu = posterior_mean(mcmc)
+    df = pl.DataFrame(
+        {"data": nis["estimate"], "date": np.arange(len(nis["estimate"]))}
+    )
+    df = df.with_columns(mu=np.asanyarray(jnp.exp(mu)))
+
+    charts = alt.Chart(df).mark_point().encode(x="date", y="data") + alt.Chart(
+        df
+    ).mark_line(color="red").encode(x="date", y="mu")
+
+    charts.save("gam_fit_k8.png")
