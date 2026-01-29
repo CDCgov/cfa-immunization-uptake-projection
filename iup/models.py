@@ -179,28 +179,23 @@ class LPLModel(CoverageModel):
         K = numpyro.sample("K", dist.Gamma(K_shape, K_rate))
         D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
 
-        # If grouping factors are given, find the group-specific deviations for each datum
-        if groups is not None:
-            sigmaA = numpyro.sample(
-                "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
-            )
-            sigmaM = numpyro.sample(
-                "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
-            )
-            zA = numpyro.sample(
-                "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
-            )
-            zM = numpyro.sample(
-                "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
-            )
-            deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
-            deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
+        sigmaA = numpyro.sample(
+            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
+        )
+        sigmaM = numpyro.sample(
+            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
+        )
+        zA = numpyro.sample(
+            "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+        )
+        zM = numpyro.sample(
+            "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+        )
+        deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
+        deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
 
-            A = muA + np.sum(deltaA[groups], axis=1)
-            M = muM + np.sum(deltaM[groups], axis=1)
-        else:
-            A = muA
-            M = muM
+        A = muA + np.sum(deltaA[groups], axis=1)
+        M = muM + np.sum(deltaM[groups], axis=1)
 
         # Calculate latent true coverage at each datum
         v = A / (1 + jnp.exp(-K * (elapsed - tau))) + (M * elapsed)  # type: ignore
