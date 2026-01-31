@@ -124,40 +124,51 @@ def get_penalty_matrix(bss: BSplineBasis) -> np.ndarray:
 def gam(
     S: ArrayLike,
     X: ArrayLike,
-    estimate: ArrayLike,
-    mu_beta_shape,
-    mu_beta_rate,
-    mu_beta0_shape,
-    mu_beta0_rate,
-    sigma_beta,
-    sigma_beta0,
+    estimate: ArrayLike = None,
+    sigma_z_rate=40,
+    groups=["season", "geography"],
+    num_group_factors=0,
+    num_group_levels=[0],
     lam_shape=1.0,
     lam_rate=1.0,
     sigma_rate=40.0,
-    beta0_mean=0.0,
-    beta0_sd=1.0,
 ):
     n, p = X.shape
 
     # Priors
     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
     sigma = numpyro.sample("sigma", dist.Exponential(sigma_rate))
-    beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
+    # beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
 
-    # Penalized precision matrix, add 1e-6 to make sure stability
-    precision = (lam * S) + 1e-6 * jnp.eye(p)
+    if groups is not None:
+        sigma_z = numpyro.sample(
+            "sigma_z", dist.Exponential(sigma_z_rate), sample_shape=(num_group_factors,)
+        )
 
-    # Sample coefficients with constraint
-    beta = numpyro.sample(
-        "beta",
-        dist.MultivariateNormal(jnp.zeros(p), sigma * jnp.linalg.inv(precision)),
-    )
+        # Penalized precision matrix, add 1e-6 to make sure stability
+        precision = (lam * S) + 1e-6 * jnp.eye(p)
 
-    # Compute mean
-    mu = X @ beta + beta0
+        # Sample coefficients with constraint
+        mu_beta = numpyro.sample(
+            "mu_beta", dist.MultivariateNormal(0, sigma * jnp.linalg.inv(precision))
+        )
 
-    # Likelihood
-    numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
+        z = numpyro.sample(
+            "z",
+            dist.MultivariateNormal(0, jnp.eye(p)),
+            sample_shape=(sum(num_group_levels),),
+        )
+
+        # Compute mean
+        all_dev = z * jnp.repeat(sigma_z, jnp.array(num_group_levels))
+        beta_all = mu_beta + jnp.sum(all_dev)
+
+        mu = X @ beta_all
+
+        # Likelihood
+        numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
+    else:
+        raise NotImplementedError("At least one grouping factor: season is requried.")
 
 
 # compare posterior mean with data #
@@ -178,14 +189,14 @@ if __name__ == "__main__":
     bss = get_Bspline_basis(x=x)
     X = get_design_matrix(bss, x)
     S = get_penalty_matrix(bss)
-    estimate = nis["estimate"].to_numpy()
-    estimate = np.log(estimate + 1e-6)
+    estimate = jnp.array(nis["estimate"])
+    estimate = jnp.log(estimate + 1e-6)
 
     rng_key = random.PRNGKey(0)
     rng_key, rng_key_ = random.split(rng_key)
 
     kernel = NUTS(gam)
-    mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 5}
+    mcmc_par = {"num_warmup": 1000, "num_samples": 1000, "num_chains": 4}
     mcmc = MCMC(
         kernel,
         num_warmup=mcmc_par["num_warmup"],
