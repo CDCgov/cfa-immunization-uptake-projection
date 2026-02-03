@@ -1,5 +1,6 @@
 import altair as alt
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 import numpyro.distributions as dist
 import polars as pl
@@ -22,30 +23,33 @@ nis = (
 ).with_columns(elapsed=(pl.col("time_end") - pl.col("roll_out")).dt.total_days())
 
 
-def get_cubic_spline(
-    x: pl.Series, y: pl.Series, p: int = 3, num_internal_knots=6
-) -> jnp.ndarray:
+def get_spline(x: pl.Series, y: pl.Series, p: int = 2, num_internal_knots=1) -> BSpline:
     """
-    Get BSplineBasis object given covariate x, degree of basis spline function,
-    and the number of internal knots (except boundary knots).
+    Get BSpline object given predictor xx-coordinates, response y, order of degree,
+    and the number of internal knots.
     The knots will be distributed as: [p*knots at x.min(), internal_knots, p*knots at x.max()],
     the internal knots are evenly spaced between the boundary knots.
 
     Args:
     x: pl.Series
-        the value of covariate, here is "elapsed" from NIS data
+        the value of predictor x, must be sorted and unique
+    y: pl.Series
+        the value of response variable y
     p: int
-        the degree of basis spline function, here fix to 3, i.e, cubic spline function
+        the degree of spline
     num_internal_knots: int
-        the number of internal knots to be used
+        the number of internal knots
 
     Return:
-    BSplineBasis object
+    BSpline object
 
     """
     # data
     x = jnp.asarray(x)
     y = jnp.asarray(y)
+
+    assert jnp.all(jnp.diff(x) >= 0), "x must not be descending."
+    assert jnp.array_equal(x, jnp.unique(x)), "Each element in x must be unique."
 
     # internal knots
     interior_knots = jnp.linspace(x.min(), x.max(), num_internal_knots + 2)[1:-1]
@@ -55,35 +59,56 @@ def get_cubic_spline(
         [jnp.repeat(x.min(), (p + 1)), interior_knots, jnp.repeat(x.max(), (p + 1))]
     )
 
-    # build cubic spline between x and y
-    cs = make_lsq_spline(x=x, y=y, t=t, k=p)
+    # build spline
+    bs = make_lsq_spline(x=x, y=y, t=t, k=p)
 
-    return cs
+    return bs
 
 
-def get_design_matrix(bs, t, x, p=3):
+def get_design_matrix(bs: BSpline, t: ArrayLike, x: pl.Series, p: int = 2) -> ArrayLike:
+    """
+    Get design matrix. Each element in design matrix is evaluation of basis function at x_i data point:
+    X_ij = B_j(x_i).
+
+    Args:
+    bs: BSpline
+        the BSpline object created based x and y
+    t: ArrayLike
+        the vector of knots
+    x: pl.Series
+        the values of predictor x
+
+    Return:
+    design matrix: ArrayLike
+
+    """
+
+    x = jnp.asarray(x)
     Xobj = bs.design_matrix(x, t, p)
     X = jnp.array(Xobj.toarray())
 
     return X
 
 
-def get_penalty_matrix(t, x, p=3):
+def get_penalty_matrix(t: ArrayLike, x: pl.Series, p: int) -> ArrayLike:
     """
-    Calculate the penalty matrix for cubic splines.
+    Get penalty matrix for spline functions, penalizing the smoothness.
+
+    The smoothness is (p-1)th derivative for p degree of spline functions.
 
     The penalty matrix S has elements:
-    S[i,j] = integral of (B_i''(x) * B_j''(x)) dx
+    S[i,j] = integral of (B_i^(p-1)(x) * B_j^(p-1)(x)) dx, where ^(p-1) means (p-1)th derivative
 
     Args:
-    knots : jnp.ndarray
-        Knot vector for the cubic spline
-    p : int
-        Degree of the spline (3 for cubic spline)
+    t: ArrayLike
+        Knot vector for spline function
+    x: pl.Series
+        the data point to evaluate penalty
+    p: int
+        Degree of the spline
 
     Return:
-    S : ndarray
-        Penalty matrix of shape (n_basis, n_basis)
+    penalty matrix: ArrayLike
     """
     # Number of basis functions: n = m - p - 1
     n_basis = len(t) - p - 1
@@ -107,8 +132,8 @@ def get_penalty_matrix(t, x, p=3):
             spline_j = BSpline(t, c_j, p)
 
             # Second derivative
-            spline_i_dd = spline_i.derivative(2)
-            spline_j_dd = spline_j.derivative(2)
+            spline_i_dd = spline_i.derivative(p - 1)
+            spline_j_dd = spline_j.derivative(p - 1)
 
             # manual integration
             # S[i,j] = sum(spline_i_dd(x)*spline_j_dd(x))
@@ -203,7 +228,7 @@ def gam(
 
 
 # compare posterior mean with data #
-def posterior_mean(mcmc: MCMC) -> ArrayLike:
+def posterior_mean(mcmc: MCMC, X) -> ArrayLike:
     samples = mcmc.get_samples()
     beta_sample = samples["beta"]
     beta_mean = jnp.mean(beta_sample, axis=0)
@@ -222,21 +247,21 @@ if __name__ == "__main__":
     x = nis["elapsed"]
     y = nis["estimate"]
 
-    bs = get_cubic_spline(x, y)
+    p = 2
+    num_internal_knots = 1
+    bs = get_spline(x, y, p, num_internal_knots)
 
-    X = get_design_matrix(bs, bs.t, x)
-    print(X)
+    X = get_design_matrix(bs, bs.t, x, p)
 
-    S = get_penalty_matrix(bs.t, x)
+    S = get_penalty_matrix(bs.t, x, p)
 
     estimate = jnp.array(nis["estimate"])
-    estimate = jnp.log(estimate + 1e-6)
 
     rng_key = random.PRNGKey(0)
     rng_key, rng_key_ = random.split(rng_key)
 
     kernel = NUTS(gam)
-    mcmc_par = {"num_warmup": 1000, "num_samples": 1000, "num_chains": 4}
+    mcmc_par = {"num_warmup": 1000, "num_samples": 2000, "num_chains": 4}
     mcmc = MCMC(
         kernel,
         num_warmup=mcmc_par["num_warmup"],
@@ -251,14 +276,12 @@ if __name__ == "__main__":
     mcmc.print_summary()
 
     # compare posterior mean with data #
-    mu = posterior_mean(mcmc)
-    df = pl.DataFrame(
-        {"data": nis["estimate"], "date": jnp.arange(len(nis["estimate"]))}
-    )
-    df = df.with_columns(mu=jnp.asanyarray(jnp.exp(mu)))
+    mu = posterior_mean(mcmc, X)
+    df = pl.DataFrame({"data": nis["estimate"], "date": nis["time_end"]})
+    df = df.with_columns(mu=np.asarray(mu))
 
     charts = alt.Chart(df).mark_point().encode(x="date", y="data") + alt.Chart(
         df
     ).mark_line(color="red").encode(x="date", y="mu")
 
-    charts.save("new_gam_fit.png")
+    charts.save("new_gam_fit_09_10.png")
