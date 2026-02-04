@@ -7,7 +7,7 @@ import argparse
 import datetime as dt
 import pickle as pkl
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Tuple
 
 import numpyro
 import polars as pl
@@ -18,8 +18,8 @@ import iup.models
 
 
 def fit_all_models(
-    data, forecast_date: dt.date, config
-) -> Dict[Tuple[str, dt.date], iup.models.CoverageModel]:
+    data: pl.DataFrame, forecast_date: dt.date, config: dict[str, Any]
+) -> dict[Tuple[str, dt.date], iup.models.CoverageModel]:
     """Run all forecasts.
 
     Args:
@@ -41,62 +41,21 @@ def fit_all_models(
             f"{model_name} is not a valid model type!"
         )
 
-        augmented_data = model_class.augment_data(
-            data,
-            config["season"]["start_month"],
-            config["season"]["start_day"],
+        model = model_class(
+            data=data,
+            forecast_date=forecast_date,
+            groups=config["groups"],
+            seed=config_model["seed"],
+            model_params=config_model["model_params"],
+            mcmc_params=config["mcmc"],
         )
 
-        fitted_model = fit_model(
-            data=augmented_data,
-            model_class=model_class,
-            seed=config_model["seed"],
-            params=config_model["params"],
-            mcmc=config["mcmc"],
-            grouping_factors=config["groups"],
-            forecast_date=forecast_date,
-        )
+        model.fit()
 
         label = (model_name, forecast_date)
-        all_models[label] = fitted_model
+        all_models[label] = model
 
     return all_models
-
-
-def fit_model(
-    data: iup.CoverageData,
-    model_class: Type[iup.models.CoverageModel],
-    seed: int,
-    params: dict[str, Any],
-    mcmc: dict[str, Any],
-    grouping_factors: List[str] | None,
-    forecast_date: dt.date,
-) -> iup.models.CoverageModel:
-    """Run a single model for a single forecast date.
-
-    Args:
-        data: Coverage data to train on.
-        model_class: Class of model to fit.
-        seed: Random seed for model initialization.
-        params: Model parameters for prior distributions.
-        mcmc: MCMC configuration parameters.
-        grouping_factors: Names of columns for grouping factors.
-        forecast_date: Forecast date to use as training cutoff.
-
-    Returns:
-        Fitted model object.
-    """
-    train_data = iup.CoverageData(data.filter(pl.col("time_end") <= forecast_date))
-
-    # Make an instance of the model, fit it using training data, and make projections
-    fit_model = model_class(seed).fit(
-        train_data,
-        grouping_factors,
-        params,
-        mcmc,
-    )
-
-    return fit_model
 
 
 if __name__ == "__main__":

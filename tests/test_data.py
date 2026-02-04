@@ -10,7 +10,7 @@ def test_to_cumulative_handles_no_last(frame):
     """
     If last_cumulative is not given, then simple cumulative sums are performed
     """
-    frame = iup.IncidentCoverageData(frame.drop(["N_vax", "N_tot"]))
+    frame = iup.IncidentCoverageData(frame.drop("N_vax"))
 
     output = frame.to_cumulative(groups=["geography", "season"])
 
@@ -73,7 +73,7 @@ def test_to_cumulative_handles_no_groups(frame):
     Note that season is still considered a group, but there is only one unique season.
     """
     frame = iup.IncidentCoverageData(
-        frame.filter(pl.col("geography") == "USA").drop(["geography", "N_vax", "N_tot"])
+        frame.filter(pl.col("geography") == "USA").drop(["geography", "N_vax"])
     )
 
     output = frame.to_cumulative(groups=None)
@@ -127,6 +127,6 @@ def test_quantile_forecast_validation():
 def test_sample_forecast_validation():
     iup.SampleForecast(
         pl.DataFrame(
-            {"time_end": [dt.date(2020, 1, 1)], "estimate": [0.0], "sample_id": "0"}
-        ).with_columns(pl.col("sample_id"))
+            {"time_end": [dt.date(2020, 1, 1)], "estimate": [0.0], "sample_id": 0}
+        ).with_columns(pl.col("sample_id").cast(pl.UInt64))
     )

@@ -4,7 +4,8 @@ import os
 os.environ["JAX_PLATFORMS"] = "cpu"
 
 import abc
-from typing import List
+import datetime
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -16,101 +17,28 @@ from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup
-import iup.utils
 
 
 class CoverageModel(abc.ABC):
-    """
-    Abstract class for different types of models.
-    Every subclass of model will have some core methods of the same name.
-    """
-
-    @staticmethod
     @abc.abstractmethod
-    def augment_data(
-        data: iup.CoverageData,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> iup.CoverageData:
-        """Add columns to preprocessed coverage data to provide all input information that a specific model requires.
-
-        Args:
-            data: Preprocessed coverage data.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-
-        Returns:
-            Augmented coverage data.
-        """
-        pass
-
-    @abc.abstractmethod
-    def fit(
+    def __init__(
         self,
-        data: iup.CoverageData,
-        groups: List[str,] | None,
-        params: dict,
-        mcmc: dict,
-    ) -> Self:
-        """Fit a model on its properly augmented data.
-
-        Args:
-            data: Training data.
-            groups: Names of columns for grouping factors.
-            params: Parameter names and values to specify prior distributions.
-            mcmc: Control parameters for MCMC fitting.
-
-        Returns:
-            Fitted model object.
-        """
-        pass
-
-    @staticmethod
-    @abc.abstractmethod
-    def augment_scaffold(
-        scaffold: pl.DataFrame,
-        groups: List[str] | None,
-        start: pl.DataFrame,
-    ) -> pl.DataFrame:
-        """Add columns to a scaffold of dates for forecasting to provide all input information that a specific model requires.
-
-        Args:
-            scaffold: Scaffold of dates for forecasting.
-            groups: Names of columns for grouping factors.
-            start: Starting values for forecasting.
-
-        Returns:
-            Augmented scaffold.
-        """
+        data: pl.DataFrame,
+        forecast_date: datetime.date,
+        groups: list[str] | None,
+        model_params: dict[str, Any],
+        mcmc_params: dict[str, Any],
+        seed: int,
+    ):
         pass
 
     @abc.abstractmethod
-    def predict(
-        self,
-        test_data: pl.DataFrame,
-        groups: List[str,] | None,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> pl.DataFrame:
-        """Use a fit model to fill in forecasts in a scaffold of dates.
-
-        Args:
-            test_data: Test data scaffold.
-            groups: Names of columns for grouping factors.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-
-        Returns:
-            Forecast data.
-        """
+    def fit(self):
         pass
 
     @abc.abstractmethod
-    def __init__(self, seed: int):
+    def predict(self) -> pl.DataFrame:
         pass
-
-    # save for future models #
-    mcmc = None
 
 
 class LPLModel(CoverageModel):
@@ -119,46 +47,124 @@ class LPLModel(CoverageModel):
     For details, see the online docs.
     """
 
-    def __init__(self, seed: int):
+    def __init__(
+        self,
+        data: iup.CumulativeCoverageData,
+        forecast_date: datetime.date,
+        groups: list[str,],
+        model_params: dict[str, Any],
+        mcmc_params: dict[str, Any],
+        seed: int,
+        date_column: str = "time_end",
+    ):
         """Initialize with a seed and the model structure.
 
         Args:
-            seed: Random seed for stochastic elements of the model, to be split for fitting vs. predicting.
+            data: Cumulative coverage data for fitting and prediction.
+            forecast_date: Date to split fit and prediction data.
+            groups: Names of the columns of grouping factors, or `None` for no grouping.
+            model_params: Parameter names and values to specify prior distributions.
+            mcmc_params: Control parameters for MCMC fitting.
+            seed: Random seed for stochastic elements of the model, to be split
+                for fitting vs. predicting.
+            date_column: Name of the date column in the data. Defaults to "time_end".
         """
-        self.rng_key = random.key(seed)
-        self.fit_key, self.pred_key = random.split(self.rng_key, 2)
-        self.model = LPLModel._logistic_plus_linear
+        self.raw_data = data
+        self.date_column = date_column
+        self.forecast_date = forecast_date
+        self.groups = groups
+        self.model_params = model_params
+        self.mcmc_params = mcmc_params
+        self.fit_key, self.pred_key = random.split(random.key(seed), 2)
+
+        # input validation
+        assert "season" in self.groups
+        assert {self.date_column, "elapsed", "N_vax", "N_tot"}.issubset(
+            self.raw_data.columns
+        )
+        assert set(self.groups).issubset(self.raw_data.columns)
+
+        # do the indexing
+        self.n_group_levels = [
+            self.raw_data.select(pl.col(group).unique()).height for group in self.groups
+        ]
+        self.data = self._index(self.raw_data, self.groups)
+
+        # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
+        self.mcmc = None
+
+    @staticmethod
+    def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
+        """
+        For each column in `groups` (e.g., `"season"`), add a new column `"{group}_idx"`
+        (e.g., `"season_idx"`) that has the values in the original column replaced by
+        integer indices.
+
+        Args:
+            data: dataframe
+            groups: names of columns
+
+        Returns: dataframe with additional columns like `"{group}_idx"`
+        """
+        for group in groups:
+            unique_values = (
+                data.select(pl.col(group).unique().sort()).get_column(group).to_list()
+            )
+            indices = list(range(len(unique_values)))
+            replace_map = {value: index for value, index in zip(unique_values, indices)}
+            data = data.with_columns(
+                pl.col(group).replace_strict(replace_map).alias(f"{group}_idx")
+            )
+
+        return data
+
+    def model(self, data: pl.DataFrame):
+        if "N_vax" in data.columns:
+            N_vax = jnp.array(data["N_vax"])
+        else:
+            N_vax = None
+
+        return self._logistic_plus_linear(
+            N_vax=N_vax,
+            elapsed=jnp.array(data["elapsed"]),
+            # jax runs into a problem if you don't specify this type
+            N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
+            groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
+            n_groups=len(self.groups),
+            n_group_levels=self.n_group_levels,
+            **self.model_params,
+        )
 
     @staticmethod
     def _logistic_plus_linear(
-        elapsed,
-        N_vax=None,
-        N_tot=None,
-        groups=None,
-        num_group_factors=0,
-        num_group_levels=[0],
-        muA_shape1=100.0,
-        muA_shape2=180.0,
-        sigmaA_rate=40.0,
-        tau_shape1=100.0,
-        tau_shape2=225.0,
-        K_shape=25.0,
-        K_rate=1.0,
-        muM_shape=1.0,
-        muM_rate=10.0,
-        sigmaM_rate=40.0,
-        D_shape=350.0,
-        D_rate=1.0,
+        N_vax: jnp.ndarray | None,
+        elapsed: jnp.ndarray,
+        N_tot: jnp.ndarray,
+        groups: jnp.ndarray,
+        n_groups: int,
+        n_group_levels: list[int],
+        muA_shape1: float,
+        muA_shape2: float,
+        sigmaA_rate: float,
+        tau_shape1: float,
+        tau_shape2: float,
+        K_shape: float,
+        K_rate: float,
+        muM_shape: float,
+        muM_rate: float,
+        sigmaM_rate: float,
+        D_shape: float,
+        D_rate: float,
     ):
         """Fit a mixed Logistic Plus Linear model on training data.
 
         Args:
             elapsed: Fraction of a year elapsed since the start of season at each data point.
-            N_vax: Number of people vaccinated at each data point.
-            N_tot: Number of people contacted at each data point.
+            N_vax: Number of people vaccinated at each data point, or `None`.
+            N_tot: Total number of people in the population at each data point.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
-            num_group_factors: Number of grouping factors.
-            num_group_levels: Number of unique levels of each grouping factor.
+            n_groups: Number of grouping factors.
+            n_group_levels: Number of unique levels of each grouping factor.
             muA_shape1: Beta distribution shape1 parameter for muA prior.
             muA_shape2: Beta distribution shape2 parameter for muA prior.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
@@ -179,279 +185,92 @@ class LPLModel(CoverageModel):
         K = numpyro.sample("K", dist.Gamma(K_shape, K_rate))
         D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
 
-        # If grouping factors are given, find the group-specific deviations for each datum
-        if groups is not None:
-            sigmaA = numpyro.sample(
-                "sigmaA",
-                dist.Exponential(sigmaA_rate),
-                sample_shape=(num_group_factors,),
-            )
-            sigmaM = numpyro.sample(
-                "sigmaM",
-                dist.Exponential(sigmaM_rate),
-                sample_shape=(num_group_factors,),
-            )
-            zA = numpyro.sample(
-                "zA", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            )
-            zM = numpyro.sample(
-                "zM", dist.Normal(0, 1), sample_shape=(sum(num_group_levels),)
-            )
-            deltaA = zA * np.repeat(sigmaA, np.array(num_group_levels))
-            deltaM = zM * np.repeat(
-                sigmaM,
-                np.array(
-                    num_group_levels,
-                ),
-            )
+        sigmaA = numpyro.sample(
+            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
+        )
+        sigmaM = numpyro.sample(
+            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
+        )
+        zA = numpyro.sample(
+            "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+        )
+        zM = numpyro.sample(
+            "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+        )
+        deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
+        deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
 
-            A = muA + np.sum(deltaA[groups], axis=1)
-            M = muM + np.sum(deltaM[groups], axis=1)
-        else:
-            A = muA
-            M = muM
+        A = muA + np.sum(deltaA[groups], axis=1)
+        M = muM + np.sum(deltaM[groups], axis=1)
 
         # Calculate latent true coverage at each datum
-        v = A / (1 + jnp.exp(0 - K * (elapsed - tau))) + (M * elapsed)
+        v = A / (1 + jnp.exp(-K * (elapsed - tau))) + (M * elapsed)  # type: ignore
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
-    @staticmethod
-    def augment_data(
-        data: iup.CumulativeCoverageData,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> iup.CumulativeCoverageData:
-        """Format preprocessed data for fitting a Logistic Plus Linear model.
-
-        The following steps are required to prepare preprocessed data
-        for fitting a linear incident coverage model:
-        - Add an extra column for time elapsed since start-of-season
-        - Rescale this time elapsed to a proportion of the year
-
-        Args:
-            data: Training data for fitting a Logistic Plus Linear model.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-
-        Returns:
-            Cumulative coverage data ready for fitting a Logistic Plus Linear model.
-        """
-        data = iup.CumulativeCoverageData(
-            data.with_columns(
-                elapsed=iup.utils.date_to_elapsed(
-                    pl.col("time_end"),
-                    season_start_month,
-                    season_start_day,
-                )
-                / 365
-            )
-        )
-
-        return data
-
-    def fit(
-        self,
-        data: iup.CumulativeCoverageData,
-        groups: List[str,] | None,
-        params: dict,
-        mcmc: dict,
-    ) -> Self:
+    def fit(self) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
 
         If grouping factors are specified, a hierarchical model will be built with
         group-specific parameters for the logistic maximum and linear slope,
         drawn from a shared distribution. Other parameters are non-hierarchical.
 
-        Args:
-            data: Training data on which to fit the model.
-            groups: Names of the columns for the grouping factors.
-            params: Parameter names and values to specify prior distributions.
-            mcmc: Control parameters for MCMC fitting.
+        Uses the data, groups, model_params, and mcmc_params specified during
+        initialization.
 
         Returns:
-            Model object with grouping factor combinations and the model fit stored as attributes.
+            Self with the fitted model stored in the mcmc attribute.
         """
-        self.group_combos = extract_group_combos(data, groups)
-
-        # Tranform the levels of the grouping factors into numeric codes
-        if groups is not None:
-            self.num_group_factors = len(groups)
-            self.num_group_levels = iup.utils.count_unique_values(self.group_combos)
-            self.value_to_index = iup.utils.map_value_to_index(data.select(groups))
-            group_codes = iup.utils.value_to_index(
-                data.select(groups), self.value_to_index, self.num_group_levels
-            )
-        else:
-            group_codes = None
-            self.num_group_factors = 0
-            self.num_group_levels = [0]
-            self.value_to_index = None
-
-        # Prepare the data to be fed to the model. Must be numpy arrays.
-        elapsed = data["elapsed"].to_numpy()
-        N_vax = data["N_vax"].to_numpy()
-        N_tot = data["N_tot"].to_numpy()
-
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(self.kernel, **mcmc)
-
+        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
         self.mcmc.run(
             self.fit_key,
-            elapsed=elapsed,
-            N_vax=N_vax,
-            N_tot=N_tot,
-            groups=group_codes,
-            num_group_factors=self.num_group_factors,
-            num_group_levels=self.num_group_levels,
-            muA_shape1=params["muA_shape1"],
-            muA_shape2=params["muA_shape2"],
-            sigmaA_rate=params["sigmaA_rate"],
-            tau_shape1=params["tau_shape1"],
-            tau_shape2=params["tau_shape2"],
-            K_shape=params["K_shape"],
-            K_rate=params["K_rate"],
-            muM_shape=params["muM_shape"],
-            muM_rate=params["muM_rate"],
-            sigmaM_rate=params["sigmaM_rate"],
-            D_shape=params["D_shape"],
-            D_rate=params["D_rate"],
+            self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
-        if "progress_bar" in mcmc and mcmc["progress_bar"]:
+        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
 
         return self
 
-    @staticmethod
-    def augment_scaffold(
-        scaffold: pl.DataFrame,
-        season_start_month: int,
-        season_start_day: int,
-        N_tot: int = 10_000,
-    ) -> pl.DataFrame:
-        """Add columns to a scaffold of dates for forecasting from a Logistic Plus Linear model.
-
-        Args:
-            scaffold: Scaffold of dates for forecasting.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-            N_tot: Predictions are made as if this many individuals are sampled.
-
-        Returns:
-            Scaffold with extra columns required by the Logistic Plus Linear model.
-        """
-        return scaffold.with_columns(
-            elapsed=iup.utils.date_to_elapsed(
-                pl.col("time_end"), season_start_month, season_start_day
-            )
-            / 365,
-            N_tot=N_tot,
-        )
-
-    def predict(
-        self,
-        test_data: pl.DataFrame,
-        groups: List[str,] | None,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> pl.DataFrame:
+    def predict(self) -> pl.DataFrame:
         """Make projections from a fit Logistic Plus Linear model.
 
-        A data frame is set up to house the projections over the
-        desired time window with the desired intervals.
-        Forecasts are then made for each date in this scaffold.
-
-        Args:
-            test_data: Exact target dates to use, when test data exists.
-            groups: Names of the columns for the grouping factors.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-
         Returns:
-            Model with incident and cumulative projections as attributes.
+            Sample forecast data frame with predictions for dates after forecast_date.
         """
-        assert "time_end" in test_data.columns
 
-        if groups is None:
-            scaffold_cols = ["time_end", "season"]
-        elif "season" in groups:
-            scaffold_cols = ["time_end"] + groups
-        else:
-            scaffold_cols = ["time_end", "season"] + groups
-
-        scaffold = LPLModel.augment_scaffold(
-            test_data.select(scaffold_cols).unique(),
-            season_start_month,
-            season_start_day,
-        )
+        assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
 
         predictive = Predictive(self.model, self.mcmc.get_samples())
+        # run the predictions, not using the observations
+        pred = predictive(self.pred_key, self.data.drop("N_vax"))
 
-        if groups is not None:
-            # Make a numpy array of numeric codes for grouping factor levels
-            # that matches the same codes used when fitting the model
-            assert self.value_to_index is not None
-            group_codes = iup.utils.value_to_index(
-                scaffold.select(groups), self.value_to_index, self.num_group_levels
-            )
+        # observations are rows; posterior samples are columns
+        pred = np.array(pred["obs"]).transpose()
 
-            # Make a prediction-machine from the fit model
-            predictions = np.array(
-                predictive(
-                    self.pred_key,
-                    elapsed=scaffold["elapsed"].to_numpy(),
-                    N_tot=scaffold["N_tot"].to_numpy(),
-                    groups=group_codes,
-                    num_group_factors=self.num_group_factors,
-                    num_group_levels=self.num_group_levels,
-                )["obs"]
-            ).transpose()
-        else:
-            predictions = np.array(
-                predictive(self.pred_key, elapsed=scaffold["elapsed"].to_numpy())["obs"]
-            ).transpose()
+        # put predictions into a dataframe
+        sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
+        pred = pl.DataFrame(pred, schema=sample_cols)
 
-        pred = pl.concat(
-            [
-                scaffold,
-                pl.DataFrame(
-                    predictions,
-                    schema=[f"{i + 1}" for i in range(predictions.shape[1])],
-                ),
-            ],
-            how="horizontal",
-        )
+        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
 
-        pred = (
-            pred.unpivot(
-                index=scaffold.columns,
+        # combine predictions
+        return iup.SampleForecast(
+            pl.concat([self.data, pred], how="horizontal")
+            .unpivot(
+                on=sample_cols,
+                index=index_cols,
                 variable_name="sample_id",
                 value_name="estimate",
             )
             .with_columns(
-                sample_id=pl.col("sample_id"),
+                forecast_date=self.forecast_date,
+                # convert from sample_id strings to integers
+                sample_id=pl.col("sample_id")
+                .replace_strict({name: i for i, name in enumerate(sample_cols)})
+                .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
             .drop(["elapsed", "N_tot"])
         )
-
-        return iup.SampleForecast(pred)
-
-
-def extract_group_combos(
-    data: pl.DataFrame, groups: List[str,] | None
-) -> pl.DataFrame | None:
-    """Extract from coverage data all combinations of grouping factors.
-
-    Args:
-        data: Coverage data possibly containing grouping factors.
-        groups: Names of the columns for the grouping factors.
-
-    Returns:
-        All combinations of grouping factors.
-    """
-    if groups is not None:
-        return data.select(groups).unique()
-    else:
-        return None
