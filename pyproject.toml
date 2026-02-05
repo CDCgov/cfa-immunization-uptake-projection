@@ -30,7 +30,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gam = ["scikit-fda>=0.10.1"]
+gam = [
+    "scikit-fda>=0.10.1",
+    "numba == 0.63.1",
+    ]
 
 [tool.uv]
 [tool.uv.sources]
