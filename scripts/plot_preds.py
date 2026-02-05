@@ -163,7 +163,9 @@ if __name__ == "__main__":
         pl.col("score_fun") == pl.lit("mspe"),
     ).with_columns(pl.col("score_value").log())
 
-    enc_y_mspe = alt.Y("score_value", title="Score (MSPE)", scale=alt.Scale(zero=False))
+    enc_y_mspe = alt.Y(
+        "score_value", title="Score (Log(MSPE))", scale=alt.Scale(zero=False)
+    )
 
     alt.Chart(
         add_medians(fit_scores, group_by="season", value_col="score_value")
@@ -212,6 +214,12 @@ if __name__ == "__main__":
     sis_text = sis_tick_base.mark_text(align="left", dx=15)
 
     (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
+
+    ## summary of end-of-season abs diff ##
+    alt.Chart(sis_data).mark_boxplot(extent="min-max").encode(
+        enc_x_month,
+        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
+    )
 
     # score vs. forecast
     avg_fit = (
