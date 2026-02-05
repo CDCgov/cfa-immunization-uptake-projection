@@ -143,57 +143,6 @@ def get_penalty_matrix(t: ArrayLike, x: pl.Series, p: int) -> ArrayLike:
 
 
 # numpyro model
-# def gam(
-#     S: ArrayLike,
-#     X: ArrayLike,
-#     estimate: ArrayLike = None,
-#     sigma_z_rate=40,
-#     groups=["season", "geography"],
-#     num_group_factors=0,
-#     num_group_levels=[0],
-#     lam_shape=1.0,
-#     lam_rate=1.0,
-#     sigma_rate=40.0,
-# ):
-#     n, p = X.shape
-
-#     # Priors
-#     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
-#     sigma = numpyro.sample("sigma", dist.Exponential(sigma_rate))
-#     # beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
-
-#     if groups is not None:
-#         sigma_z = numpyro.sample(
-#             "sigma_z", dist.Exponential(sigma_z_rate), sample_shape=(num_group_factors,)
-#         )
-
-#         # Penalized precision matrix, add 1e-6 to make sure stability
-#         precision = (lam * S) + 1e-6 * jnp.eye(p)
-
-#         # Sample coefficients with constraint
-#         mu_beta = numpyro.sample(
-#             "mu_beta", dist.MultivariateNormal(0, sigma * jnp.linalg.inv(precision))
-#         )
-
-#         z = numpyro.sample(
-#             "z",
-#             dist.MultivariateNormal(0, jnp.eye(p)),
-#             sample_shape=(sum(num_group_levels),),
-#         )
-
-#         # Compute mean
-#         all_dev = z * jnp.repeat(sigma_z, jnp.array(num_group_levels))
-#         beta_all = mu_beta + jnp.sum(all_dev)
-
-#         mu = X @ beta_all
-
-#         # Likelihood
-#         numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
-#     else:
-#         raise NotImplementedError("At least one grouping factor: season is requried.")
-
-
-# numpyro model
 def gam(
     S: ArrayLike,
     X: ArrayLike,
