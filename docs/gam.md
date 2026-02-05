@@ -2,98 +2,105 @@
 
 ## Overview
 
-GAM (generalized additive model) models the relation between vaccination coverage ($y_i$) and the smooth version ($f(.)$) of elapsed variable (the number of days after vaccination roll-out) ($x_i$) and effects from grouping factors, including season ($u_s$) and state ($v_g$) with link function $g^{-1}
-(.)$.
-
-```math
-g^{-1}(E(y_{i,s,g})) = f(x_i) + u_s + v_g + \beta_0
-
-```
-
-where $f(x_i)=\sum_{k=1}^{K}{\beta_k}{B_k(x_{i})}$.
-
-$\beta_0$ is intercept for main effect.
-
-Writing in matrix form, this is:
+GAM (generalized additive model) predicts vaccination covarege using the number of days since vaccine roll-out date through spline function. A spline function is a smooth curve, composed by multiple polynomial functions, which are called basis functions, connected at certain points (knots). Denote  vaccination coverage as $y_i$, elapsed days as $x_i$, spline function $f(.)$, the relation between $y_i$ and $x_i$ is:
 
 ```math
 
-g^{-1}(E(y)) = X\beta + Zu + \beta_0
+g^{-1}(E(y_i)) = f(x_i) + \beta_0
+
+```
+where $g^{-1}(.)$ is a link function and $\beta_0$ is population-level intercept.
+
+Moreover, $f(x_i)$ is the sum of values evaluated at basis functions $B_k(.), k = 1,2,...$, weighted by coefficients $\beta_k$.
+
+$$
+f(x_i)=\sum_{k=1}^{K}{\beta_k}{B_k(x_{i})}
+$$
+
+Writing the formula in matrix form, this is:
+
+```math
+
+g^{-1}(E(y)) = X\beta + \beta_0
+
 ```
 
-$y$ is a vector of observed vaccination coverage, $X$ is the design matrix of basis function with $N \times k$ dimension, where $N$ is the number of observations and $k$ is the number of basis functions used. Each element in $X$ is the value of the basis function evaluated at the predictor elapsed ($B_k(x_{i})$).$\beta$ is a vector of coefficients that control each basis function. $X\beta$ is the main effect that is the same across all the level in a group (in our case is season). $Z$ is a random-effect design matrix to define the relation between levels in a group. $u$ is a vector representing season-specific intercept. Here, we assume the model follows lognormal distribution and the link function is $log()$.
+$y$ is a vector of observed vaccination coverage, $X$ is the design matrix of basis function with $N \times k$ dimension, where $N$ is the number of data points and $k$ is the number of basis functions used. The element in $X$ is the value of the basis function evaluated at the predictor elapsed, with rows are data point $x_i$ , and columns are basis function $B_k$.
+
+$$
+X_{i, k} = B_k(x_{i})
+$$
+
+**$\beta$** is a vector of coefficients that control how much influence each basis function has on the fit of spline function $f(x_i)$. It will be estimated in model fitting. We use identify link function for now, which is: $X\beta = E(y)$.
 
 ## Bayesian framework
 
-Because the main effect and the random effect are additive, we consider them separately for now.
+We use Bayesian framework to fit the GAM model.
 
-### Main effect
-
-The loglikelihood function is:
-
-```math
-Loglik(\beta, \lambda, u |y) = Loglik(y| \beta) - \lambda \beta^TS\beta
-```
-
-$S$ is called penalty matrix that is used to penalize the wiggliness of smooth function. In our case, we will use cubic spline function as the basis function, and the wiggliness of cubic spline function is measured as the integral of squared secondary derivatives of $B_k(x_{i})$, which is:
-
-```math
-S_{ij} = \int{B''_i(x)B''_j(x)dx}
-
-```
-
-In this way, $S$ penalizes the curvature of basis function. $\lambda$ is a smoothing parameter to control the balance between smoothness and fidelity of the data, which will be estimated along with $\beta$.
-
-Exponentiating the loglikelhood function, we have:
-
-```math
-L(\beta,\lambda|y) = L(y|\beta)\cdot exp(-\lambda\beta^TS\beta)
-```
-
-Using empirical Bayes approach, we can derive:
-
-$$
-\begin{align}
-L(\beta,\lambda|y) & ∝ L(y|\beta) \cdot exp(-\lambda\beta^TS\beta/(2\sigma^2)) \\
-L(\beta,\lambda|y) & ∝ L(y|\beta) \cdot exp(-\beta^T\beta/(2\sigma^2 /\lambda S))
-\end{align}
-$$
-
-to have a multivariate normal prior for $\beta$, where $\beta \sim N(0, S^{-1}\sigma^2/\lambda)$. The prior needs to be estimated from data.
-
-Because it is assumed the model follows lognormal distribution, we have:
-
-```math
-log(y) \sim N(X\beta, \sigma^2I)
-
-```
+### Population-level effect
 
 #### Model structure
 
 $$
 \begin{align}
 & p(\beta,\lambda,\sigma^2 |y) ∝ p(y |\beta,\sigma^2)p(\beta|\lambda, \sigma^2)p(\lambda)p(\sigma^2) \\
-& p(log(y)|\beta, \sigma^2) \sim N(X\beta, \sigma^2I) \\
-& p(\beta|\lambda, \sigma^2) \sim N(0, S^{-1}\sigma^2/\lambda) \\
+& p(y|\beta, \sigma^2) \sim N(X\beta, \sigma^2I) \\
+& p(\beta|\lambda, \sigma^2) \sim N(0, (\sigma^2/\lambda)S^{-}) \\
 & p(\lambda) \sim Gamma(shape=1.0,rate=1.0) \\
 & p(\sigma^2) \sim InverseGamma(shape=1.0,rate=1.0)
 \end{align}
 $$
 
-#### Identifiability constraints
+#### Deriving prior of $\beta$
 
-For each smooth term, it is possible to have identifiability issue between $f(x_i)$ and $\beta0$ when one of the basis function is also an intercept (first-order polynomials). Thus, it is needed to impose sum-to-zero constraint to ensure the identifiability of the smooth function, which is that the sum of the smooth function across the entire range of the covariate needs to be 0.
+As we assume the link function is identity, that indicates the data $y$ follows normal distribution with covariance matrix $\sigma^2I$.
+$$
+log(y|\beta,\sigma^2) = -||y-X\beta||^2/(2\sigma^2) +c
+$$
+
+Instead of directly minimizing $||y - X\beta||$, we add a term to penalize the wiggliness of the spline. The target function to minimize becomes:
+
+$$
+\hat{\beta} = argmin\{||y-X\beta|| + \lambda \int f^{(k-1)}(x)^2 dx\}
+$$
+
+$f^{(k-1)}$ is the $(k-1)^{th}$ derivative of the spline function with order of $k$. $\int f^{(k-1)}(x)^2 dx$ measures the wiggleness of the spline function for the entire range of covariate $x$. $\lambda$ is a coefficient that controls how much penalization is imposed in this function, and will be estimated.
+
+We can rewrite the function to minimize in pure matrix form:
+
+$$
+\hat{\beta} = argmin\{||y-X\beta|| + \lambda\beta^TS\beta\}
+$$
+
+where $S$ is called penalty matrix, and
+
+$$
+S_{ij} = \int{B''_i(x)B''_j(x)dx}
+$$
+
+Multiply $-\frac{1}{2\sigma^2}$, we have:
+
+$$
+\hat{\beta} = argmax\{-||y-X\beta||/(2\sigma^2) - \lambda\beta^TS\beta/(2\sigma^2)\}
+$$
+which is proportional to:
+$$
+log(y|\beta,\sigma^2) - \lambda\beta^TS\beta/(2\sigma^2)
+$$
+
+Exponentiating the function, we have:
 
 ```math
-
-\sum_i^N{f(x_i)} = 0
-
+L(y|\beta)\cdot exp(-\lambda\beta^TS\beta/(2\sigma^2))
 ```
 
-In matrix form, it is:
+Using empirical Bayes approach, we can derive:
 
-```math
-1^TX\beta = 0
-```
+$$
+\begin{align}
+\hat{\beta} & ∝ L(y|\beta, \sigma^2) \cdot exp(-\lambda\beta^TS\beta/(2\sigma^2)) \\
+\hat{\beta} & ∝ L(y|\beta,\sigma^2) \cdot exp(-\beta^T\beta/(2\sigma^2 /\lambda S))
+\end{align}
+$$
 
-####
+to have $\beta \sim N(0, (\sigma^2/\lambda)S^{-})$. This is the prior of $\beta$ and needs to be estimated from data.
