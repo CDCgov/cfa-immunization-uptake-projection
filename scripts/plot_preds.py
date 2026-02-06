@@ -222,10 +222,18 @@ if __name__ == "__main__":
     ).save(out_dir / "eos_abs_diff_summary.svg")
 
     # end-of-season abs diff by state #
+    state_sort = (
+        sis_data.filter(pl.col("month") == "Jul")
+        .sort(pl.col("score_value"))
+        .select("geography")
+        .to_numpy()
+        .ravel()
+        .tolist()
+    )
     alt.Chart(sis_data).mark_line(color="black", opacity=LINE_OPACITY).encode(
         enc_x_month,
         alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-        alt.Facet("geography", columns=6),
+        alt.Facet("geography", columns=9, sort=state_sort),
     ).save(out_dir / "eos_abs_diff_by_state.svg")
 
     # score vs. forecast
