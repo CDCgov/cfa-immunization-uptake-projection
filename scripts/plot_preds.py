@@ -7,12 +7,10 @@ import polars as pl
 import yaml
 from plot_data import (
     AXIS_PERCENT,
-    MEDIAN_ENCODINGS,
-    TICK_KWARGS,
-    add_medians,
-    gather_n,
     month_order,
 )
+
+alt.data_transformers.enable("vegafusion")
 
 LINE_OPACITY = 0.4
 
@@ -61,16 +59,30 @@ def plot_forecast(
 
 def plot_fit(
     data: pl.DataFrame,
-    pred: pl.DataFrame,
+    pred: pl.LazyFrame,
     geography: str,
     season: str,
     sort_month: List[str],
 ) -> alt.LayerChart:
-    assert pred["forecast_date"].unique().len() == 1
-    base = alt.Chart(
+    pred_to_plot = (
         pred.filter(
-            pl.col("geography") == pl.lit(geography), pl.col("season") == pl.lit(season)
-        ).join(data, on=["season", "geography", "time_end"], how="inner")
+            pl.col("forecast_date") == pl.col("forecast_date").max(),
+            pl.col("geography") == pl.lit(geography),
+            pl.col("season") == pl.lit(season),
+        )
+        .group_by(["season", "geography", "time_end", "model", "forecast_date"])
+        .agg(
+            pl.col("estimate").median().alias("pred_estimate"),
+            pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
+            pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
+        )
+        .collect()
+    )
+
+    assert pred_to_plot["forecast_date"].unique().len() == 1
+
+    base = alt.Chart(
+        pred_to_plot.join(data, on=["season", "geography", "time_end"], how="inner")
     ).encode(alt.X("month", title=None, sort=sort_month))
 
     cone = base.mark_area(fill="black", opacity=0.25).encode(
@@ -116,17 +128,18 @@ if __name__ == "__main__":
     # get the prediction cones
     half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
     pred_cones = (
-        preds.group_by(["season", "geography", "time_end", "model", "forecast_date"])
+        preds.filter(pl.col("time_end") > pl.col("forecast_date"))
+        .group_by(["season", "geography", "time_end", "model", "forecast_date"])
         .agg(
             pl.col("estimate").median().alias("pred_estimate"),
             pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
             pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
         )
-        .collect()
     )
 
     # get all the target dates & forecast dates
-    fc = pred_cones.filter(pl.col("time_end") > pl.col("forecast_date"))
+    fc = pred_cones.collect()
+
     fc_plot_data = (
         obs.join(fc.select(pl.col("forecast_date").unique()), how="cross")
         .join(
@@ -145,9 +158,7 @@ if __name__ == "__main__":
     for geo in config["plots"]["example_geos"]:
         plot_fit(
             data=obs,
-            pred=pred_cones.filter(
-                pl.col("forecast_date") == pl.col("forecast_date").max()
-            ),
+            pred=preds,
             geography=geo,
             season=config["plots"]["example_season"],
             sort_month=sort_month,
@@ -156,109 +167,3 @@ if __name__ == "__main__":
         plot_forecast(data=fc_plot_data, geography=geo, sort_month=sort_month).save(
             out_dir / f"forecast_{geo}.svg"
         )
-
-    # scores across seasons & states
-    fit_scores = scores.filter(
-        pl.col("forecast_date") == pl.col("forecast_date").max(),
-        pl.col("score_fun") == pl.lit("mspe"),
-    ).with_columns(pl.col("score_value").log())
-
-    enc_y_mspe = alt.Y(
-        "score_value", title="Score (Log(MSPE))", scale=alt.Scale(zero=False)
-    )
-
-    alt.Chart(
-        add_medians(fit_scores, group_by="season", value_col="score_value")
-    ).mark_point().encode(
-        alt.X("season", title=None),
-        enc_y_mspe,
-        *MEDIAN_ENCODINGS,
-    ).save(out_dir / "score_by_season.svg")
-
-    alt.Chart(
-        add_medians(fit_scores, group_by="geography", value_col="score_value")
-    ).mark_point().encode(
-        alt.X(
-            "geography",
-            title=None,
-            sort=alt.EncodingSortField("score_value", "median", "descending"),
-        ),
-        enc_y_mspe,
-        *MEDIAN_ENCODINGS,
-    ).save(out_dir / "score_by_geo.svg")
-
-    # scores increasing through the season?
-    # sis = score in season
-    sis_data = scores.filter(
-        pl.col("score_fun") == pl.lit("eos_abs_diff"),
-        pl.col("season") == pl.col("season").max(),
-    ).with_columns(month=pl.col("forecast_date").dt.to_string("%b"))
-
-    sis_line = (
-        alt.Chart(sis_data)
-        .mark_line(color="black", opacity=LINE_OPACITY)
-        .encode(
-            enc_x_month,
-            alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-            alt.Detail("geography"),
-        )
-    )
-
-    sis_tick_base = alt.Chart(
-        sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
-        .sort("score_value")
-        .pipe(gather_n, 5)
-    ).encode(enc_x_month, alt.Y("score_value"), alt.Text("geography"))
-
-    sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
-    sis_text = sis_tick_base.mark_text(align="left", dx=15)
-
-    (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
-
-    ## summary of end-of-season abs diff ##
-    alt.Chart(sis_data).mark_boxplot(extent="min-max").encode(
-        enc_x_month,
-        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-    ).save(out_dir / "eos_abs_diff_summary.svg")
-
-    # end-of-season abs diff by state #
-    state_sort = (
-        sis_data.filter(pl.col("month") == "Jul")
-        .sort(pl.col("score_value"))
-        .select("geography")
-        .to_numpy()
-        .ravel()
-        .tolist()
-    )
-    alt.Chart(sis_data).mark_line(color="black", opacity=LINE_OPACITY).encode(
-        enc_x_month,
-        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-        alt.Facet("geography", columns=9, sort=state_sort),
-    ).save(out_dir / "eos_abs_diff_by_state.svg")
-
-    # score vs. forecast
-    avg_fit = (
-        fit_scores.group_by(["model", "geography"])
-        .agg(pl.col("score_value").median())
-        .rename({"score_value": "fit_score"})
-    )
-    fc_goodness = (
-        scores.filter(
-            pl.col("score_fun") == pl.lit("eos_abs_diff"),
-            pl.col("season") == pl.col("season").max(),
-            pl.col("forecast_date") == pl.col("forecast_date").min(),
-        )
-        .select(["geography", "model", "score_value"])
-        .rename({"score_value": "fc_score"})
-    )
-
-    alt.Chart(
-        avg_fit.join(fc_goodness, on=["model", "geography"], how="inner")
-    ).mark_point(color="black").encode(
-        alt.X(
-            "fit_score",
-            title="Fit score (median MSPE over seasons)",
-            scale=alt.Scale(zero=False),
-        ),
-        alt.Y("fc_score", title="Forecast score (abs. end-of-season diff.)"),
-    ).save(out_dir / "forecast_fit_compare.svg")
