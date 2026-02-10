@@ -8,6 +8,7 @@ import datetime
 from typing import Any
 
 import jax.numpy as jnp
+import jax.scipy.stats
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -21,18 +22,6 @@ import iup
 
 class CoverageModel(abc.ABC):
     @abc.abstractmethod
-    def __init__(
-        self,
-        data: pl.DataFrame,
-        forecast_date: datetime.date,
-        groups: list[str] | None,
-        model_params: dict[str, Any],
-        mcmc_params: dict[str, Any],
-        seed: int,
-    ):
-        pass
-
-    @abc.abstractmethod
     def fit(self):
         pass
 
@@ -40,18 +29,17 @@ class CoverageModel(abc.ABC):
     def predict(self) -> pl.DataFrame:
         pass
 
+    @abc.abstractmethod
+    def model(self, data: pl.DataFrame) -> None:
+        pass
 
-class LPLModel(CoverageModel):
-    """
-    Subclass of CoverageModel for a mixed Logistic Plus Linear model.
-    For details, see the online docs.
-    """
 
+class NumpyroModel(CoverageModel):
     def __init__(
         self,
-        data: iup.CumulativeCoverageData,
+        data: pl.DataFrame,
         forecast_date: datetime.date,
-        groups: list[str,],
+        groups: list[str],
         model_params: dict[str, Any],
         mcmc_params: dict[str, Any],
         seed: int,
@@ -77,11 +65,9 @@ class LPLModel(CoverageModel):
         self.mcmc_params = mcmc_params
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
-        # input validation
+        # do common validation
         assert "season" in self.groups
-        assert {self.date_column, "elapsed", "N_vax", "N_tot"}.issubset(
-            self.raw_data.columns
-        )
+        assert self.date_column in self.raw_data.columns
         assert set(self.groups).issubset(self.raw_data.columns)
 
         # do the indexing
@@ -117,6 +103,182 @@ class LPLModel(CoverageModel):
             )
 
         return data
+
+    def fit(self) -> Self:
+        """Fit a mixed Logistic Plus Linear model on training data.
+
+        If grouping factors are specified, a hierarchical model will be built with
+        group-specific parameters for the logistic maximum and linear slope,
+        drawn from a shared distribution. Other parameters are non-hierarchical.
+
+        Uses the data, groups, model_params, and mcmc_params specified during
+        initialization.
+
+        Returns:
+            Self with the fitted model stored in the mcmc attribute.
+        """
+        self.kernel = NUTS(self.model, init_strategy=init_to_sample)
+        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
+        self.mcmc.run(
+            self.fit_key,
+            self.data.filter(pl.col(self.date_column) <= self.forecast_date),
+        )
+
+        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
+            self.mcmc.print_summary()
+
+        return self
+
+
+class LLModel(NumpyroModel):
+    """Sum of two logistic curves model"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # model-specific input validation
+        assert {"elapsed", "N_vax", "N_tot"}.issubset(self.raw_data.columns)
+
+    def model(self, data: pl.DataFrame):
+        if "N_vax" in data.columns:
+            N_vax = jnp.array(data["N_vax"])
+        else:
+            N_vax = None
+
+        return self._two_logistic(
+            N_vax=N_vax,
+            elapsed=jnp.array(data["elapsed"]),
+            # jax runs into a problem if you don't specify this type
+            N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
+            groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
+            n_groups=len(self.groups),
+            n_group_levels=self.n_group_levels,
+            **self.model_params,
+        )
+
+    @classmethod
+    def _two_logistic(
+        cls,
+        N_vax: jnp.ndarray | None,
+        elapsed: jnp.ndarray,
+        N_tot: jnp.ndarray,
+        groups: jnp.ndarray,
+        n_groups: int,
+        n_group_levels: list[int],
+        muA_shape1: float,
+        muA_shape2: float,
+        sigma_rate: float,
+        rho_rate: float,
+        B_shape1: float,
+        B_shape2: float,
+        D_shape: float,
+        D_rate: float,
+        mu_tau_shape1: float,
+        mu_tau_shape2: float,
+        delta_tau_rate: float,
+    ):
+        # locations
+        mu_tau = numpyro.sample("mu_tau", dist.Beta(mu_tau_shape1, mu_tau_shape2))
+        delta_tau = numpyro.sample("delta_tau", dist.Exponential(delta_tau_rate))
+        tau1 = mu_tau - 0.5 * delta_tau  # type: ignore
+        tau2 = mu_tau + 0.5 * delta_tau  # type: ignore
+
+        # spreads
+        sigma1 = numpyro.sample("sigma1", dist.Exponential(sigma_rate))
+        sigma2 = numpyro.sample("sigma2", dist.Exponential(sigma_rate))
+
+        # heights
+        muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
+        rho = numpyro.sample(
+            "rho", dist.Exponential(rho_rate), sample_shape=(n_groups,)
+        )
+        zA = numpyro.sample(
+            "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+        )
+        deltaA = zA * np.repeat(rho, np.array(n_group_levels))
+        A = muA + np.sum(deltaA[groups], axis=1)
+
+        # mixture
+        B = numpyro.sample("B", dist.Beta(B_shape1, B_shape2))
+        C1 = A * B
+        C2 = A * (1.0 - B)  # type: ignore
+
+        # latent coverage
+        v = C1 * cls._cdf_tn(t=elapsed, loc=tau1, scale=sigma1) + C2 * cls._cdf_tn(  # type: ignore
+            t=elapsed,
+            loc=tau2,
+            scale=sigma2,  # type: ignore
+        )
+
+        # observation
+        D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
+        numpyro.sample("N_vax", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
+
+    @staticmethod
+    def _cdf_tn(
+        t: jnp.ndarray,
+        loc: float | jnp.ndarray,
+        scale: float | jnp.ndarray,
+        a_trunc=0.0,
+        b_trunc=jnp.inf,
+    ) -> jnp.ndarray:
+        """
+        Truncated normal cdf
+
+        See the note in <https://scipy.github.io/devdocs/reference/generated/scipy.stats.truncnorm.html>
+        about rescaling the `a` and `b` parameters for truncation.
+        """
+        a = (a_trunc - loc) / scale
+        b = (b_trunc - loc) / scale
+        # irritatingly, need a type ignore here, because truncnorm.cdf expects integer scale?
+        return jax.scipy.stats.truncnorm.cdf(x=t, a=a, b=b, loc=loc, scale=scale)  # type: ignore
+
+    def predict(self) -> pl.DataFrame:
+        # BEWARE: this is a copy of the LPL function
+        assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
+
+        predictive = Predictive(self.model, self.mcmc.get_samples())
+        # run the predictions, not using the observations
+        pred = predictive(self.pred_key, self.data.drop("N_vax"))
+
+        # observations are rows; posterior samples are columns
+        pred = np.array(pred["N_vax"]).transpose()
+
+        # put predictions into a dataframe
+        sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
+        pred = pl.DataFrame(pred, schema=sample_cols)
+
+        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
+
+        # combine predictions
+        return iup.SampleForecast(
+            pl.concat([self.data, pred], how="horizontal")
+            .unpivot(
+                on=sample_cols,
+                index=index_cols,
+                variable_name="sample_id",
+                value_name="estimate",
+            )
+            .with_columns(
+                forecast_date=self.forecast_date,
+                # convert from sample_id strings to integers
+                sample_id=pl.col("sample_id")
+                .replace_strict({name: i for i, name in enumerate(sample_cols)})
+                .cast(pl.UInt64),
+                estimate=pl.col("estimate") / pl.col("N_tot"),
+            )
+            .drop(["elapsed", "N_tot"])
+        )
+
+
+class LPLModel(NumpyroModel):
+    """Logistic Plus Linear model"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # model-specific input validation
+        assert {"elapsed", "N_vax", "N_tot"}.issubset(self.raw_data.columns)
 
     def model(self, data: pl.DataFrame):
         if "N_vax" in data.columns:
@@ -206,32 +368,7 @@ class LPLModel(CoverageModel):
         # Calculate latent true coverage at each datum
         v = A / (1 + jnp.exp(-K * (elapsed - tau))) + (M * elapsed)  # type: ignore
 
-        numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
-
-    def fit(self) -> Self:
-        """Fit a mixed Logistic Plus Linear model on training data.
-
-        If grouping factors are specified, a hierarchical model will be built with
-        group-specific parameters for the logistic maximum and linear slope,
-        drawn from a shared distribution. Other parameters are non-hierarchical.
-
-        Uses the data, groups, model_params, and mcmc_params specified during
-        initialization.
-
-        Returns:
-            Self with the fitted model stored in the mcmc attribute.
-        """
-        self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
-        self.mcmc.run(
-            self.fit_key,
-            self.data.filter(pl.col(self.date_column) <= self.forecast_date),
-        )
-
-        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
-            self.mcmc.print_summary()
-
-        return self
+        numpyro.sample("N_vax", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
     def predict(self) -> pl.DataFrame:
         """Make projections from a fit Logistic Plus Linear model.
@@ -247,7 +384,7 @@ class LPLModel(CoverageModel):
         pred = predictive(self.pred_key, self.data.drop("N_vax"))
 
         # observations are rows; posterior samples are columns
-        pred = np.array(pred["obs"]).transpose()
+        pred = np.array(pred["N_vax"]).transpose()
 
         # put predictions into a dataframe
         sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]

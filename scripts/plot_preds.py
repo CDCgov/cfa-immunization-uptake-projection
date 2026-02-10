@@ -18,7 +18,7 @@ LINE_OPACITY = 0.4
 
 
 def plot_forecast(
-    data: pl.DataFrame, geography: str, sort_month: List[str]
+    data: pl.DataFrame, geography: str, model: str, sort_month: List[str]
 ) -> alt.FacetChart:
     # remove forecast dates that have no actual forecasts
     # .filter(pl.col("forecast_date") < pl.col("time_end").max())
@@ -39,6 +39,7 @@ def plot_forecast(
     base = alt.Chart(
         data.filter(
             pl.col("geography") == pl.lit(geography),
+            pl.col("model") == pl.lit(model),
             pl.col("forecast_date").is_in(good_fc_dates),
         )
     ).encode(alt.X("month", title=None, sort=sort_month))
@@ -63,13 +64,16 @@ def plot_fit(
     data: pl.DataFrame,
     pred: pl.DataFrame,
     geography: str,
+    model: str,
     season: str,
     sort_month: List[str],
 ) -> alt.LayerChart:
     assert pred["forecast_date"].unique().len() == 1
     base = alt.Chart(
         pred.filter(
-            pl.col("geography") == pl.lit(geography), pl.col("season") == pl.lit(season)
+            pl.col("geography") == pl.lit(geography),
+            pl.col("season") == pl.lit(season),
+            pl.col("model") == pl.lit(model),
         ).join(data, on=["season", "geography", "time_end"], how="inner")
     ).encode(alt.X("month", title=None, sort=sort_month))
 
@@ -105,6 +109,8 @@ if __name__ == "__main__":
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    models = preds.select(pl.col("model").unique()).collect().to_series()
 
     # clean data
     obs = (
@@ -143,19 +149,23 @@ if __name__ == "__main__":
 
     # example fits and forecasts
     for geo in config["plots"]["example_geos"]:
-        plot_fit(
-            data=obs,
-            pred=pred_cones.filter(
-                pl.col("forecast_date") == pl.col("forecast_date").max()
-            ),
-            geography=geo,
-            season=config["plots"]["example_season"],
-            sort_month=sort_month,
-        ).save(out_dir / f"fit_{geo}.svg")
+        for model in models:
+            plot_fit(
+                data=obs,
+                pred=pred_cones.filter(
+                    pl.col("forecast_date") == pl.col("forecast_date").max()
+                ),
+                geography=geo,
+                model=model,
+                season=config["plots"]["example_season"],
+                sort_month=sort_month,
+            ).save(out_dir / f"fit_{geo}_{model}.svg")
 
-        plot_forecast(data=fc_plot_data, geography=geo, sort_month=sort_month).save(
-            out_dir / f"forecast_{geo}.svg"
-        )
+            plot_forecast(
+                data=fc_plot_data, geography=geo, model=model, sort_month=sort_month
+            ).save(out_dir / f"forecast_{geo}_{model}.svg")
+
+    raise NotImplementedError()
 
     # scores across seasons & states
     fit_scores = scores.filter(
