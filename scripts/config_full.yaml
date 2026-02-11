@@ -17,7 +17,7 @@ groups: [season, geography, season_geo]
 models:
   - name: LPLModel
     seed: 42
-    params:
+    model_params:
       muA_shape1: 100.0
       muA_shape2: 180.0
       sigmaA_rate: 80.0
