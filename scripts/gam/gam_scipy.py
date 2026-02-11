@@ -9,8 +9,8 @@ from jax.typing import ArrayLike
 from numpyro.infer import MCMC, NUTS
 from scipy.interpolate import BSpline, make_lsq_spline
 
-nis = pl.read_csv("data/nis_flu_national.csv")
-nis = nis.filter(pl.col("season") == "2009/2010")
+nis = pl.read_parquet("data/raw.parquet")
+nis.head()
 
 start_day = "-07-01"
 nis = (
@@ -34,7 +34,7 @@ def get_spline(x: pl.Series, y: pl.Series, p: int = 2, num_internal_knots=1) -> 
     x: pl.Series
         the value of predictor x, must be sorted and unique
     y: pl.Series
-        the value of response variable y
+        the value of response variable yS
     p: int
         the degree of spline
     num_internal_knots: int
@@ -147,6 +147,10 @@ def gam(
     S: ArrayLike,
     X: ArrayLike,
     estimate: ArrayLike,
+    sigma_z_rate=40,
+    groups=None,
+    num_group_factors=0,
+    num_group_levels: ArrayLike = jnp.array([0]),
     lam_shape=1.0,
     lam_rate=1.0,
     sigma_rate=40.0,
@@ -158,19 +162,39 @@ def gam(
     # Priors
     lam = numpyro.sample("lam", dist.Gamma(lam_shape, lam_rate))
     sigma = numpyro.sample("sigma", dist.Exponential(sigma_rate))
-    beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
+    # beta0 = numpyro.sample("beta0", dist.Normal(beta0_mean, beta0_sd))
 
     # Penalized precision matrix, add 1e-6 to make sure stability
     precision = (lam * S) + 1e-6 * jnp.eye(p)
 
-    # Sample coefficients with constraint
-    beta = numpyro.sample(
-        "beta",
-        dist.MultivariateNormal(jnp.zeros(p), sigma * jnp.linalg.inv(precision)),
-    )
+    if groups is None:
+        # Sample coefficients with constraint
+        beta = numpyro.sample(
+            "beta",
+            dist.MultivariateNormal(jnp.zeros(p), sigma * jnp.linalg.inv(precision)),
+        )
 
-    # Compute mean
-    mu = X @ beta + beta0
+        # Compute mean
+        mu = X @ beta
+
+    else:
+        sigma_z = numpyro.sample(
+            "sigma_z", dist.Exponential(sigma_z_rate), sample_shape=(num_group_factors,)
+        )
+
+        z = numpyro.sample(
+            "z",
+            dist.MultivariateNormal(0, jnp.eye(p)),
+            sample_shape=(sum(num_group_levels),),
+        )
+
+        dev = (
+            z * jnp.repeat(sigma_z, num_group_levels)[:, None]
+        )  # broadcast to allowing multiplying with z
+
+        beta_all = beta + jnp.sum(dev, axis=0)
+
+        mu = X @ beta_all
 
     # Likelihood
     numpyro.sample("obs", dist.Normal(mu, sigma), obs=estimate)
@@ -181,9 +205,9 @@ def posterior_mean(mcmc: MCMC, X) -> ArrayLike:
     samples = mcmc.get_samples()
     beta_sample = samples["beta"]
     beta_mean = jnp.mean(beta_sample, axis=0)
-    beta0_mean = jnp.mean(samples["beta0"])
+    # beta0_mean = jnp.mean(samples["beta0"])
 
-    mu = X @ beta_mean + beta0_mean
+    mu = X @ beta_mean
 
     return mu
 
@@ -233,4 +257,4 @@ if __name__ == "__main__":
         df
     ).mark_line(color="red").encode(x="date", y="mu")
 
-    charts.save("new_gam_fit_09_10.png")
+    charts.save("new_gam_fit_10_11.png")
