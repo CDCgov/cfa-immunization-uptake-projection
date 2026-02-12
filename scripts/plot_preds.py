@@ -64,7 +64,7 @@ def plot_fit(
     season: str,
     sort_month: List[str],
 ) -> alt.LayerChart:
-    pred_to_plot = (
+    chart_data = (
         pred.filter(
             pl.col("forecast_date") == pl.col("forecast_date").max(),
             pl.col("geography") == pl.lit(geography),
@@ -77,13 +77,10 @@ def plot_fit(
             pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
         )
         .collect()
+        .join(data, on=["season", "geography", "time_end"], how="inner")
     )
 
-    assert pred_to_plot["forecast_date"].unique().len() == 1
-
-    base = alt.Chart(
-        pred_to_plot.join(data, on=["season", "geography", "time_end"], how="inner")
-    ).encode(alt.X("month", title=None, sort=sort_month))
+    base = alt.Chart(chart_data).encode(alt.X("month", title=None, sort=sort_month))
 
     cone = base.mark_area(fill="black", opacity=0.25).encode(
         alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT), alt.Y2("pred_uci")
