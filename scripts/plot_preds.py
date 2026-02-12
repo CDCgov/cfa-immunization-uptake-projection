@@ -10,7 +10,7 @@ from plot_data import (
     month_order,
 )
 
-# alt.data_transformers.enable("vegafusion")
+alt.data_transformers.enable("vegafusion")
 
 LINE_OPACITY = 0.4
 
