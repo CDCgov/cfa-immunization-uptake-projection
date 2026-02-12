@@ -135,3 +135,7 @@ Y &\sim N(\mu, \sigma) \\
 \sigma &\sim Exp(40)
 \end{align*}
 ```
+
+#### Implementation
+
+In `scipy.interpolate`, design matrix is evaluated given a unique and non-decreasing series of $x$ and corresponding $y$. When adding group effect, this requires to get the X for each combination of levels from season and geography, estimate the deviation vector $\delta$ specific to that combination, and finally add to the population mean of $\bar \beta$. The final $mu$ for the entire time series is contatenated by each $X( \bar \beta + \delta_{s=i} + \delta_{g=j})$.
