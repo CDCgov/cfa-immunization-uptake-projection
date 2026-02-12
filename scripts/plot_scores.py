@@ -19,8 +19,8 @@ LINE_OPACITY = 0.4
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--scores", required=True)
-    p.add_argument("--output_dir", required=True)
     p.add_argument("--config", required=True)
+    p.add_argument("--output", required=True)
 
     args = p.parse_args()
 
@@ -29,7 +29,8 @@ if __name__ == "__main__":
 
     scores = pl.read_parquet(args.scores)
 
-    out_dir = Path(args.output_dir)
+    out_flag = Path(args.output)
+    out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     fit_scores = scores.filter(
@@ -143,3 +144,5 @@ if __name__ == "__main__":
         ),
         alt.Y("fc_score", title="Forecast score (abs. end-of-season diff.)"),
     ).save(out_dir / "forecast_fit_compare.svg")
+
+    out_flag.touch()
