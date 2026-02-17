@@ -37,7 +37,7 @@ $$
 X_{i, k} = B_k(x_{i})
 $$
 
-**$\beta$** is a vector of coefficients that control how much influence each basis function has on the fit of spline function $f(x_i)$. It will be estimated in model fitting. We assume $y$ is normally distributed and use identify link function for now, which is: $X\beta = E(y)$.
+**$\beta$** is a vector of coefficients that control how much influence each basis function has on the fit of spline function $f(x_i)$. It will be estimated in model fitting. We assume $y$ is normally distributed and use identity link function for now, which is: $X\beta = E(y)$.
 
 ## Bayesian framework
 
