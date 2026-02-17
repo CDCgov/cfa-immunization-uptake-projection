@@ -7,7 +7,6 @@ OUTPUT_DIR = output/$(RUN_ID)
 CONFIG_COPY = $(OUTPUT_DIR)/config.yaml
 DATA = $(OUTPUT_DIR)/data.parquet
 PRED_DIR = $(OUTPUT_DIR)/pred
-PREDS_FLAG = $(PRED_DIR)/.checkpoint
 SCORES = $(OUTPUT_DIR)/scores.parquet
 
 # each plotting script outputs multiple files; use a single output as a flag
@@ -27,7 +26,7 @@ EQ = =
 
 .PHONY: clean viz dx
 
-all: $(CONFIG_COPY) $(DATA) $(FITS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES)
+all: $(CONFIG_COPY) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -39,17 +38,14 @@ dx: scripts.diagnostics $(FITS) $(CONFIG)
 $(PLOT_SCORES): scripts/plot_scores.py $(SCORES) $(CONFIG)
 	python $< --scores=$(SCORES) --config=$(CONFIG) --output=$@
 
-$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG)
+$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS)
 	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --output=$@
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
 	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
 
-$(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA) $(CONFIG)
+$(SCORES): scripts/eval.py $(PREDS) $(DATA) $(CONFIG)
 	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
-
-$(PREDS_FLAG): $(PREDS)
-	touch $@
 
 # output/run_id/pred/forecast_date=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl
