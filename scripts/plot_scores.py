@@ -96,12 +96,6 @@ if __name__ == "__main__":
 
     (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
 
-    ## summary of end-of-season abs diff ##
-    alt.Chart(sis_data).mark_boxplot(extent="min-max").encode(
-        enc_x_month,
-        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-    ).save(out_dir / "eos_abs_diff_summary.svg")
-
     # end-of-season abs diff by state #
     state_sort = (
         sis_data.filter(pl.col("month") == "Jul")
