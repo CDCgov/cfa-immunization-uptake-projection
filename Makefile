@@ -7,12 +7,14 @@ OUTPUT_DIR = output/$(RUN_ID)
 CONFIG_COPY = $(OUTPUT_DIR)/config.yaml
 DATA = $(OUTPUT_DIR)/data.parquet
 PRED_DIR = $(OUTPUT_DIR)/pred
-PREDS_FLAG = $(PRED_DIR)/.checkpoint
 SCORES = $(OUTPUT_DIR)/scores.parquet
 
-PLOT_DATA = $(OUTPUT_DIR)/plots/coverage_trajectories.svg
-PLOT_PREDS = $(OUTPUT_DIR)/plots/score_by_geo.svg
+# each plotting script outputs multiple files; use a single output as a flag
+PLOT_DATA = $(OUTPUT_DIR)/plots/.data.checkpoint
+PLOT_PREDS = $(OUTPUT_DIR)/plots/.preds.checkpoint
+PLOT_SCORES = $(OUTPUT_DIR)/plots/.scores.checkpoint
 
+# dynamically find forecast dates to use
 FORECAST_DATES = $(shell python scripts/get_forecast_dates.py --config=$(CONFIG))
 PREDS = $(foreach date,$(FORECAST_DATES),$(PRED_DIR)/forecast_date=$(date)/part-0.parquet)
 FITS = $(foreach date,$(FORECAST_DATES),$(OUTPUT_DIR)/fits/fit_$(date).pkl)
@@ -24,7 +26,7 @@ EQ = =
 
 .PHONY: clean viz dx
 
-all: $(CONFIG_COPY) $(DATA) $(FITS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS)
+all: $(CONFIG_COPY) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -33,17 +35,17 @@ viz:
 dx: scripts.diagnostics $(FITS) $(CONFIG)
 	python $< --fit_dir=$(OUTPUT_DIR)/fits --output_dir=$(OUTPUT_DIR)/diagnostics --config=$(CONFIG)
 
-$(SCORES): scripts/eval.py $(PREDS_FLAG) $(DATA) $(CONFIG)
-	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
+$(PLOT_SCORES): scripts/plot_scores.py $(SCORES) $(CONFIG)
+	python $< --scores=$(SCORES) --config=$(CONFIG) --output=$@
 
-$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS_FLAG) $(SCORES)
-	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --output_dir=$(OUTPUT_DIR)/plots
+$(PLOT_PREDS): scripts/plot_preds.py $(CONFIG) $(DATA) $(PREDS)
+	python $< --config=$(CONFIG) --data=$(DATA) --preds=$(PRED_DIR) --output=$@
 
 $(PLOT_DATA): scripts/plot_data.py $(DATA) $(CONFIG)
-	python $< --config=$(CONFIG) --data=$(DATA) --output_dir=$(OUTPUT_DIR)/plots
+	python $< --config=$(CONFIG) --data=$(DATA) --output=$@
 
-$(PREDS_FLAG): $(PREDS)
-	touch $@
+$(SCORES): scripts/eval.py $(PREDS) $(DATA) $(CONFIG)
+	python $< --preds=$(PRED_DIR) --data=$(DATA) --config=$(CONFIG) --output=$@
 
 # output/run_id/pred/forecast_date=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl
