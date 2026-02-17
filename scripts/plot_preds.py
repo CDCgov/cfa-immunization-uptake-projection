@@ -104,8 +104,7 @@ if __name__ == "__main__":
     p.add_argument("--config", required=True)
     p.add_argument("--data", required=True)
     p.add_argument("--preds", required=True)
-    p.add_argument("--scores", required=True)
-    p.add_argument("--output_dir", required=True)
+    p.add_argument("--output", required=True, help="output flag file")
     args = p.parse_args()
 
     with open(args.config) as f:
@@ -113,9 +112,9 @@ if __name__ == "__main__":
 
     obs_raw = pl.read_parquet(args.data)
     preds = pl.scan_parquet(args.preds)
-    scores = pl.read_parquet(args.scores)
 
-    out_dir = Path(args.output_dir)
+    out_flag = Path(args.output)
+    out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # clean data
@@ -167,3 +166,5 @@ if __name__ == "__main__":
         plot_forecast(data=fc_plot_data, geography=geo, sort_month=sort_month).save(
             out_dir / f"forecast_{geo}.svg"
         )
+
+    out_flag.touch()
