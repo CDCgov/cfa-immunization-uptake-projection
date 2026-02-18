@@ -1,8 +1,8 @@
 # app.py
+import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-import matplotlib.pyplot as plt
-from scipy.interpolate import make_lsq_spline, BSpline
+from scipy.interpolate import BSpline, make_lsq_spline
 
 st.set_page_config(page_title="Interactive LSQ B-splines", layout="wide")
 
