@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple
 
 import altair as alt
+import forestci as fci
 import numpy as np
 import polars as pl
 from plot_data import month_order
@@ -164,13 +165,15 @@ def forecast(
         forecast_t=forecast_t, pred=y_pred
     )
 
+    ci = fci.random_forest_error(rf, X_fit.shape, X_pred)
+
     features = pl.from_records(
         enc.categories(data_fit.select(features)),
         orient="row",
         schema=["feature", "value"],
     ).with_columns(forecast_t=forecast_t, importance=rf.feature_importances_)
 
-    return preds, features
+    return preds, features, ci
 
 
 # Generate forecasts
@@ -178,13 +181,26 @@ print("\nGenerating forecasts...")
 results = [forecast(x) for x in range(MIN_T, 0 + 1)]
 forecasts = pl.concat([x[0] for x in results])
 importances = pl.concat([x[1] for x in results])
+sds = np.sqrt(np.concat([x[2] for x in results]))
+
+forecasts = forecasts.with_columns(sd=sds).with_columns(
+    lci=pl.col("pred") - 1.96 * pl.col("sd"), uci=pl.col("pred") + 1.96 * pl.col("sd")
+)
 
 # Forecast visualization by geography
-chart3 = (
+chart_pred = (
     alt.Chart(forecasts)
     .mark_line(point=True)
-    .encode(alt.X("forecast_t"), alt.Y("pred"), alt.Facet("geography", columns=5))
+    .encode(alt.X("forecast_t"), alt.Y("pred"))
 )
+
+chart_ci = (
+    alt.Chart(forecasts)
+    .mark_area(opacity=0.3)
+    .encode(alt.X("forecast_t"), alt.Y("lci"), alt.Y2("uci"))
+)
+chart3 = alt.layer(chart_pred, chart_ci).facet("geography", columns=5)
+
 chart3.save(str(OUTPUT_DIR / "forecasts_by_geography.png"))
 print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.png'}")
 
