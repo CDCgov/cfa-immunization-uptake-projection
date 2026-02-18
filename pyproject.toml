@@ -28,6 +28,7 @@ dependencies = [
     "streamlit>=1.45.1,<2",
     "scipy>=1.15.3",
     "vegafusion>=2.0",
+    "forestci>=0.7",
 ]
 
 [project.optional-dependencies]
