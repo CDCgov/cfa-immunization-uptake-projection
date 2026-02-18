@@ -51,7 +51,7 @@ We use Bayesian framework to fit the GAM model.
 \begin{align*}
 p(\beta,\lambda,\sigma |y) & ∝ p(y |\beta,\sigma)p(\beta|\lambda, \sigma)p(\lambda)p(\sigma) \\
 p(y|\beta, \sigma) & \sim MultiNormal(X\beta, \sigma I) \\
-p(\beta|\lambda, \sigma) & \sim MultiNormal(0, (\sigma/\lambda)S^{-}) \\
+p(\beta|\lambda, \sigma) & \sim MultiNormal(0, (\sigma/\lambda)S^{-1}) \\
 p(\lambda) & \sim Gamma(shape=1.0,rate=1.0) \\
 p(\sigma) & \sim Exp(40)
 \end{align*}
@@ -60,11 +60,14 @@ p(\sigma) & \sim Exp(40)
 
 #### Deriving prior of $\beta$
 
-As we assume the link function is identity, that indicates the data $y$ follows normal distribution with covariance matrix $\sigma I$.
+We assume data $y$ follows normal distribution with covariance matrix $\sigma I$.
 $$
-log(y|\beta,\sigma) = -||y-X\beta||^2/(2\sigma) +c
+Y \sim N(X\beta, \sigma I) \\
 $$
-
+where the likelihood function is proportional to:
+$$
+p(y|\beta,\sigma) ∝ -||y-X\beta||^2/(2\sigma) +c
+$$
 Instead of directly minimizing $||y - X\beta||$, we add a term to penalize the wiggliness of the spline. The target function to minimize becomes:
 
 $$
@@ -110,7 +113,7 @@ $$
 \end{align}
 $$
 
-to have $\beta \sim N(0, (\sigma/\lambda)S^{-})$. This is the prior of $\beta$ and needs to be estimated from data.
+to have $\beta \sim N(0, (\sigma/\lambda)S^{-1})$. This is the prior of $\beta$ and needs to be estimated from data.
 
 ### Group effect
 
@@ -126,7 +129,7 @@ Given the population mean of $\beta$, denoted as $\bar \beta$, the $\beta$ speci
 \mu &= X\beta_{total} \\
 Y &\sim N(\mu, \sigma) \\
 
-\bar \beta &\sim MultiNormal(0, (\sigma/\lambda)S^{-}) \\
+\bar \beta &\sim MultiNormal(0, (\sigma/\lambda)S^{-1}) \\
 \delta_s &\sim MultiNormal(0, \sigma_s I) \\
 \delta_g &\sim MultiNormal(0, \sigma_g I) \\
 \lambda &\sim Gamma(shape=1.0,rate=1.0) \\
