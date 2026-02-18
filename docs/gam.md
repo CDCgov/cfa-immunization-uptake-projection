@@ -145,12 +145,12 @@ where there are up to $K$ basis functions, the $\beta_{1k}$ are the coefficients
 We also need some observation error model. For example, normally-distributed errors would be:
 
 $$
-L \equiv \mathbb{P}\big[y \mid \mathbb{E}[Y] \big] = \mathcal{N}\left(y; \mathbb{E}[Y], \sigma_\varepsilon^2 \right)
+L \equiv \prod_{tsg} \mathbb{P}\big[y_{tsg} \mid \mathbb{E}[Y_{tsg}] \big] = \mathcal{N}\left(y_{tsg}; \mathbb{E}[Y_{tsg}], \sigma_\varepsilon^2 \right)
 $$
 
 ### Empirical Bayes
 
 1. Pick basis functions, including the number and position of knots. An algorithm does this; in mgcv you specify the maximum number and it does the basis reduction, based on the data.
-1. Compute the penalty matrix $\mathbf{S}$ from the basis functions.
-1. Choose smoothing parameters $\lambda_j$. An algorithm does this, based on the data.
-1. Find the $\beta$, which includes $\beta_0$ and all the $\beta_{ijk}$, that minimizes $L - \sum_j \lambda_j \beta_j^T \mathbf{S}_j \beta_j$
+1. Compute the penalty matrices $\mathbf{S}_i$ from the basis functions $b_{ijk}$.
+1. Choose smoothing parameters $\lambda_i$. An algorithm does this, based on the data.
+1. Find the $\beta$, which includes $\beta_0$ and all the $\beta_{1k}$ and $\beta_{ijk}$, that minimizes $L - \sum_i \lambda_i \beta_i^T \mathbf{S}_i \beta_i$
