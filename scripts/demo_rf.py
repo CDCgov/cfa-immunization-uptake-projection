@@ -165,7 +165,7 @@ def forecast(
         forecast_t=forecast_t, pred=y_pred
     )
 
-    ci = fci.random_forest_error(rf, X_fit.shape, X_pred)
+    error = fci.random_forest_error(rf, X_fit.shape, X_pred)
 
     features = pl.from_records(
         enc.categories(data_fit.select(features)),
@@ -173,7 +173,7 @@ def forecast(
         schema=["feature", "value"],
     ).with_columns(forecast_t=forecast_t, importance=rf.feature_importances_)
 
-    return preds, features, ci
+    return preds, features, error
 
 
 # Generate forecasts
