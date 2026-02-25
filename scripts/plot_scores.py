@@ -9,10 +9,13 @@ from plot_data import (
     TICK_KWARGS,
     add_medians,
     gather_n,
+    hightlight_state,
     month_order,
 )
 
 LINE_OPACITY = 0.4
+NUMBER_HIGHLIGHT = 2
+HIGHLIGHT_MONTH = "Jul"
 
 # scores across seasons & states
 
@@ -39,7 +42,7 @@ if __name__ == "__main__":
     ).with_columns(pl.col("score_value").log())
 
     sort_month = month_order(config["season"]["start_month"])
-    enc_x_month = alt.X("month", title=None, sort=sort_month)
+    enc_x_month = alt.X("month:N", title=None, sort=sort_month)
 
     enc_y_mspe = alt.Y(
         "score_value", title="Score (Log(MSPE))", scale=alt.Scale(zero=False)
@@ -72,14 +75,16 @@ if __name__ == "__main__":
         pl.col("season") == pl.col("season").max(),
     ).with_columns(month=pl.col("forecast_date").dt.to_string("%b"))
 
+    line_encodings = dict(
+        x=enc_x_month,
+        y=alt.Y("score_value:Q", title="Score (abs. end-of-season diff.)"),
+        detail=alt.Detail("geography:Q"),
+    )
+
     sis_line = (
         alt.Chart(sis_data)
         .mark_line(color="black", opacity=LINE_OPACITY)
-        .encode(
-            enc_x_month,
-            alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-            alt.Detail("geography"),
-        )
+        .encode(**line_encodings)
     )
 
     sis_tick_base = alt.Chart(
@@ -97,20 +102,55 @@ if __name__ == "__main__":
 
     (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
 
-    # end-of-season abs diff by state #
-    state_sort = (
-        sis_data.filter(pl.col("month") == "Jul")
-        .sort(pl.col("score_value"))
-        .select("geography")
-        .to_numpy()
-        .ravel()
-        .tolist()
+    ## highlight the NUMBER_HIGHLIGHT of states that has lowest(best) and highest(worst) score in Jul
+    sis_highlight_best = (
+        alt.Chart(
+            sis_data.filter(
+                pl.col("geography").is_in(
+                    hightlight_state(sis_data, HIGHLIGHT_MONTH, NUMBER_HIGHLIGHT)[
+                        "best"
+                    ]
+                )
+            )
+        )
+        .mark_line(color="blue")
+        .encode(**line_encodings)
     )
-    alt.Chart(sis_data).mark_line(color="black", opacity=LINE_OPACITY).encode(
-        enc_x_month,
-        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
-        alt.Facet("geography", columns=9, sort=state_sort),
-    ).save(out_dir / "eos_abs_diff_by_state.svg")
+
+    sis_highlight_worst = (
+        alt.Chart(
+            sis_data.filter(
+                pl.col("geography").is_in(
+                    hightlight_state(sis_data, HIGHLIGHT_MONTH, NUMBER_HIGHLIGHT)[
+                        "worst"
+                    ]
+                )
+            )
+        )
+        .mark_line(color="red")
+        .encode(**line_encodings)
+    )
+
+    sis_tick_base_highlight = alt.Chart(
+        sis_data.filter(
+            pl.col("geography").is_in(
+                hightlight_state(sis_data, HIGHLIGHT_MONTH, NUMBER_HIGHLIGHT)["best"]
+                + hightlight_state(sis_data, HIGHLIGHT_MONTH, NUMBER_HIGHLIGHT)["worst"]
+            ),
+            pl.col("forecast_date") == pl.col("forecast_date").max(),
+        )
+    ).encode(enc_x_month, alt.Y("score_value"), alt.Text("geography"))
+
+    sis_tick_highlight = sis_tick_base_highlight.mark_point(**TICK_KWARGS)
+    sis_text_highlight = sis_tick_base_highlight.mark_text(align="left", dx=15)
+
+    (
+        sis_line
+        + sis_highlight_best
+        + sis_highlight_worst
+        + sis_tick_highlight
+        + sis_text_highlight
+    ).save(out_dir / "scores_increasing_highlight.svg")
 
     # score vs. forecast
     avg_fit = (
