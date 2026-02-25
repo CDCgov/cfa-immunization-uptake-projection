@@ -93,6 +93,19 @@ def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
     )
 
 
+def hightlight_state(df, month, order_n, value="score_value", state_var="geography"):
+    """Return a dic with a list of states (n = order_n) that has lowest score(best) and highest score(worst) at a given month"""
+    sorted_state = (
+        df.filter(pl.col("month") == month)
+        .sort(pl.col(value))
+        .select(state_var)
+        .to_numpy()
+        .ravel()
+        .tolist()
+    )
+    return {"best": sorted_state[:order_n], "worst": sorted_state[-order_n:]}
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
