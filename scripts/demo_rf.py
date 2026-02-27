@@ -181,10 +181,11 @@ print("\nGenerating forecasts...")
 results = [forecast(x) for x in range(MIN_T, 0 + 1)]
 forecasts = pl.concat([x[0] for x in results])
 importances = pl.concat([x[1] for x in results])
-sds = np.sqrt(np.concat([x[2] for x in results]))
+vars = np.concat([x[2] for x in results])
 
-forecasts = forecasts.with_columns(sd=sds).with_columns(
-    lci=pl.col("pred") - 1.96 * pl.col("sd"), uci=pl.col("pred") + 1.96 * pl.col("sd")
+forecasts = forecasts.with_columns(sd=np.sqrt(vars)).with_columns(
+    lci=pl.col("pred") - 1.96 * pl.col("sd"),
+    uci=pl.col("pred") + 1.96 * pl.col("sd"),
 )
 
 # Forecast visualization by geography
