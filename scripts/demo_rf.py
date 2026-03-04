@@ -189,21 +189,43 @@ forecasts = forecasts.with_columns(sd=np.sqrt(vars)).with_columns(
 )
 
 # Forecast visualization by geography
+data = (
+    data.unpivot(
+        index=["season", "geography"], variable_name="forecast_t", value_name="estimate"
+    )
+    .rename({"forecast_t": "target_t"})
+    .filter(
+        pl.col("season") == pl.lit("2021/2022"), pl.col("target_t") == pl.lit("t=0")
+    )
+    .with_columns(forecast_t=pl.col("target_t").str.replace("t=", "").cast(pl.Int64))
+    .drop("forecast_t")
+    .sort(["season", "geography", "target_t"])
+)
+
+pred_data = data.join(forecasts, on=["season", "geography"], how="right")
+
+chart_data = (
+    alt.Chart(pred_data).mark_point().encode(alt.X("forecast_t"), alt.Y("estimate"))
+)
+
 chart_pred = (
-    alt.Chart(forecasts)
-    .mark_line(point=True)
-    .encode(alt.X("forecast_t"), alt.Y("pred"))
+    alt.Chart(pred_data)
+    .mark_line(point=False)
+    .encode(
+        alt.X("forecast_t"),
+        alt.Y("pred"),
+    )
 )
 
 chart_ci = (
-    alt.Chart(forecasts)
+    alt.Chart(pred_data)
     .mark_area(opacity=0.3)
     .encode(alt.X("forecast_t"), alt.Y("lci"), alt.Y2("uci"))
 )
-chart3 = alt.layer(chart_pred, chart_ci).facet("geography", columns=5)
+chart3 = alt.layer(chart_data, chart_pred, chart_ci).facet("geography", columns=5)
 
 chart3.save(str(OUTPUT_DIR / "forecasts_by_geography.png"))
-print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.png'}")
+
 
 # Forecast errors
 errors = (
@@ -242,5 +264,5 @@ chart5 = (
 )
 chart5.save(str(OUTPUT_DIR / "feature_importance_over_time.png"))
 print(
-    f"Saved feature importance over time to {OUTPUT_DIR / 'feature_importance_over_time.png'}"
+    f"Saved feature importance over time to {OUTPUT_DIR / 'feature_importance_over_time10000.png'}"
 )
