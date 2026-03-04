@@ -53,9 +53,9 @@ While based on [Wager et al](https://jmlr.org/papers/volume15/wager14a/wager14a.
 
 ```math
 
-V = \sum_{i=1}^n \frac{\sum_b (N_{bi}^* -1)(t_b^*(x)-\bar t^*(x))}{B} - \frac{n}{B^2}\sum_{b=1}^B(t^*_b(x) - \bar t^*(x))^2
+V = \sum_{i=1}^n \frac{\sum_b (N_{bi}^* -1)(f_b(x)-\hat f)}{B} - \frac{n}{B^2}\sum_{b=1}^B(f_b(x) - \hat f)^2
 
 ```
-where $n$ is number of the data points, $N_{bi}^*$ is the number of times the $i^{th}$ observation appears in the boostrap sample $b$, $t_b^*(x)$ is the prediction at $x$ from tree $b$, $\bar t^*(x)$ is the average prediction across all the trees at $x$. This estimator is used by R package `randomForestCI` and is inherited by Python package `forestci`.
+where $n$ is number of the data points, $N_{bi}^*$ is the number of times the $i^{th}$ observation appears in the boostrap sample $b$, $f_b(x)$ is the prediction at $x$ from tree $b$, $\hat f$ is the average prediction across all the trees at $x$. This estimator is used by R package `randomForestCI` and is inherited by Python package `forestci`.
 
 Based on central limit theorem, the distribution of $\hat f$ is normal, then we can calculate the 95% confidence interval as $[\hat f - 1.96 \sqrt(V), \hat f + 1.96 \sqrt(V)]$.
