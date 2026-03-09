@@ -93,11 +93,24 @@ def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
     )
 
 
+def hightlight_state(df, month, order_n, value="score_value", state_var="geography"):
+    """Return a dic with a list of states (n = order_n) that has lowest score(best) and highest score(worst) at a given month"""
+    sorted_state = (
+        df.filter(pl.col("month") == month)
+        .sort(pl.col(value))
+        .select(state_var)
+        .to_numpy()
+        .ravel()
+        .tolist()
+    )
+    return {"best": sorted_state[:order_n], "worst": sorted_state[-order_n:]}
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
     p.add_argument("--data", required=True)
-    p.add_argument("--output_dir", required=True)
+    p.add_argument("--output", required=True)
     args = p.parse_args()
 
     with open(args.config) as f:
@@ -106,7 +119,8 @@ if __name__ == "__main__":
     data = pl.read_parquet(args.data)
 
     # ensure output directory exists
-    out_dir = Path(args.output_dir)
+    out_flag = Path(args.output)
+    out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # for one season, show each state's trajectory
@@ -160,3 +174,5 @@ if __name__ == "__main__":
         alt.Y("estimate", title="End of season coverage", axis=AXIS_PERCENT),
         *MEDIAN_ENCODINGS,
     ).save(out_dir / "coverage_by_state.svg")
+
+    out_flag.touch()
