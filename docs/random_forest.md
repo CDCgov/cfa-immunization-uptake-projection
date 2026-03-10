@@ -53,9 +53,9 @@ While based on [Wager et al](https://jmlr.org/papers/volume15/wager14a/wager14a.
 
 ```math
 
-V = \sum_{i=1}^n \frac{\sum_b (N_{bi}^* -1)(f_b(x)-\hat f)}{B} - \frac{n}{B^2}\sum_{b=1}^B(f_b(x) - \hat f)^2
+V = \sum_{i=1}^n \left[ \frac{\sum_b (N_{bi}^* -1)(f_b(x)-\hat f)}{B} \right]^2 - \frac{n}{B^2}\sum_{b=1}^B(f_b(x) - \hat f)^2
 
 ```
-where $n$ is number of the data points, $N_{bi}^*$ is the number of times the $i^{th}$ observation appears in the boostrap sample $b$, $f_b(x)$ is the prediction at $x$ from tree $b$, $\hat f$ is the average prediction across all the trees at $x$. This estimator is used by R package `randomForestCI` and is inherited by Python package `forestci`.
+where $n$ is number of the data points in testing data, $N_{bi}^*$ is the number of times the $i^{th}$ observation from the training data set appears in the boostrap sample $b$, $f_b(x)$ is the prediction at $x$ from tree $b$, $\hat f$ is the average prediction across all the trees at $x$. The error is composed of the infinitesimal Jackknife error estimator (left term) and the bias-correction term (right) to reduce Monte Carlo error. The infinitesimal Jackknife error estimator is proved though considering the number of times each data point in the training data set is resampled in the bootstrapped data from tree $b$ as a multinomial distribution. Details are in [Efron et al](https://efron.ckirby.su.domains/papers/2013ModelSelection.pdf). This estimator is used by R package `randomForestCI` and is inherited by Python package `forestci`.
 
 Based on central limit theorem, the distribution of $\hat f$ is normal, then we can calculate the 95% confidence interval as $[\hat f - 1.96 \sqrt(V), \hat f + 1.96 \sqrt(V)]$.
