@@ -136,7 +136,11 @@ print(f"Saved error distribution chart to {OUTPUT_DIR / 'error_distribution.png'
 
 # Forecasting function
 def forecast(
-    forecast_t: int, target_t: int = 0, target_season: str = "2021/2022", data=data
+    forecast_t: int,
+    target_t: int = 0,
+    target_season: str = "2021/2022",
+    data=data,
+    alpha=0.05,
 ):
     assert forecast_t >= MIN_T
 
@@ -152,7 +156,7 @@ def forecast(
     X_fit = enc.encode(data_fit.select(features))
     y_fit = data_fit.select(f"t={target_t}").to_series().to_numpy()
 
-    rf = RandomForestRegressor()
+    rf = RandomForestRegressor(oob_score=True)
     rf.fit(X_fit, y_fit)
 
     # make the forecast
@@ -164,29 +168,76 @@ def forecast(
         forecast_t=forecast_t, pred=y_pred
     )
 
+    # error = fci.random_forest_error(rf, X_fit.shape, X_pred)
+    resid = y_fit - rf.oob_prediction_
+    low_q = np.quantile(resid, alpha / 2)
+    high_q = np.quantile(resid, 1 - alpha / 2)
+
     features = pl.from_records(
         enc.categories(data_fit.select(features)),
         orient="row",
         schema=["feature", "value"],
     ).with_columns(forecast_t=forecast_t, importance=rf.feature_importances_)
 
-    return preds, features
+    return preds, features, low_q, high_q
 
 
 # Generate forecasts
 print("\nGenerating forecasts...")
 results = [forecast(x) for x in range(MIN_T, 0 + 1)]
-forecasts = pl.concat([x[0] for x in results])
+forecasts = [x[0] for x in results]
 importances = pl.concat([x[1] for x in results])
+# vars = np.concat([x[2] for x in results])
+lowqs = np.array([x[2] for x in results])
+highqs = np.array([x[3] for x in results])
+
+forecasts = pl.concat(
+    [
+        forecast.with_columns(
+            pred_lci=pl.col("pred") + lowq, pred_uci=pl.col("pred") + highq
+        )
+        for forecast, lowq, highq in zip(forecasts, lowqs, highqs)
+    ]
+)
 
 # Forecast visualization by geography
-chart3 = (
-    alt.Chart(forecasts)
-    .mark_line(point=True)
-    .encode(alt.X("forecast_t"), alt.Y("pred"), alt.Facet("geography", columns=5))
+data = (
+    data.unpivot(
+        index=["season", "geography"], variable_name="forecast_t", value_name="estimate"
+    )
+    .rename({"forecast_t": "target_t"})
+    .filter(
+        pl.col("season") == pl.lit("2021/2022"), pl.col("target_t") == pl.lit("t=0")
+    )
+    .with_columns(forecast_t=pl.col("target_t").str.replace("t=", "").cast(pl.Int64))
+    .drop("forecast_t")
+    .sort(["season", "geography", "target_t"])
 )
+
+pred_data = data.join(forecasts, on=["season", "geography"], how="right")
+
+chart_data = (
+    alt.Chart(pred_data).mark_point().encode(alt.X("forecast_t"), alt.Y("estimate"))
+)
+
+chart_pred = (
+    alt.Chart(pred_data)
+    .mark_line(point=False)
+    .encode(
+        alt.X("forecast_t"),
+        alt.Y("pred"),
+    )
+)
+
+chart_ci = (
+    alt.Chart(pred_data)
+    .mark_area(opacity=0.3)
+    .encode(alt.X("forecast_t"), alt.Y("pred_lci"), alt.Y2("pred_uci"))
+)
+chart3 = alt.layer(chart_data, chart_pred, chart_ci).facet("geography", columns=5)
+
 chart3.save(str(OUTPUT_DIR / "forecasts_by_geography.png"))
-print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.png'}")
+
 
 # Forecast errors
 errors = (
@@ -225,5 +276,5 @@ chart5 = (
 )
 chart5.save(str(OUTPUT_DIR / "feature_importance_over_time.png"))
 print(
-    f"Saved feature importance over time to {OUTPUT_DIR / 'feature_importance_over_time.png'}"
+    f"Saved feature importance over time to {OUTPUT_DIR / 'feature_importance_over_time10000.png'}"
 )
