@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Tuple
 
 import altair as alt
-import forestci as fci
 import numpy as np
 import polars as pl
 from plot_data import month_order
@@ -137,7 +136,11 @@ print(f"Saved error distribution chart to {OUTPUT_DIR / 'error_distribution.png'
 
 # Forecasting function
 def forecast(
-    forecast_t: int, target_t: int = 0, target_season: str = "2021/2022", data=data
+    forecast_t: int,
+    target_t: int = 0,
+    target_season: str = "2021/2022",
+    data=data,
+    alpha=0.05,
 ):
     assert forecast_t >= MIN_T
 
@@ -153,7 +156,7 @@ def forecast(
     X_fit = enc.encode(data_fit.select(features))
     y_fit = data_fit.select(f"t={target_t}").to_series().to_numpy()
 
-    rf = RandomForestRegressor()
+    rf = RandomForestRegressor(oob_score=True)
     rf.fit(X_fit, y_fit)
 
     # make the forecast
@@ -165,7 +168,10 @@ def forecast(
         forecast_t=forecast_t, pred=y_pred
     )
 
-    error = fci.random_forest_error(rf, X_fit.shape, X_pred)
+    # error = fci.random_forest_error(rf, X_fit.shape, X_pred)
+    resid = y_fit - rf.oob_prediction_
+    low_q = np.quantile(resid, alpha / 2)
+    high_q = np.quantile(resid, 1 - alpha / 2)
 
     features = pl.from_records(
         enc.categories(data_fit.select(features)),
@@ -173,19 +179,25 @@ def forecast(
         schema=["feature", "value"],
     ).with_columns(forecast_t=forecast_t, importance=rf.feature_importances_)
 
-    return preds, features, error
+    return preds, features, low_q, high_q
 
 
 # Generate forecasts
 print("\nGenerating forecasts...")
 results = [forecast(x) for x in range(MIN_T, 0 + 1)]
-forecasts = pl.concat([x[0] for x in results])
+forecasts = [x[0] for x in results]
 importances = pl.concat([x[1] for x in results])
-vars = np.concat([x[2] for x in results])
+# vars = np.concat([x[2] for x in results])
+lowqs = np.array([x[2] for x in results])
+highqs = np.array([x[3] for x in results])
 
-forecasts = forecasts.with_columns(sd=np.sqrt(vars)).with_columns(
-    lci=pl.col("pred") - 1.96 * pl.col("sd"),
-    uci=pl.col("pred") + 1.96 * pl.col("sd"),
+forecasts = pl.concat(
+    [
+        forecast.with_columns(
+            pred_lci=pl.col("pred") + lowq, pred_uci=pl.col("pred") + highq
+        )
+        for forecast, lowq, highq in zip(forecasts, lowqs, highqs)
+    ]
 )
 
 # Forecast visualization by geography
@@ -220,7 +232,7 @@ chart_pred = (
 chart_ci = (
     alt.Chart(pred_data)
     .mark_area(opacity=0.3)
-    .encode(alt.X("forecast_t"), alt.Y("lci"), alt.Y2("uci"))
+    .encode(alt.X("forecast_t"), alt.Y("pred_lci"), alt.Y2("pred_uci"))
 )
 chart3 = alt.layer(chart_data, chart_pred, chart_ci).facet("geography", columns=5)
 
