@@ -40,22 +40,34 @@ After training, predictions for the predictors $x'$ in testing data can be made 
 \hat f = \frac{1}{B}\sum_{b=1}^B f_b(x')
 
 ```
-The prediction error (as variance) can also be derived:
+This process is also called _Bootstrap smoothing_, known as "bagging" ([Breiman 1996](https://link.springer.com/article/10.1007/BF00058655), [Buja et al 2006](https://sites.stat.washington.edu/wxs/Learning-papers/sinica-bagging-buja-stuetzle.pdf)). $\hat f$ is also called bootstrap smoothed estimator. As bagging is a form of model averaging, it leads to variance reduction. Because, in this case, instead of deriving the 95% CI for individual tree estimator with its own variance:
 
 ```math
-\begin{align}
+f_b \pm 1.96 \sqrt(V_b)
 
-V = \frac{\sum_{b=1}^B(f_b(x') -\hat f)^2}{B-1}
-
-\end{align}
 ```
+The 95% CI for random forest used a variance for the bootstrap smoothed estimator:
+
+```math
+\hat f \pm 1.96 \sqrt(V)
+
+```
+
+Ideally, $V$ is derived from a second level of bootstrapping: for each bootstrapped sample $(x^\star_i, y^\star_i), i = 1,2,...n$, the smoothed estimator $\hat f_i$ can be derived, and $V$ can be calculated given $\hat f_i, i = 1,2,...n$. While this method yields $n^n$ number of samples for data series with length $n$, it is computationally challenge to derive the ideal $V$. [Efron et al](https://efron.ckirby.su.domains/papers/2013ModelSelection.pdf) derived an estimator to adapt to the situation when the number of bootstrapped samples is finite. It is:
+
+```math
+V_{IJ} = \sum_{i=1}^n \left[ \frac{\sum_b (N_{bi}^* -1)(f_b(x)-\hat f)}{B} \right]^2
+
+```
+where $n$ is number of the data points, $N_{bi}^*$ is the number of times the $i^{th}$ observation from the data set appears in the boostrap sample $b$, $f_b(x)$ is the prediction at $x$ from tree $b$, $\hat f$ is the average prediction across all the trees at $x$. The estimator is called infinitesimal Jackknife error estimator. It assumes the number of times each data point in the training data set is resampled in the bootstrapped data from tree $b$ as a multinomial distribution. Details are in [Efron et al](https://efron.ckirby.su.domains/papers/2013ModelSelection.pdf).
+
 While based on [Wager et al](https://jmlr.org/papers/volume15/wager14a/wager14a.pdf), estimating the variance of prediction error (Eq(1)) can be challenging, as it includes two sources of noises: sampling noise from data collection, and Monte Carlo noise from the boostrap replicates. Specifically, Monte Carlo noise will inflate when $B$ is small. This study proposes a bias-corrected estimator of variance for random forest. It is:
 
 ```math
 
-V = \sum_{i=1}^n \left[ \frac{\sum_b (N_{bi}^* -1)(f_b(x)-\hat f)}{B} \right]^2 - \frac{n}{B^2}\sum_{b=1}^B(f_b(x) - \hat f)^2
+V = V_{IJ} - \frac{n}{B^2}\sum_{b=1}^B(f_b(x) - \hat f)^2
 
 ```
-where $n$ is number of the data points in testing data, $N_{bi}^*$ is the number of times the $i^{th}$ observation from the training data set appears in the boostrap sample $b$, $f_b(x)$ is the prediction at $x$ from tree $b$, $\hat f$ is the average prediction across all the trees at $x$. The error is composed of the infinitesimal Jackknife error estimator (left term) and the bias-correction term (right) to reduce Monte Carlo error. The infinitesimal Jackknife error estimator is proved though considering the number of times each data point in the training data set is resampled in the bootstrapped data from tree $b$ as a multinomial distribution. Details are in [Efron et al](https://efron.ckirby.su.domains/papers/2013ModelSelection.pdf). This estimator is used by R package `randomForestCI` and is inherited by Python package `forestci`.
+It adds a bias-correction term (right) to reduce Monte Carlo error. The estimator $V$ is used by R package `randomForestCI` and is inherited by Python package `forestci` to calculate the prediction error.
 
-Based on central limit theorem, the distribution of $\hat f$ is normal, then we can calculate the 95% confidence interval as $[\hat f - 1.96 \sqrt(V), \hat f + 1.96 \sqrt(V)]$.
+Based on central limit theorem, the distribution of $\hat f$ is normal, then we can calculate the 95% prediction interval as $[\hat f - 1.96 \sqrt(V), \hat f + 1.96 \sqrt(V)]$.
