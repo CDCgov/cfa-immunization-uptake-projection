@@ -84,6 +84,7 @@ class CoverageEncoder:
 
 
 # Forecasting function
+# Forecasting function
 def forecast(
     forecast_t: int,
     target_t: int = 0,
@@ -128,61 +129,91 @@ def forecast(
         [data_pred.select(["season", "geography"]), pred_qs], how="horizontal"
     )
 
-    preds = preds.with_columns(forecast_t=forecast_t, pred=y_pred_se)
+    preds = preds.with_columns(forecast_t=forecast_t, target_t=target_t, pred=y_pred_se)
 
     return preds
 
 
-forecasts = [forecast(x) for x in range(MIN_T, 1)]
-forecasts = pl.concat(forecasts)
+def plot(
+    x_name,
+    plot_name,
+    data,
+    obs_name="estimate:Q",
+    pred_name="pred:Q",
+    med_name="median:Q",
+    lpi_name="lpi:Q",
+    upi_name="upi:Q",
+    facet="geography:N",
+):
+    chart_data = alt.Chart(data).mark_point().encode(alt.X(x_name), alt.Y(obs_name))
 
-data = (
+    chart_pred = (
+        alt.Chart(data)
+        .mark_line(point=False, color="orange")
+        .encode(
+            alt.X(x_name),
+            alt.Y(pred_name),
+        )
+    )
+
+    chart_med = (
+        alt.Chart(data)
+        .mark_line(point=False, color="red")
+        .encode(
+            alt.X(x_name),
+            alt.Y(med_name),
+        )
+    )
+
+    chart_qs = (
+        alt.Chart(data)
+        .mark_area(opacity=0.3)
+        .encode(alt.X(x_name), alt.Y(lpi_name), alt.Y2(upi_name))
+    )
+    charts = alt.layer(chart_data, chart_pred, chart_med, chart_qs).facet(
+        facet, columns=5
+    )
+
+    charts.save(OUTPUT_DIR / plot_name)
+
+
+data_to_join = (
     data.unpivot(
         index=["season", "geography"], variable_name="forecast_t", value_name="estimate"
     )
     .rename({"forecast_t": "target_t"})
-    .filter(
-        pl.col("season") == pl.lit("2021/2022"), pl.col("target_t") == pl.lit("t=0")
-    )
-    .with_columns(forecast_t=pl.col("target_t").str.replace("t=", "").cast(pl.Int64))
-    .drop("forecast_t")
+    .filter(pl.col("season") == pl.lit("2021/2022"))
+)
+
+### forecast end-of-season across forecast dates ###
+forecasts = [forecast(x) for x in range(MIN_T, 1)]
+forecasts = pl.concat(forecasts)
+
+pred_data1 = (
+    data_to_join.filter(pl.col("target_t") == pl.lit("t=0"))
     .sort(["season", "geography", "target_t"])
-)
-
-pred_data = data.join(forecasts, on=["season", "geography"], how="right").rename(
-    {"quantile=0.025": "lpi", "quantile=0.5": "median", "quantile=0.975": "upi"}
-)
-
-chart_data = (
-    alt.Chart(pred_data).mark_point().encode(alt.X("forecast_t"), alt.Y("estimate"))
-)
-
-chart_pred = (
-    alt.Chart(pred_data)
-    .mark_line(point=False, color="orange")
-    .encode(
-        alt.X("forecast_t"),
-        alt.Y("pred"),
+    .join(forecasts, on=["season", "geography"], how="right")
+    .rename(
+        {"quantile=0.025": "lpi", "quantile=0.5": "median", "quantile=0.975": "upi"}
     )
 )
 
-chart_med = (
-    alt.Chart(pred_data)
-    .mark_line(point=False, color="red")
-    .encode(
-        alt.X("forecast_t"),
-        alt.Y("median"),
+plot(x_name="forecast_t:Q", plot_name="grb_vary_fct.png", data=pred_data1)
+
+
+##### forecast a series ####
+forecasts = [forecast(forecast_t=-8, target_t=x) for x in range(MIN_T, 1)]
+forecasts = pl.concat(forecasts)
+
+pred_data2 = (
+    data_to_join.with_columns(
+        target_t=pl.col("target_t").str.replace("t=", "").cast(pl.Int64)
+    )
+    .sort(["season", "geography", "target_t"])
+    .join(forecasts, on=["season", "geography", "target_t"], how="right")
+    .rename(
+        {"quantile=0.025": "lpi", "quantile=0.5": "median", "quantile=0.975": "upi"}
     )
 )
 
-
-chart_qs = (
-    alt.Chart(pred_data)
-    .mark_area(opacity=0.3)
-    .encode(alt.X("forecast_t"), alt.Y("lpi"), alt.Y2("upi"))
-)
-charts = alt.layer(chart_data, chart_pred, chart_med, chart_qs).facet(
-    "geography", columns=5
-)
-
-charts.save(str(OUTPUT_DIR / "grb_eda.png"))
+plot(x_name="target_t:Q", plot_name="grb_fct=-8.png", data=pred_data2)
