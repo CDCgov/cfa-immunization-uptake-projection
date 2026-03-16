@@ -64,20 +64,11 @@ def plot_fit(
     season: str,
     sort_month: List[str],
 ) -> alt.LayerChart:
-    pred_to_plot = (
-        pred.filter(
-            pl.col("forecast_date") == pl.col("forecast_date").max(),
-            pl.col("geography") == pl.lit(geography),
-            pl.col("season") == pl.lit(season),
-        )
-        .group_by(["season", "geography", "time_end", "model", "forecast_date"])
-        .agg(
-            pl.col("estimate").median().alias("pred_estimate"),
-            pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
-            pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
-        )
-        .collect()
-    )
+    pred_to_plot = pred.filter(
+        pl.col("forecast_date") == pl.col("forecast_date").max(),
+        pl.col("geography") == pl.lit(geography),
+        pl.col("season") == pl.lit(season),
+    ).collect()
 
     assert pred_to_plot["forecast_date"].unique().len() == 1
 
@@ -107,15 +98,17 @@ if __name__ == "__main__":
     p.add_argument("--output", required=True, help="output flag file")
     args = p.parse_args()
 
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
-
-    obs_raw = pl.read_parquet(args.data)
-    preds = pl.scan_parquet(args.preds)
-
     out_flag = Path(args.output)
     out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+
+    half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
+
+    obs_raw = pl.read_parquet(args.data)
+    pred_raw = pl.scan_parquet(args.preds)
 
     # clean data
     obs = (
@@ -124,20 +117,14 @@ if __name__ == "__main__":
         .with_columns(month=pl.col("time_end").dt.to_string("%b"))
     )
 
-    # get the prediction cones
-    half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
-    pred_cones = (
-        preds.filter(pl.col("time_end") > pl.col("forecast_date"))
-        .with_columns(
-            pred_estimate=pl.col("samples").arr.agg(pl.element().median()),
-            pred_lci=pl.col("samples").arr.agg(pl.element().quantile(half_alpha)),
-            pred_uci=pl.col("samples").arr.agg(pl.element().quantile(1.0 - half_alpha)),
-        )
-        .drop("samples")
-    )
+    pred = pred_raw.with_columns(
+        pred_estimate=pl.col("samples").arr.agg(pl.element().median()),
+        pred_lci=pl.col("samples").arr.agg(pl.element().quantile(half_alpha)),
+        pred_uci=pl.col("samples").arr.agg(pl.element().quantile(1.0 - half_alpha)),
+    ).drop("samples")
 
     # get all the target dates & forecast dates
-    fc = pred_cones.collect()
+    fc = pred.filter(pl.col("time_end") > pl.col("forecast_date")).collect()
 
     fc_plot_data = (
         obs.join(fc.select(pl.col("forecast_date").unique()), how="cross")
@@ -157,7 +144,7 @@ if __name__ == "__main__":
     for geo in config["plots"]["example_geos"]:
         plot_fit(
             data=obs,
-            pred=preds,
+            pred=pred,
             geography=geo,
             season=config["plots"]["example_season"],
             sort_month=sort_month,
