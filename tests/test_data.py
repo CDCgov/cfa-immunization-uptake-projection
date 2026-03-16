@@ -127,6 +127,7 @@ def test_quantile_forecast_validation():
 def test_sample_forecast_validation():
     iup.SampleForecast(
         pl.DataFrame(
-            {"time_end": [dt.date(2020, 1, 1)], "estimate": [0.0], "sample_id": 0}
-        ).with_columns(pl.col("sample_id").cast(pl.UInt64))
+            {"time_end": [dt.date(2020, 1, 1)], "samples": [[0.0, 0.1, 0.2, 0.3]]},
+            schema=[("time_end", dt.date), ("samples", pl.Array(pl.Float64, 4))],
+        )
     )
