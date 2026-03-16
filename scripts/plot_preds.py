@@ -128,12 +128,12 @@ if __name__ == "__main__":
     half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
     pred_cones = (
         preds.filter(pl.col("time_end") > pl.col("forecast_date"))
-        .group_by(["season", "geography", "time_end", "model", "forecast_date"])
-        .agg(
-            pl.col("estimate").median().alias("pred_estimate"),
-            pl.col("estimate").quantile(half_alpha).alias("pred_lci"),
-            pl.col("estimate").quantile(1.0 - half_alpha).alias("pred_uci"),
+        .with_columns(
+            pred_estimate=pl.col("samples").arr.agg(pl.element().median()),
+            pred_lci=pl.col("samples").arr.agg(pl.element().quantile(half_alpha)),
+            pred_uci=pl.col("samples").arr.agg(pl.element().quantile(1.0 - half_alpha)),
         )
+        .drop("samples")
     )
 
     # get all the target dates & forecast dates

@@ -248,28 +248,22 @@ class LPLModel(CoverageModel):
 
         # observations are rows; posterior samples are columns
         pred = np.array(pred["obs"]).transpose()
+        assert pred.shape == (
+            self.data.height,
+            self.mcmc_params["num_samples"] * self.mcmc_params["num_chains"],
+        )
 
         # put predictions into a dataframe
-        sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
-        pred = pl.DataFrame(pred, schema=sample_cols)
-
-        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
+        pred = pl.DataFrame(
+            pred, schema=[("samples", pl.Array(pl.Float64, pred.shape[1]))]
+        )
+        assert pred.shape == (self.data.height, 1)
 
         # combine predictions
         return iup.SampleForecast(
             pl.concat([self.data, pred], how="horizontal")
-            .unpivot(
-                on=sample_cols,
-                index=index_cols,
-                variable_name="sample_id",
-                value_name="estimate",
-            )
             .with_columns(
                 forecast_date=self.forecast_date,
-                # convert from sample_id strings to integers
-                sample_id=pl.col("sample_id")
-                .replace_strict({name: i for i, name in enumerate(sample_cols)})
-                .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
             .drop(["elapsed", "N_tot"])
