@@ -62,7 +62,25 @@ def preprocess(
     season_end_month: int,
     season_end_day: int,
     geographies: Optional[List[str] | None],
-):
+) -> pl.DataFrame:
+    """
+    Preprocess the raw data (Filter the raw data with certain states and seasons, add season column).
+
+    Args:
+        raw_data: Raw Lazy data frame
+        season_start_year: The year of the first season to include in the data.
+        season_start_month: The month of the first season to include in the data.
+        season_start_day: The day of the first season to include in the data.
+        season_end_year: The year of the last season to include in the data.
+        season_end_month: The month of the last season to include in the data.
+        season_end_day: The day of the last season to include in the data.
+        geographies: List of geographies to include in the data. If None, include all geographies.
+
+    Returns:
+        Preprocessed data frame ready for downstreamed process for two models.
+
+    """
+
     def geo_filter(df: pl.LazyFrame) -> pl.LazyFrame:
         if geographies is None:
             return df
