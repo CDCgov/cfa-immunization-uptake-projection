@@ -17,6 +17,7 @@ from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup
+from iup.utils import date_to_elapsed
 
 
 class CoverageModel(abc.ABC):
@@ -27,9 +28,14 @@ class CoverageModel(abc.ABC):
         forecast_date: datetime.date,
         groups: list[str] | None,
         model_params: dict[str, Any],
-        mcmc_params: dict[str, Any],
+        season_start_month: int,
+        season_start_day: int,
         seed: int,
     ):
+        pass
+
+    @abc.abstractmethod
+    def preprocess(self) -> pl.DataFrame:
         pass
 
     @abc.abstractmethod
@@ -53,7 +59,8 @@ class LPLModel(CoverageModel):
         forecast_date: datetime.date,
         groups: list[str,],
         model_params: dict[str, Any],
-        mcmc_params: dict[str, Any],
+        season_start_month: int,
+        season_start_day: int,
         seed: int,
         date_column: str = "time_end",
     ):
@@ -74,7 +81,8 @@ class LPLModel(CoverageModel):
         self.forecast_date = forecast_date
         self.groups = groups
         self.model_params = model_params
-        self.mcmc_params = mcmc_params
+        self.start_month = season_start_month
+        self.start_day = season_start_day
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
         # input validation
@@ -92,6 +100,26 @@ class LPLModel(CoverageModel):
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
+
+    def preprocess(self, data: pl.DataFrame) -> pl.DataFrame:
+        data = iup.CumulativeCoverageData(
+            data.rename({"sample_size": "N_tot"})
+        ).with_columns(
+            N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
+            season_geo=pl.concat_str(["season", "geography"], separator="_"),
+            t=date_to_elapsed(
+                pl.col("time_end"),
+                season_start_month=self.start_month,
+                season_start_day=self.start_day,
+            ),
+        )
+
+        data = self._index(data, self.groups)
+
+        if self.groups is not None:
+            assert set(data.columns).issuperset(self.groups)
+
+        return data
 
     @staticmethod
     def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
@@ -208,7 +236,7 @@ class LPLModel(CoverageModel):
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
-    def fit(self) -> Self:
+    def fit(self, mcmc_params) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
 
         If grouping factors are specified, a hierarchical model will be built with
@@ -222,18 +250,18 @@ class LPLModel(CoverageModel):
             Self with the fitted model stored in the mcmc attribute.
         """
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
+        self.mcmc = MCMC(self.kernel, **mcmc_params)
         self.mcmc.run(
             self.fit_key,
             self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
-        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
+        if "progress_bar" in mcmc_params and mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
 
         return self
 
-    def predict(self) -> pl.DataFrame:
+    def predict(self, alpha) -> pl.DataFrame:
         """Make projections from a fit Logistic Plus Linear model.
 
         Returns:
@@ -255,8 +283,11 @@ class LPLModel(CoverageModel):
 
         index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
 
-        # combine predictions
-        return iup.SampleForecast(
+        # summarize predictions by quantiles
+        lq = alpha / 2
+        uq = 1 - alpha / 2
+
+        return iup.QuantileForecast(
             pl.concat([self.data, pred], how="horizontal")
             .unpivot(
                 on=sample_cols,
@@ -273,4 +304,33 @@ class LPLModel(CoverageModel):
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
             .drop(["elapsed", "N_tot"])
+            .group_by(
+                [
+                    "season",
+                    "geography",
+                    "season_geo",
+                    "time_end",
+                    "forecast_date",
+                    "model",
+                ]
+            )
+            .agg(
+                pl.quantile("estimate", 0.5).alias("0.5"),
+                pl.quantile("estimate", lq).alias(str(lq)),
+                pl.quantile("estimate", uq).alias(str(uq)),
+            )
+            .unpivot(
+                on=["0.5", str(lq), str(uq)],
+                index=[
+                    "season",
+                    "geography",
+                    "season_geo",
+                    "time_end",
+                    "forecast_date",
+                    "model",
+                ],
+                variable_name="quantile",
+                value_name="value",
+            )
+            .with_columns(pl.col("quantile").cast(pl.Float64))
         )
