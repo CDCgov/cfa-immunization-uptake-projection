@@ -7,11 +7,11 @@ season:
   end_month: 4 # April
   end_day: 1
   # use only a few years of data
-  first_year: 2018
-  last_year: 2022
+  start_year: 2018
+  end_year: 2022
 
 # prediction features
-groups: [season, geography, season_geo]
+groups: [season, geography]
 
 # include only these geographies
 geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
@@ -32,12 +32,14 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
+    fit_params:
+      num_warmup: 500
+      num_samples: 500
+      num_chains: 4
+      progress_bar: false
+    pred_params:
+      alpha: 0.05
 
-mcmc:
-  num_warmup: 500
-  num_samples: 500
-  num_chains: 4
-  progress_bar: false
 
 forecast_dates:
   # run forecasts starting Oct, Nov, Dec

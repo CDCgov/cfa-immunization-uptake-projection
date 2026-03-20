@@ -1,13 +1,13 @@
 run_id: full
 
 season:
-  start_month: 7
+  start_month: 7 # July
   start_day: 1
-  end_month: 4
+  end_month: 4 # April
   end_day: 1
-  # use all data
-  first_year: 2009
-  last_year: 2022
+  # use only a few years of data
+  start_year: 2018
+  end_year: 2022
 
 # prediction features
 groups: [season, geography, season_geo]
@@ -30,12 +30,13 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
+    fit_params:
+      num_warmup: 500
+      num_samples: 500
+      num_chains: 4
+      progress_bar: false
 
-mcmc:
-  num_warmup: 1000
-  num_samples: 1000
-  num_chains: 4
-  progress_bar: false
+
 
 forecast_dates:
   start: 2021-07-01
