@@ -28,6 +28,7 @@ class CoverageModel(abc.ABC):
         forecast_date: datetime.date,
         groups: list[str] | None,
         model_params: dict[str, Any],
+        fit_params: dict[str, Any],
         season_start_month: int,
         season_start_day: int,
         seed: int,
@@ -59,6 +60,7 @@ class LPLModel(CoverageModel):
         forecast_date: datetime.date,
         groups: list[str,],
         model_params: dict[str, Any],
+        fit_params: dict[str, Any],
         season_start_month: int,
         season_start_day: int,
         seed: int,
@@ -71,7 +73,7 @@ class LPLModel(CoverageModel):
             forecast_date: Date to split fit and prediction data.
             groups: Names of the columns of grouping factors, or `None` for no grouping.
             model_params: Parameter names and values to specify prior distributions.
-            mcmc_params: Control parameters for MCMC fitting.
+            fit_params: Control parameters for MCMC fitting.
             seed: Random seed for stochastic elements of the model, to be split
                 for fitting vs. predicting.
             date_column: Name of the date column in the data. Defaults to "time_end".
@@ -83,20 +85,19 @@ class LPLModel(CoverageModel):
         self.model_params = model_params
         self.start_month = season_start_month
         self.start_day = season_start_day
+        self.mcmc_params = fit_params
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
         # input validation
         assert "season" in self.groups
-        assert {self.date_column, "elapsed", "N_vax", "N_tot"}.issubset(
-            self.raw_data.columns
-        )
         assert set(self.groups).issubset(self.raw_data.columns)
+        assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
 
         # do the indexing
         self.n_group_levels = [
             self.raw_data.select(pl.col(group).unique()).height for group in self.groups
         ]
-        self.data = self._index(self.raw_data, self.groups)
+        self.data = self.preprocess(self.raw_data)
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
@@ -112,6 +113,12 @@ class LPLModel(CoverageModel):
                 season_start_month=self.start_month,
                 season_start_day=self.start_day,
             ),
+            elapsed=date_to_elapsed(
+                pl.col(self.date_column),
+                season_start_month=self.start_month,
+                season_start_day=self.start_day,
+            )
+            / 365,
         )
 
         data = self._index(data, self.groups)
@@ -236,7 +243,7 @@ class LPLModel(CoverageModel):
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
-    def fit(self, mcmc_params) -> Self:
+    def fit(self) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
 
         If grouping factors are specified, a hierarchical model will be built with
@@ -250,13 +257,13 @@ class LPLModel(CoverageModel):
             Self with the fitted model stored in the mcmc attribute.
         """
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(self.kernel, **mcmc_params)
+        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
         self.mcmc.run(
             self.fit_key,
             self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
-        if "progress_bar" in mcmc_params and mcmc_params["progress_bar"]:
+        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
 
         return self
