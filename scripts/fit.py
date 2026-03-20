@@ -9,7 +9,6 @@ import pickle as pkl
 from pathlib import Path
 from typing import Any, Tuple
 
-import numpyro
 import polars as pl
 import yaml
 
@@ -47,7 +46,9 @@ def fit_all_models(
             groups=config["groups"],
             seed=config_model["seed"],
             model_params=config_model["model_params"],
-            mcmc_params=config["mcmc"],
+            fit_params=config_model["fit_params"],
+            season_start_month=config["season"]["start_month"],
+            season_start_day=config["season"]["start_day"],
         )
 
         model.fit()
@@ -72,7 +73,11 @@ if __name__ == "__main__":
     forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
-    numpyro.set_host_device_count(config["mcmc"]["num_chains"])
+    # may raise issue when RFModel is included, commented for now
+
+    # numpyro.set_host_device_count(
+    #     config["models"]["fit_params"]["num_chains"]
+    # )
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
