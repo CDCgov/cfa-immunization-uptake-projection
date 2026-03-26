@@ -34,10 +34,10 @@ def mspe(
     pred = _ensure_lazy(pred)
 
     return (
-        pred.group_by(["model", "time_end", "forecast_date"] + grouping_factors)
-        .agg(pred_median=pl.col("estimate").median())
+        pred.filter(pl.col("quantile") == 0.5)
         .join(obs, on=["time_end"] + grouping_factors, how="right")
-        .with_columns(score_value=(pl.col("estimate") - pl.col("pred_median")) ** 2)
+        .rename({"estimate_right": "obs", "estimate": "pred"})
+        .with_columns(score_value=(pl.col("pred") - pl.col("obs")) ** 2)
         .group_by(["model", "forecast_date"] + grouping_factors)
         .agg(pl.col("score_value").mean())
         .with_columns(score_fun=pl.lit("mspe"))
@@ -65,17 +65,18 @@ def eos_abs_diff(
     obs = _ensure_lazy(obs)
     pred = _ensure_lazy(pred)
 
-    median_pred = pred.group_by(
-        ["model", "time_end", "forecast_date"] + grouping_factors
-    ).agg(pred_median=pl.col("estimate").median())
-
     return (
-        obs.filter(
-            (pl.col("time_end") == pl.col("time_end").max()).over(grouping_factors)
+        pred.filter(pl.col("quantile") == 0.5)
+        .join(
+            obs.filter(
+                (pl.col("time_end") == pl.col("time_end").max()).over(grouping_factors)
+            ),
+            on=["time_end"] + grouping_factors,
+            how="right",
         )
-        .join(median_pred, on=["time_end"] + grouping_factors, how="left")
+        .rename({"estimate_right": "obs", "estimate": "pred"})
         .with_columns(
-            score_value=(pl.col("estimate") - pl.col("pred_median")).abs(),
+            score_value=(pl.col("pred") - pl.col("obs")).abs(),
             score_fun=pl.lit("eos_abs_diff"),
         )
         .select(grouping_factors + SCORE_COLS)
