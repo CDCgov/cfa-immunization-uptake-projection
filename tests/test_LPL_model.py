@@ -16,31 +16,37 @@ def model_params():
     """
 
     params = {
-        "muA_shape1": 100.0,
-        "muA_shape2": 140.0,
-        "sigmaA_rate": 40.0,
-        "tau_shape1": 100.0,
-        "tau_shape2": 225.0,
-        "K_shape": 20.0,
-        "K_rate": 5.0,
-        "muM_shape": 1.0,
-        "muM_rate": 0.1,
-        "sigmaM_rate": 40,
-        "D_shape": 5.0,
-        "D_rate": 0.01,
+        "seed": 42,
+        "model_params": {
+            "muA_shape1": 100.0,
+            "muA_shape2": 140.0,
+            "sigmaA_rate": 40.0,
+            "tau_shape1": 100.0,
+            "tau_shape2": 225.0,
+            "K_shape": 20.0,
+            "K_rate": 5.0,
+            "muM_shape": 1.0,
+            "muM_rate": 0.1,
+            "sigmaM_rate": 40,
+            "D_shape": 5.0,
+            "D_rate": 0.01,
+        },
+        "fit_params": {"num_warmup": 10, "num_samples": 10, "num_chains": 1},
     }
 
     return params
 
 
 @pytest.fixture
-def mcmc_params():
-    """
-    Mock set of mcmc control parameters.
-    """
-    mcmc = {"num_warmup": 10, "num_samples": 10, "num_chains": 1}
+def config_params():
+    params = {
+        "start_month": 7,
+        "start_day": 1,
+        "forecast_date": datetime.date(2020, 1, 1),
+        "groups": ["season", "geography"],
+    }
 
-    return mcmc
+    return params
 
 
 def test_index():
@@ -64,21 +70,55 @@ def test_index():
     )
 
 
-def test_fit_handles_groups(frame, model_params, mcmc_params):
+def test_preprocess(frame, model_params, config_params):
+    """
+    Should produce expected columns, given raw data.
+    """
+    model = iup.models.LPLModel(
+        data=frame,
+        forecast_date=config_params["forecast_date"],
+        groups=config_params["groups"],
+        seed=model_params["seed"],
+        model_params=model_params["model_params"],
+        fit_params=model_params["fit_params"],
+        season_start_month=config_params["start_month"],
+        season_start_day=config_params["start_day"],
+    )
+
+    expected_cols = {
+        "geography",
+        "time_end",
+        "estimate",
+        "lci",
+        "uci",
+        "N_tot",
+        "season",
+        "N_vax",
+        "season_geo",
+        "t",
+        "elapsed",
+        "season_idx",
+        "geography_idx",
+        "season_geo_idx",
+    }
+
+    assert expected_cols.issubset(model.data.columns)
+
+
+def test_fit_handles_groups(frame, model_params, config_params):
     """
     Model should produce posterior samples for each parameter.
     """
-    data = iup.CumulativeCoverageData(
-        frame.filter(pl.col("geography") == "USA").drop("geography")
-    )
 
     model = iup.models.LPLModel(
-        data=data,
-        forecast_date=datetime.date(2020, 1, 21),
-        groups=["season"],
-        model_params=model_params,
-        mcmc_params=mcmc_params,
-        seed=0,
+        data=frame,
+        forecast_date=config_params["forecast_date"],
+        groups=config_params["groups"],
+        seed=model_params["seed"],
+        model_params=model_params["model_params"],
+        fit_params=model_params["fit_params"],
+        season_start_month=config_params["start_month"],
+        season_start_day=config_params["start_day"],
     )
 
     model.fit()
