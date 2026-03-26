@@ -26,7 +26,7 @@ EQ = =
 
 .PHONY: clean viz dx
 
-all: $(CONFIG_COPY) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES)
+all: $(DATA) $(FITS) $(PREDS) $(SCORES) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES)
 
 viz:
 	streamlit run scripts/viz.py -- \
@@ -49,7 +49,7 @@ $(SCORES): scripts/eval.py $(PREDS) $(DATA) $(CONFIG)
 
 # output/run_id/pred/forecast_date=2021-01-01/part-0.parquet <== output/fits/fit_2021-01-01.pkl
 $(PRED_DIR)/forecast_date$(EQ)%/part-0.parquet: scripts/predict.py $(OUTPUT_DIR)/fits/fit_%.pkl
-	python $< --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --output=$@
+	python $< --fits=$(OUTPUT_DIR)/fits/fit_$*.pkl --config=$(CONFIG) --output=$@
 
 $(OUTPUT_DIR)/fits/fit_%.pkl: scripts/fit.py $(DATA) $(CONFIG)
 	python $< --data=$(DATA) --forecast_date=$* --config=$(CONFIG) --output=$@
