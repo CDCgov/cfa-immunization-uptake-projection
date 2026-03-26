@@ -1,5 +1,7 @@
 import os
 
+import numpyro
+
 # silence Jax CPU warning
 os.environ["JAX_PLATFORMS"] = "cpu"
 
@@ -73,11 +75,13 @@ if __name__ == "__main__":
     forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
-    # may raise issue when RFModel is included, commented for now
+    # may raise issue when RFModel is included
+    [
+        numpyro.set_host_device_count(model["fit_params"]["num_chains"])
+        for model in config["models"]
+        if model["name"] == "LPLModel"
+    ]
 
-    # numpyro.set_host_device_count(
-    #     config["models"]["fit_params"]["num_chains"]
-    # )
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
