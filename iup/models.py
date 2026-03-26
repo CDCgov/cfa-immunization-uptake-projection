@@ -5,7 +5,7 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 
 import abc
 import datetime
-from typing import Any
+from typing import Any, List
 
 import jax.numpy as jnp
 import numpy as np
@@ -81,28 +81,29 @@ class LPLModel(CoverageModel):
         self.raw_data = data
         self.date_column = date_column
         self.forecast_date = forecast_date
-        self.groups = groups
         self.model_params = model_params
         self.start_month = season_start_month
         self.start_day = season_start_day
         self.mcmc_params = fit_params
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
+        assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
+
+        self.data = self.preprocess(groups, self.raw_data)
+
         # input validation
         assert "season" in self.groups
-        assert set(self.groups).issubset(self.raw_data.columns)
-        assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
+        assert set(self.groups).issubset(self.data.columns)
 
         # do the indexing
         self.n_group_levels = [
-            self.raw_data.select(pl.col(group).unique()).height for group in self.groups
+            self.data.select(pl.col(group).unique()).height for group in self.groups
         ]
-        self.data = self.preprocess(self.raw_data)
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
 
-    def preprocess(self, data: pl.DataFrame) -> pl.DataFrame:
+    def preprocess(self, groups: List[str], data: pl.DataFrame) -> pl.DataFrame:
         data = iup.CumulativeCoverageData(
             data.rename({"sample_size": "N_tot"})
         ).with_columns(
@@ -120,6 +121,9 @@ class LPLModel(CoverageModel):
             )
             / 365,
         )
+
+        groups = groups + ["season_geo"]
+        self.groups = groups
 
         data = self._index(data, self.groups)
 
@@ -288,7 +292,7 @@ class LPLModel(CoverageModel):
         sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
         pred = pl.DataFrame(pred, schema=sample_cols)
 
-        index_cols = [self.date_column, "elapsed", "N_tot"] + self.groups
+        index_cols = [self.date_column, "N_tot"] + self.groups
 
         # summarize predictions by quantiles
         lq = alpha / 2
@@ -310,7 +314,7 @@ class LPLModel(CoverageModel):
                 .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .drop(["elapsed", "N_tot"])
+            # .drop(["elapsed", "N_tot"])
             .group_by(
                 [
                     "season",
@@ -318,7 +322,6 @@ class LPLModel(CoverageModel):
                     "season_geo",
                     "time_end",
                     "forecast_date",
-                    "model",
                 ]
             )
             .agg(
@@ -334,10 +337,9 @@ class LPLModel(CoverageModel):
                     "season_geo",
                     "time_end",
                     "forecast_date",
-                    "model",
                 ],
                 variable_name="quantile",
-                value_name="value",
+                value_name="estimate",
             )
             .with_columns(pl.col("quantile").cast(pl.Float64))
         )
