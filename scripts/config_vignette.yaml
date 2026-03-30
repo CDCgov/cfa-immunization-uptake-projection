@@ -1,4 +1,3 @@
-# results will be placed in output/RUN_ID/
 run_id: vignette
 
 season:
@@ -9,9 +8,6 @@ season:
   # use only a few years of data
   start_year: 2018
   end_year: 2022
-
-# prediction features
-groups: [season, geography]
 
 # include only these geographies
 geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
@@ -38,9 +34,8 @@ models:
       progress_bar: false
       season_start_month: 7
       season_start_day: 1
-    pred_params:
-      alpha: 0.05
 
+pred_interval_alpha: 0.05
 
 forecast_dates:
   # run forecasts starting Oct, Nov, Dec

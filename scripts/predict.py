@@ -20,12 +20,7 @@ if __name__ == "__main__":
 
     forecasts = []
     for (k1, k2), v in models_dict.items():
-        alpha = next(
-            model["pred_params"]["alpha"]
-            for model in config["models"]
-            if model["name"] == k1
-        )
-
+        alpha = config["pred_interval_alpha"]
         forecast = v.predict(alpha).with_columns(model=pl.lit(k1))
         forecasts.append(forecast)
 
