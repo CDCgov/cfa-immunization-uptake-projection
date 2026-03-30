@@ -6,7 +6,6 @@ import yaml
 import iup.eval
 from iup.utils import DEFAULT_GROUPS, date_to_season
 
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
