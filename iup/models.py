@@ -27,16 +27,13 @@ class CoverageModel(abc.ABC):
         data: pl.DataFrame,
         forecast_date: datetime.date,
         groups: list[str] | None,
-        model_params: dict[str, Any],
-        fit_params: dict[str, Any],
-        season_start_month: int,
-        season_start_day: int,
+        params: dict[str, Any],
         seed: int,
     ):
         pass
 
     @abc.abstractmethod
-    def preprocess(self) -> pl.DataFrame:
+    def _preprocess(self) -> pl.DataFrame:
         pass
 
     @abc.abstractmethod
@@ -59,10 +56,7 @@ class LPLModel(CoverageModel):
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
         groups: list[str,],
-        model_params: dict[str, Any],
-        fit_params: dict[str, Any],
-        season_start_month: int,
-        season_start_day: int,
+        params: dict[str, Any],
         seed: int,
         date_column: str = "time_end",
     ):
@@ -72,8 +66,7 @@ class LPLModel(CoverageModel):
             data: Cumulative coverage data for fitting and prediction.
             forecast_date: Date to split fit and prediction data.
             groups: Names of the columns of grouping factors, or `None` for no grouping.
-            model_params: Parameter names and values to specify prior distributions.
-            fit_params: Control parameters for MCMC fitting.
+            params: All parameters including parameter names and values to specify prior distributions, Control parameters for MCMC fitting, and season start month and day
             seed: Random seed for stochastic elements of the model, to be split
                 for fitting vs. predicting.
             date_column: Name of the date column in the data. Defaults to "time_end".
@@ -81,15 +74,14 @@ class LPLModel(CoverageModel):
         self.raw_data = data
         self.date_column = date_column
         self.forecast_date = forecast_date
-        self.model_params = model_params
-        self.start_month = season_start_month
-        self.start_day = season_start_day
-        self.mcmc_params = fit_params
+        self.params = params
+        self.start_month = params["season_start_month"]
+        self.start_day = params["season_start_day"]
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
         assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
 
-        self.data = self.preprocess(groups, self.raw_data)
+        self.data = self._preprocess(groups, self.raw_data)
 
         # input validation
         assert "season" in self.groups
@@ -103,23 +95,19 @@ class LPLModel(CoverageModel):
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
 
-    def preprocess(self, groups: List[str], data: pl.DataFrame) -> pl.DataFrame:
-        data = iup.CumulativeCoverageData(
-            data.rename({"sample_size": "N_tot"})
-        ).with_columns(
-            N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
-            season_geo=pl.concat_str(["season", "geography"], separator="_"),
-            t=date_to_elapsed(
-                pl.col("time_end"),
-                season_start_month=self.start_month,
-                season_start_day=self.start_day,
-            ),
-            elapsed=date_to_elapsed(
-                pl.col(self.date_column),
-                season_start_month=self.start_month,
-                season_start_day=self.start_day,
+    def _preprocess(self, groups: List[str], data: pl.DataFrame) -> pl.DataFrame:
+        data = (
+            iup.CumulativeCoverageData(data.rename({"sample_size": "N_tot"}))
+            .with_columns(
+                N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
+                season_geo=pl.concat_str(["season", "geography"], separator="_"),
+                t=date_to_elapsed(
+                    pl.col("time_end"),
+                    season_start_month=self.start_month,
+                    season_start_day=self.start_day,
+                ),
             )
-            / 365,
+            .with_columns(elapsed=pl.col("t") / 365)
         )
 
         groups = groups + ["season_geo"]
@@ -171,7 +159,7 @@ class LPLModel(CoverageModel):
             groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
             n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
-            **self.model_params,
+            **self.params,
         )
 
     @staticmethod
@@ -194,6 +182,7 @@ class LPLModel(CoverageModel):
         sigmaM_rate: float,
         D_shape: float,
         D_rate: float,
+        **kwargs,
     ):
         """Fit a mixed Logistic Plus Linear model on training data.
 
@@ -261,13 +250,20 @@ class LPLModel(CoverageModel):
             Self with the fitted model stored in the mcmc attribute.
         """
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
+
+        # manually filter the mcmc parameters #
+        mcmc_params = {
+            k: v
+            for k, v in self.params.items()
+            if k in {"num_warmup", "num_samples", "num_chains", "progress_bar"}
+        }
+        self.mcmc = MCMC(self.kernel, **mcmc_params)
         self.mcmc.run(
             self.fit_key,
             self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
-        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
+        if "progress_bar" in mcmc_params and mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
 
         return self
