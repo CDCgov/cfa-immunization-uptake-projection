@@ -5,19 +5,20 @@ season:
   start_day: 1
   end_month: 4 # April
   end_day: 1
-  # use only a few years of data
-  start_year: 2018
+  # use all data
+  start_year: 2009
   end_year: 2022
 
 # prediction features
 groups: [season, geography, season_geo]
 
 # include all geographies
+geographies:
 
 models:
   - name: LPLModel
     seed: 42
-    model_params:
+    params:
       muA_shape1: 100.0
       muA_shape2: 180.0
       sigmaA_rate: 80.0
@@ -30,11 +31,14 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
-    fit_params:
       num_warmup: 500
       num_samples: 500
       num_chains: 4
       progress_bar: false
+      season_start_month: 7
+      season_start_day: 1
+    pred_params:
+      alpha: 0.05
 
 
 
