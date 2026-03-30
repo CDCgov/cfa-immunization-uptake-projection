@@ -1,5 +1,7 @@
 import polars as pl
 
+DEFAULT_GROUPS = ["season", "geography"]
+
 
 def date_to_season(
     date: pl.Expr, season_start_month: int, season_start_day: int = 1

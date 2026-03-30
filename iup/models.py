@@ -17,7 +17,7 @@ from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup
-from iup.utils import date_to_elapsed
+from iup.utils import DEFAULT_GROUPS, date_to_elapsed
 
 
 class CoverageModel(abc.ABC):
@@ -55,9 +55,9 @@ class LPLModel(CoverageModel):
         self,
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
-        groups: list[str,],
         params: dict[str, Any],
         seed: int,
+        groups: list[str,] = DEFAULT_GROUPS,
         date_column: str = "time_end",
     ):
         """Initialize with a seed and the model structure.
@@ -80,6 +80,7 @@ class LPLModel(CoverageModel):
         self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
         assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
+        assert groups == ["season", "geography"]
 
         self.groups, self.data = self._preprocess(
             groups, self.raw_data, self.start_month, self.start_day
@@ -88,7 +89,6 @@ class LPLModel(CoverageModel):
         self.data = self._index(self.data, self.groups)
 
         # input validation
-        assert "season" in self.groups
         assert set(self.groups).issubset(self.data.columns)
 
         # do the indexing
@@ -107,7 +107,7 @@ class LPLModel(CoverageModel):
             iup.CumulativeCoverageData(data.rename({"sample_size": "N_tot"}))
             .with_columns(
                 N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
-                season_geo=pl.concat_str(["season", "geography"], separator="_"),
+                season_geo=pl.concat_str(groups, separator="_"),
                 t=date_to_elapsed(
                     pl.col("time_end"),
                     season_start_month=season_start_month,

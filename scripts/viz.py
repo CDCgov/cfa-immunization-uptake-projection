@@ -7,6 +7,8 @@ import polars as pl
 import streamlit as st
 import yaml
 
+from iup.utils import DEFAULT_GROUPS
+
 
 @st.cache_data
 def load_parquet(path: str) -> pl.DataFrame:
@@ -107,7 +109,7 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
     pred = sample_preds(preds_path, n_samples=n_samples)
 
     st.subheader("Data channels")
-    dimensions = ["model", "forecast_date"] + config["groups"]
+    dimensions = ["model", "forecast_date"] + DEFAULT_GROUPS
     default_channels = {
         "column": ("Column", "forecast_date"),
         "row": ("Row", "model"),
@@ -143,10 +145,10 @@ def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]
     model_forecast_dates = pred.select(["model", "forecast_date"]).unique()
     plot_obs = obs.join(model_forecast_dates, how="cross").filter(
         pl.col(factor).is_in(pred[factor].unique().implode())
-        for factor in config["groups"]
+        for factor in DEFAULT_GROUPS
     )
 
-    groupings = ["model", "forecast_date", "time_end"] + config["groups"]
+    groupings = ["model", "forecast_date", "time_end"] + DEFAULT_GROUPS
 
     data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
 
@@ -198,7 +200,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
         config: Configuration dictionary.
     """
     # summarize sample predictions by grouping factors
-    groups_to_include = ["model", "forecast_date", "time_end"] + config["groups"]
+    groups_to_include = ["model", "forecast_date", "time_end"] + DEFAULT_GROUPS
     pred = summarize_preds(
         path=preds_path,
         groups_to_include=tuple(groups_to_include),
@@ -211,7 +213,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     forecast_dates = pred.select(["model", "forecast_date"]).unique()
     plot_obs = obs.join(forecast_dates, how="cross").filter(
         pl.col(factor).is_in(pred[factor].unique().implode())
-        for factor in config["groups"]
+        for factor in DEFAULT_GROUPS
     )
 
     data = pred.join(plot_obs, on=groups_to_include)
@@ -219,7 +221,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "forecast_date"] + config["groups"]
+    dimensions = ["model", "forecast_date"] + DEFAULT_GROUPS
 
     if "season" in dimensions:
         default_channels = {
@@ -354,7 +356,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "score_fun"] + config["groups"]
+    dimensions = ["model", "score_fun"] + DEFAULT_GROUPS
     if "season" in dimensions:
         default_channels = {
             "color": ("Color", "model"),

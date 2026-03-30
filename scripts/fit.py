@@ -45,7 +45,6 @@ def fit_all_models(
         model = model_class(
             data=data,
             forecast_date=forecast_date,
-            groups=config["groups"],
             seed=config_model["seed"],
             params=config_model["params"],
         )
