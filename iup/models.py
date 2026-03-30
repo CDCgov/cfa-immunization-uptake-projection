@@ -81,7 +81,11 @@ class LPLModel(CoverageModel):
 
         assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
 
-        self.data = self._preprocess(groups, self.raw_data)
+        self.groups, self.data = self._preprocess(
+            groups, self.raw_data, self.start_month, self.start_day
+        )
+
+        self.data = self._index(self.data, self.groups)
 
         # input validation
         assert "season" in self.groups
@@ -95,7 +99,10 @@ class LPLModel(CoverageModel):
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
 
-    def _preprocess(self, groups: List[str], data: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def _preprocess(
+        groups: List[str], data: pl.DataFrame, season_start_month, season_start_day
+    ) -> tuple[list[str], pl.DataFrame]:
         data = (
             iup.CumulativeCoverageData(data.rename({"sample_size": "N_tot"}))
             .with_columns(
@@ -103,22 +110,19 @@ class LPLModel(CoverageModel):
                 season_geo=pl.concat_str(["season", "geography"], separator="_"),
                 t=date_to_elapsed(
                     pl.col("time_end"),
-                    season_start_month=self.start_month,
-                    season_start_day=self.start_day,
+                    season_start_month=season_start_month,
+                    season_start_day=season_start_day,
                 ),
             )
             .with_columns(elapsed=pl.col("t") / 365)
         )
 
         groups = groups + ["season_geo"]
-        self.groups = groups
 
-        data = self._index(data, self.groups)
+        if groups is not None:
+            assert set(data.columns).issuperset(groups)
 
-        if self.groups is not None:
-            assert set(data.columns).issuperset(self.groups)
-
-        return data
+        return groups, data
 
     @staticmethod
     def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
@@ -310,12 +314,9 @@ class LPLModel(CoverageModel):
                 .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            # .drop(["elapsed", "N_tot"])
             .group_by(
-                [
-                    "season",
-                    "geography",
-                    "season_geo",
+                self.groups
+                + [
                     "time_end",
                     "forecast_date",
                 ]
