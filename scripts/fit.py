@@ -71,12 +71,13 @@ if __name__ == "__main__":
     forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
-    # may raise issue when RFModel is included
-    [
-        numpyro.set_host_device_count(model["params"]["num_chains"])
+    max_num_chains = max(
+        model["params"]["num_chains"]
         for model in config["models"]
-        if model["name"] == "LPLModel"
-    ]
+        if "num_chains" in model["params"]
+    )
+
+    numpyro.set_host_device_count(max_num_chains)
 
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 
