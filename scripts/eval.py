@@ -4,7 +4,10 @@ import polars as pl
 import yaml
 
 import iup.eval
-from iup.utils import DEFAULT_GROUPS, date_to_season
+import iup.models
+from iup.utils import date_to_season
+
+GROUPS = iup.models.CoverageModel.groups
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -25,7 +28,7 @@ if __name__ == "__main__":
     mspe = iup.eval.mspe(
         obs=data,
         pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
-        grouping_factors=DEFAULT_GROUPS,
+        grouping_factors=GROUPS,
     )
 
     # score the forecasts proper, only in the season that the forecasts were made
@@ -44,7 +47,7 @@ if __name__ == "__main__":
     eos_abs_diff = iup.eval.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
-        grouping_factors=DEFAULT_GROUPS,
+        grouping_factors=GROUPS,
     )
 
     pl.concat([mspe, eos_abs_diff]).write_parquet(args.output)

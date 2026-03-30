@@ -5,7 +5,8 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 
 import abc
 import datetime
-from typing import Any, List
+import inspect
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -17,23 +18,19 @@ from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from typing_extensions import Self
 
 import iup
-from iup.utils import DEFAULT_GROUPS, date_to_elapsed
 
 
 class CoverageModel(abc.ABC):
+    groups = ["season", "geography"]
+
     @abc.abstractmethod
     def __init__(
         self,
         data: pl.DataFrame,
         forecast_date: datetime.date,
-        groups: list[str] | None,
         params: dict[str, Any],
-        seed: int,
+        quantiles: list[float],
     ):
-        pass
-
-    @abc.abstractmethod
-    def _preprocess(self) -> pl.DataFrame:
         pass
 
     @abc.abstractmethod
@@ -51,13 +48,14 @@ class LPLModel(CoverageModel):
     For details, see the online docs.
     """
 
+    groups = ["season", "geography", "season_geo"]
+
     def __init__(
         self,
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
         params: dict[str, Any],
-        seed: int,
-        groups: list[str,] = DEFAULT_GROUPS,
+        quantiles: list[float],
         date_column: str = "time_end",
     ):
         """Initialize with a seed and the model structure.
@@ -67,29 +65,32 @@ class LPLModel(CoverageModel):
             forecast_date: Date to split fit and prediction data.
             groups: Names of the columns of grouping factors, or `None` for no grouping.
             params: All parameters including parameter names and values to specify prior distributions, Control parameters for MCMC fitting, and season start month and day
-            seed: Random seed for stochastic elements of the model, to be split
-                for fitting vs. predicting.
             date_column: Name of the date column in the data. Defaults to "time_end".
         """
         self.raw_data = data
         self.date_column = date_column
+        self.quantiles = quantiles
         self.forecast_date = forecast_date
+
+        # use parameters, separating MCMC and model fitting parameters
         self.params = params
-        self.start_month = params["season_start_month"]
-        self.start_day = params["season_start_day"]
-        self.fit_key, self.pred_key = random.split(random.key(seed), 2)
 
-        assert {self.date_column, "estimate"}.issubset(self.raw_data.columns)
-        assert groups == ["season", "geography"]
+        mcmc_keys = {"num_warmup", "num_samples", "num_chains", "progress_bar"}
+        self.mcmc_params = {k: v for k, v in params.items() if k in mcmc_keys}
+        self.model_params = {
+            k: v
+            for k, v in params.items()
+            if k in inspect.signature(self._logistic_plus_linear).parameters
+        }
+        self.fit_key, self.pred_key = random.split(random.key(self.params["seed"]), 2)
 
-        self.groups, self.data = self._preprocess(
-            groups, self.raw_data, self.start_month, self.start_day
+        # input data validation
+        assert {self.date_column, "estimate", "season", "geography"}.issubset(
+            self.raw_data.columns
         )
 
-        self.data = self._index(self.data, self.groups)
-
-        # input validation
-        assert set(self.groups).issubset(self.data.columns)
+        # preprocess data
+        self.data = self._preprocess(data=self.raw_data)
 
         # do the indexing
         self.n_group_levels = [
@@ -99,30 +100,25 @@ class LPLModel(CoverageModel):
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
 
-    @staticmethod
-    def _preprocess(
-        groups: List[str], data: pl.DataFrame, season_start_month, season_start_day
-    ) -> tuple[list[str], pl.DataFrame]:
-        data = (
-            iup.CumulativeCoverageData(data.rename({"sample_size": "N_tot"}))
-            .with_columns(
-                N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0),
-                season_geo=pl.concat_str(groups, separator="_"),
-                t=date_to_elapsed(
-                    pl.col("time_end"),
-                    season_start_month=season_start_month,
-                    season_start_day=season_start_day,
-                ),
-            )
+    @classmethod
+    def _preprocess(cls, data: pl.DataFrame) -> pl.DataFrame:
+        out = (
+            data
+            # prepare observation data
+            .rename({"sample_size": "N_tot"})
+            .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
+            # set up temporal data
             .with_columns(elapsed=pl.col("t") / 365)
+            # add interaction term
+            .with_columns(
+                season_geo=pl.concat_str(["season", "geography"], separator="_")
+            )
         )
 
-        groups = groups + ["season_geo"]
+        # add the indices
+        out = cls._index(out, groups=["season", "geography", "season_geo"])
 
-        if groups is not None:
-            assert set(data.columns).issuperset(groups)
-
-        return groups, data
+        return out
 
     @staticmethod
     def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
@@ -150,6 +146,7 @@ class LPLModel(CoverageModel):
         return data
 
     def model(self, data: pl.DataFrame):
+        # missing `N_vax` column signals that we are drawing predictions, not fitting
         if "N_vax" in data.columns:
             N_vax = jnp.array(data["N_vax"])
         else:
@@ -163,7 +160,7 @@ class LPLModel(CoverageModel):
             groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
             n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
-            **self.params,
+            **self.model_params,
         )
 
     @staticmethod
@@ -186,7 +183,6 @@ class LPLModel(CoverageModel):
         sigmaM_rate: float,
         D_shape: float,
         D_rate: float,
-        **kwargs,
     ):
         """Fit a mixed Logistic Plus Linear model on training data.
 
@@ -254,26 +250,20 @@ class LPLModel(CoverageModel):
             Self with the fitted model stored in the mcmc attribute.
         """
         self.kernel = NUTS(self.model, init_strategy=init_to_sample)
-
-        # manually filter the mcmc parameters #
-        mcmc_params = {
-            k: v
-            for k, v in self.params.items()
-            if k in {"num_warmup", "num_samples", "num_chains", "progress_bar"}
-        }
-        self.mcmc = MCMC(self.kernel, **mcmc_params)
+        self.mcmc = MCMC(self.kernel, **self.mcmc_params)
         self.mcmc.run(
             self.fit_key,
             self.data.filter(pl.col(self.date_column) <= self.forecast_date),
         )
 
-        if "progress_bar" in mcmc_params and mcmc_params["progress_bar"]:
+        if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
 
         return self
 
-    def predict(self, alpha) -> pl.DataFrame:
-        """Make projections from a fit Logistic Plus Linear model.
+    def predict(self) -> pl.DataFrame:
+        """
+        Make projections from a fit Logistic Plus Linear model.
 
         Returns:
             Sample forecast data frame with predictions for dates after forecast_date.
@@ -294,10 +284,6 @@ class LPLModel(CoverageModel):
 
         index_cols = [self.date_column, "N_tot"] + self.groups
 
-        # summarize predictions by quantiles
-        lq = alpha / 2
-        uq = 1 - alpha / 2
-
         data_pred = (
             pl.concat([self.data, pred], how="horizontal")
             .unpivot(
@@ -314,23 +300,11 @@ class LPLModel(CoverageModel):
                 .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .group_by(
-                self.groups
-                + [
-                    "time_end",
-                    "forecast_date",
-                ]
-            )
+            .group_by(self.groups + ["time_end", "forecast_date"])
             .agg(
-                quantile=pl.concat_arr(
-                    pl.lit(0.5, dtype=pl.Float64),
-                    pl.lit(lq, dtype=pl.Float64),
-                    pl.lit(uq, dtype=pl.Float64),
-                ),
+                quantile=pl.concat_arr(self.quantiles),
                 estimate=pl.concat_arr(
-                    pl.quantile("estimate", 0.5).alias("0.5"),
-                    pl.quantile("estimate", lq).alias(str(lq)),
-                    pl.quantile("estimate", uq).alias(str(uq)),
+                    [pl.quantile("estimate", q).alias(str(q)) for q in self.quantiles]
                 ),
             )
         )

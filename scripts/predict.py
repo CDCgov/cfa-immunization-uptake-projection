@@ -18,13 +18,12 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    forecasts = []
-    for (k1, k2), v in models_dict.items():
-        alpha = config["pred_interval_alpha"]
-        forecast = v.predict(alpha).with_columns(model=pl.lit(k1))
-        forecasts.append(forecast)
-
-    forecasts = pl.concat(forecasts)
+    forecasts = pl.concat(
+        [
+            model.predict().with_columns(model=pl.lit(model_name))
+            for (model_name, _), model in models_dict.items()
+        ]
+    )
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     forecasts.write_parquet(args.output)
