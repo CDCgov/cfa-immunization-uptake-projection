@@ -298,7 +298,7 @@ class LPLModel(CoverageModel):
         lq = alpha / 2
         uq = 1 - alpha / 2
 
-        return iup.QuantileForecast(
+        data_pred = (
             pl.concat([self.data, pred], how="horizontal")
             .unpivot(
                 on=sample_cols,
@@ -322,21 +322,17 @@ class LPLModel(CoverageModel):
                 ]
             )
             .agg(
-                pl.quantile("estimate", 0.5).alias("0.5"),
-                pl.quantile("estimate", lq).alias(str(lq)),
-                pl.quantile("estimate", uq).alias(str(uq)),
+                quantile=pl.concat_arr(
+                    pl.lit(0.5, dtype=pl.Float64),
+                    pl.lit(lq, dtype=pl.Float64),
+                    pl.lit(uq, dtype=pl.Float64),
+                ),
+                estimate=pl.concat_arr(
+                    pl.quantile("estimate", 0.5).alias("0.5"),
+                    pl.quantile("estimate", lq).alias(str(lq)),
+                    pl.quantile("estimate", uq).alias(str(uq)),
+                ),
             )
-            .unpivot(
-                on=["0.5", str(lq), str(uq)],
-                index=[
-                    "season",
-                    "geography",
-                    "season_geo",
-                    "time_end",
-                    "forecast_date",
-                ],
-                variable_name="quantile",
-                value_name="estimate",
-            )
-            .with_columns(pl.col("quantile").cast(pl.Float64))
         )
+
+        return iup.QuantileForecast(data_pred.explode(["quantile", "estimate"]))
