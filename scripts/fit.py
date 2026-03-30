@@ -47,10 +47,7 @@ def fit_all_models(
             forecast_date=forecast_date,
             groups=config["groups"],
             seed=config_model["seed"],
-            model_params=config_model["model_params"],
-            fit_params=config_model["fit_params"],
-            season_start_month=config["season"]["start_month"],
-            season_start_day=config["season"]["start_day"],
+            params=config_model["params"],
         )
 
         model.fit()
@@ -77,7 +74,7 @@ if __name__ == "__main__":
 
     # may raise issue when RFModel is included
     [
-        numpyro.set_host_device_count(model["fit_params"]["num_chains"])
+        numpyro.set_host_device_count(model["params"]["num_chains"])
         for model in config["models"]
         if model["name"] == "LPLModel"
     ]
