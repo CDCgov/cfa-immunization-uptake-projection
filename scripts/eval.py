@@ -7,8 +7,6 @@ import iup.eval
 import iup.models
 from iup.utils import date_to_season
 
-GROUPS = iup.models.CoverageModel.groups
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", help="config file", required=True)
@@ -28,7 +26,7 @@ if __name__ == "__main__":
     mspe = iup.eval.mspe(
         obs=data,
         pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
-        grouping_factors=GROUPS,
+        grouping_factors=["season", "geography"],
     )
 
     # score the forecasts proper, only in the season that the forecasts were made
@@ -47,7 +45,7 @@ if __name__ == "__main__":
     eos_abs_diff = iup.eval.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
-        grouping_factors=GROUPS,
+        grouping_factors=["season", "geography"],
     )
 
     pl.concat([mspe, eos_abs_diff]).write_parquet(args.output)

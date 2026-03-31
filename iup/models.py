@@ -21,8 +21,6 @@ import iup
 
 
 class CoverageModel(abc.ABC):
-    groups = ["season", "geography"]
-
     @abc.abstractmethod
     def __init__(
         self,
@@ -47,8 +45,6 @@ class LPLModel(CoverageModel):
     Subclass of CoverageModel for a mixed Logistic Plus Linear model.
     For details, see the online docs.
     """
-
-    groups = ["season", "geography", "season_geo"]
 
     def __init__(
         self,
@@ -94,7 +90,8 @@ class LPLModel(CoverageModel):
 
         # do the indexing
         self.n_group_levels = [
-            self.data.select(pl.col(group).unique()).height for group in self.groups
+            self.data.select(pl.col(group).unique()).height
+            for group in ["season", "geography", "season_geo"]
         ]
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
@@ -157,8 +154,12 @@ class LPLModel(CoverageModel):
             elapsed=jnp.array(data["elapsed"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
-            groups=jnp.array(data.select([f"{group}_idx" for group in self.groups])),
-            n_groups=len(self.groups),
+            groups=jnp.array(
+                data.select(
+                    [f"{group}_idx" for group in ["season", "geography", "season_geo"]]
+                )
+            ),
+            n_groups=3,
             n_group_levels=self.n_group_levels,
             **self.model_params,
         )
@@ -282,7 +283,7 @@ class LPLModel(CoverageModel):
         sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
         pred = pl.DataFrame(pred, schema=sample_cols)
 
-        index_cols = [self.date_column, "N_tot"] + self.groups
+        index_cols = [self.date_column, "N_tot", "season", "geography", "season_geo"]
 
         data_pred = (
             pl.concat([self.data, pred], how="horizontal")
@@ -300,7 +301,9 @@ class LPLModel(CoverageModel):
                 .cast(pl.UInt64),
                 estimate=pl.col("estimate") / pl.col("N_tot"),
             )
-            .group_by(self.groups + ["time_end", "forecast_date"])
+            .group_by(
+                ["season", "geography", "season_geo", "time_end", "forecast_date"]
+            )
             .agg(
                 quantile=pl.concat_arr(self.quantiles),
                 estimate=pl.concat_arr(
