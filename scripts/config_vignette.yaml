@@ -14,8 +14,8 @@ geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
 
 models:
   - name: LPLModel
-    seed: 42
     params:
+      seed: 42
       muA_shape1: 100.0
       muA_shape2: 180.0
       sigmaA_rate: 80.0
@@ -32,10 +32,8 @@ models:
       num_samples: 500
       num_chains: 4
       progress_bar: false
-      season_start_month: 7
-      season_start_day: 1
 
-pred_interval_alpha: 0.05
+alpha: 0.05
 
 forecast_dates:
   # run forecasts starting Oct, Nov, Dec
@@ -46,7 +44,6 @@ forecast_dates:
 plots:
   example_season: "2020/2021"
   example_geos: ["New Jersey"]
-  ci_level: 0.95
   n_trajectories: 20
 
 # diagnostics are not produced by default

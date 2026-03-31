@@ -112,10 +112,44 @@ def preprocess(
             end_day=season_end_day,
         )
         .pipe(geo_filter)
+        .with_columns(
+            t=days_in_season(
+                pl.col("time_end"),
+                season_start_month=season_start_month,
+                season_start_day=season_start_day,
+            )
+        )
         .collect()
     )
 
     return CumulativeCoverageData(data)
+
+
+def days_in_season(
+    date_col: pl.Expr, season_start_month: int, season_start_day: int
+) -> pl.Expr:
+    """Extract a time elapsed column from a date column, as polars expressions.
+
+    Args:
+        date_col: Column of dates.
+        season_start_month: First month of the overwinter disease season.
+        season_start_day: First day of the first month of the overwinter disease season.
+
+    Returns:
+        number of days elapsed since the first date
+    """
+    # for every date, figure out the season breakpoint in that year
+    season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
+
+    # for dates before the season breakpoint in year, subtract a year
+    year = date_col.dt.year()
+    season_start_year = pl.when(date_col < season_start).then(year - 1).otherwise(year)
+
+    # rewrite the season breakpoints to that immediately before each date
+    season_start = pl.date(season_start_year, season_start_month, season_start_day)
+
+    # return the number of days from season start to each date
+    return (date_col - season_start).dt.total_days()
 
 
 if __name__ == "__main__":

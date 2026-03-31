@@ -32,8 +32,10 @@ def fit_all_models(
         Dictionary of fitted models organized by model name and forecast date.
     """
 
-    all_models = {}
+    alpha = config["alpha"]
+    quantiles = [0.5, alpha / 2, 1.0 - alpha / 2]
 
+    all_models = {}
     for config_model in config["models"]:
         model_name = config_model["name"]
         model_class = getattr(iup.models, model_name)
@@ -45,11 +47,9 @@ def fit_all_models(
         model = model_class(
             data=data,
             forecast_date=forecast_date,
-            seed=config_model["seed"],
             params=config_model["params"],
-        )
-
-        model.fit()
+            quantiles=quantiles,
+        ).fit()
 
         label = (model_name, forecast_date)
         all_models[label] = model
@@ -71,13 +71,14 @@ if __name__ == "__main__":
     forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
-    max_num_chains = max(
+    num_chains = [
         model["params"]["num_chains"]
         for model in config["models"]
         if "num_chains" in model["params"]
-    )
+    ]
 
-    numpyro.set_host_device_count(max_num_chains)
+    if num_chains:
+        numpyro.set_host_device_count(max(num_chains))
 
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 

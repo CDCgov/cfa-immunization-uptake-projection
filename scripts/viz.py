@@ -2,12 +2,9 @@ import argparse
 from typing import Any, Dict, List
 
 import altair as alt
-import numpy as np
 import polars as pl
 import streamlit as st
 import yaml
-
-from iup.utils import DEFAULT_GROUPS
 
 
 @st.cache_data
@@ -23,171 +20,43 @@ def load_config(path: str) -> Dict[str, Any]:
     return config
 
 
-@st.cache_data
-def summarize_preds(
-    path: str, groups_to_include: tuple, ci_level: float
-) -> pl.DataFrame:
-    half_alpha = (1.0 - ci_level) / 2
+def pivot_quantiles(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    `df` should have columns "quantile" and "estimates". There should be 3 quantiles.
+    Then pivot them, making columns "lower", "median", "upper"
+    """
+    quantiles = df["quantile"].unique().sort()
+    assert len(quantiles) == 3
+    assert quantiles[1] == 0.50
 
-    return (
-        pl.scan_parquet(path)
-        .group_by(groups_to_include)
-        .agg(
-            lower=pl.col("estimate").quantile(half_alpha),
-            upper=pl.col("estimate").quantile(1.0 - half_alpha),
-            mean=pl.col("estimate").mean(),
+    return df.with_columns(
+        pl.col("quantile").replace_strict(
+            {quantiles[0]: "lower", quantiles[1]: "median", quantiles[2]: "upper"},
+            return_dtype=pl.String,
         )
-        .sort("time_end")
-        .collect()
-    )
-
-
-@st.cache_data
-def sample_preds(path: str, n_samples: int, seed: int = 42) -> pl.DataFrame:
-    preds = pl.scan_parquet(path).with_columns(pl.col("sample_id").cast(pl.Int64))
-
-    max_id = preds.select(pl.col("sample_id").max()).collect().item()
-    min_id = preds.select(pl.col("sample_id").min()).collect().item()
-    assert isinstance(min_id, int)
-    assert isinstance(max_id, int)
-
-    # draw indices of trajectories randomly #
-    rng = np.random.default_rng(seed=seed)
-
-    selected_ids = rng.integers(low=min_id, high=max_id + 1, size=n_samples)
-
-    return preds.filter(pl.col("sample_id").is_in(selected_ids)).collect()
+    ).pivot(on="quantile", values="estimate")
 
 
 def app(data_path: str, config_path: str, scores_path: str, preds_path: str):
     # load data from caches
     obs = load_parquet(data_path)
+    preds = pivot_quantiles(load_parquet(preds_path))
     scores = load_parquet(scores_path)
     config = load_config(config_path)
 
     st.title("Vaccination Coverage Forecasts")
 
     # multiple tabs
-    tab1, tab2, tab3 = st.tabs(["Trajectories", "Summary", "Evaluation"])
+    tabs = st.tabs(["Summary", "Evaluation"])
 
-    with tab1:
-        plot_trajectories(obs=obs, preds_path=preds_path, config=config)
+    with tabs[0]:
+        plot_summary(obs=obs, preds=preds, config=config)
 
-    with tab2:
-        plot_summary(obs=obs, preds_path=preds_path, config=config)
-
-    with tab3:
+    with tabs[1]:
         plot_evaluation(scores=scores, config=config)
 
 
-def plot_trajectories(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
-    """Plot the individual trajectories of the forecasts with data.
-
-    User options to select the dimensions to group the data, including:
-    column and row. Other grouping factors that haven't been selected will
-    be used to filter the data.
-
-    Args:
-        obs: Observed data.
-        preds_path: Path to predictions data.
-        config: Configuration dictionary.
-    """
-
-    # set up plot encodings
-    encodings = {
-        "x": alt.X("time_end:T", title="Observation date"),
-        "y": alt.Y("estimate:Q", title="Cumulative coverage estimate"),
-        "color": alt.Color("sample_id:N", title="Trajectories"),
-    }
-
-    # select which data dimension to put into which plot channel
-    st.header("Plot options")
-
-    # how many trajectories to show?
-    n_samples = st.number_input("Number of forecasts", value=3, min_value=1)
-
-    pred = sample_preds(preds_path, n_samples=n_samples)
-
-    st.subheader("Data channels")
-    dimensions = ["model", "forecast_date"] + DEFAULT_GROUPS
-    default_channels = {
-        "column": ("Column", "forecast_date"),
-        "row": ("Row", "model"),
-    }
-
-    for idx, item in enumerate(default_channels.items()):
-        key, value = item
-        channel, default_dim = value
-
-        index = dimensions.index(default_dim)
-        dim = st.selectbox(
-            f"{channel} by",
-            options=dimensions,
-            index=index,
-            key=f"{channel}_{idx}_trajectories",
-        )
-
-        if dim != "None":
-            dimensions.remove(dim)
-            encodings[key] = getattr(alt, channel)(dim)
-
-    # filter for specific values of the remaining dimensions
-    st.header("Data filters")
-
-    if missing_columns := set(dimensions) - set(pred.columns):
-        raise RuntimeError(f"Missing columns: {missing_columns}")
-
-    for dim in dimensions:
-        filter_val = st.selectbox(dim, options=pred[dim].unique().sort().to_list())
-        pred = pred.filter(pl.col(dim) == pl.lit(filter_val))
-
-    # merge observed data with prediction by the combination of models and forecast starts
-    model_forecast_dates = pred.select(["model", "forecast_date"]).unique()
-    plot_obs = obs.join(model_forecast_dates, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique().implode())
-        for factor in DEFAULT_GROUPS
-    )
-
-    groupings = ["model", "forecast_date", "time_end"] + DEFAULT_GROUPS
-
-    data = pred.join(plot_obs, on=groupings).rename({"estimate_right": "observed"})
-
-    obs_chart = (
-        alt.Chart(data)
-        .encode(
-            x="time_end:T",
-            y="observed:Q",
-            tooltip=[
-                alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("observed", title="Observed coverage"),
-            ],
-        )
-        .transform_calculate(type="'observed'")
-        .mark_point()
-        .encode(shape=alt.Shape("type:N", title="Type"))
-    )
-
-    pred_chart = (
-        alt.Chart(data)
-        .encode(
-            x="time_end:T",
-            y="estimate:Q",
-            tooltip=[
-                alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("estimate", title="Predicted coverage"),
-            ],
-        )
-        .transform_calculate(type="'predicted'")
-        .mark_line()
-        .encode(strokeDash=alt.StrokeDash("type:N", title=None))
-    )
-
-    chart = layer_with_facets([obs_chart, pred_chart], encodings)
-
-    st.altair_chart(chart)
-
-
-def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
+def plot_summary(obs: pl.DataFrame, preds: pl.DataFrame, config: Dict[str, Any]):
     """Plot the 95% PI with mean estimate of forecasts with data.
 
     User options to select the dimensions to group the data, including:
@@ -200,28 +69,23 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
         config: Configuration dictionary.
     """
     # summarize sample predictions by grouping factors
-    groups_to_include = ["model", "forecast_date", "time_end"] + DEFAULT_GROUPS
-    pred = summarize_preds(
-        path=preds_path,
-        groups_to_include=tuple(groups_to_include),
-        ci_level=config["plots"]["ci_level"],
-    )
+    groups_to_include = ["model", "forecast_date", "time_end", "season", "geography"]
 
     encodings = {}
 
     # data process: merge observed data with prediction by combinations of model and forecast start #
-    forecast_dates = pred.select(["model", "forecast_date"]).unique()
+    forecast_dates = preds.select(["model", "forecast_date"]).unique()
     plot_obs = obs.join(forecast_dates, how="cross").filter(
-        pl.col(factor).is_in(pred[factor].unique().implode())
-        for factor in DEFAULT_GROUPS
+        pl.col(factor).is_in(preds[factor].unique().implode())
+        for factor in ["season", "geography"]
     )
 
-    data = pred.join(plot_obs, on=groups_to_include)
+    data = preds.join(plot_obs, on=groups_to_include)
 
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "forecast_date"] + DEFAULT_GROUPS
+    dimensions = ["model", "forecast_date", "season", "geography"]
 
     if "season" in dimensions:
         default_channels = {
@@ -257,7 +121,7 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
     for idx, dim in enumerate(dimensions):
         filter_val = st.selectbox(
             dim,
-            options=pred[dim].unique().sort().to_list(),
+            options=preds[dim].unique().sort().to_list(),
             key=f"{dim}_{idx}_summary",
         )
 
@@ -282,13 +146,12 @@ def plot_summary(obs: pl.DataFrame, preds_path: str, config: Dict[str, Any]):
         alt.Chart(data)
         .encode(
             x="time_end:T",
-            y="mean:Q",
+            y="median:Q",
             tooltip=[
                 alt.Tooltip("time_end", title="Observation date"),
-                alt.Tooltip("mean", title="Predicted mean"),
+                alt.Tooltip("median", title="Median prediction"),
             ],
         )
-        .transform_calculate(type="'predicted mean'")
         .mark_line()
         .encode(strokeDash=alt.StrokeDash("type:N", title=None))
     )
@@ -356,7 +219,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     # select which data dimension to put into which plot channel
     st.header("Plot options")
     st.subheader("Data channels")
-    dimensions = ["model", "score_fun"] + DEFAULT_GROUPS
+    dimensions = ["model", "score_fun", "season", "geography"]
     if "season" in dimensions:
         default_channels = {
             "color": ("Color", "model"),

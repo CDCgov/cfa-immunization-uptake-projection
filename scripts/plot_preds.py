@@ -125,7 +125,7 @@ if __name__ == "__main__":
     )
 
     # get the prediction cones
-    half_alpha = (1.0 - config["plots"]["ci_level"]) / 2
+    half_alpha = config["alpha"] / 2
     pred_cones = (
         preds.filter(pl.col("time_end") > pl.col("forecast_date"))
         .group_by(["season", "geography", "time_end", "model", "forecast_date"])

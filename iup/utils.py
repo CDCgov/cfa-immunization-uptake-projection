@@ -1,7 +1,5 @@
 import polars as pl
 
-DEFAULT_GROUPS = ["season", "geography"]
-
 
 def date_to_season(
     date: pl.Expr, season_start_month: int, season_start_day: int = 1
@@ -30,33 +28,3 @@ def date_to_season(
 
     year2 = year1 + 1
     return pl.format("{}/{}", year1, year2)
-
-
-def date_to_elapsed(
-    date_col: pl.Expr, season_start_month: int, season_start_day: int
-) -> pl.Expr:
-    """Extract a time elapsed column from a date column, as polars expressions.
-
-    Args:
-        date_col: Column of dates.
-        season_start_month: First month of the overwinter disease season.
-        season_start_day: First day of the first month of the overwinter disease season.
-
-    Returns:
-        Column of the number of days elapsed since the first date.
-
-    Note:
-        Dates should be chronologically sorted in advance.
-    """
-    # for every date, figure out the season breakpoint in that year
-    season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
-
-    # for dates before the season breakpoint in year, subtract a year
-    year = date_col.dt.year()
-    season_start_year = pl.when(date_col < season_start).then(year - 1).otherwise(year)
-
-    # rewrite the season breakpoints to that immediately before each date
-    season_start = pl.date(season_start_year, season_start_month, season_start_day)
-
-    # return the number of days from season start to each date
-    return (date_col - season_start).dt.total_days()
