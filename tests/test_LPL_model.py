@@ -3,50 +3,30 @@ import datetime
 import numpyro.infer
 import polars as pl
 import polars.testing
-import pytest
 
 import iup
 import iup.models
 
+PARAMS = {
+    "seed": 42,
+    "muA_shape1": 100.0,
+    "muA_shape2": 140.0,
+    "sigmaA_rate": 40.0,
+    "tau_shape1": 100.0,
+    "tau_shape2": 225.0,
+    "K_shape": 20.0,
+    "K_rate": 5.0,
+    "muM_shape": 1.0,
+    "muM_rate": 0.1,
+    "sigmaM_rate": 40,
+    "D_shape": 5.0,
+    "D_rate": 0.01,
+    "num_warmup": 10,
+    "num_samples": 10,
+    "num_chains": 1,
+}
 
-@pytest.fixture
-def model_params():
-    """
-    Mock set of parameter values to specify the LIUM prior distributions.
-    """
-
-    params = {
-        "seed": 42,
-        "model_params": {
-            "muA_shape1": 100.0,
-            "muA_shape2": 140.0,
-            "sigmaA_rate": 40.0,
-            "tau_shape1": 100.0,
-            "tau_shape2": 225.0,
-            "K_shape": 20.0,
-            "K_rate": 5.0,
-            "muM_shape": 1.0,
-            "muM_rate": 0.1,
-            "sigmaM_rate": 40,
-            "D_shape": 5.0,
-            "D_rate": 0.01,
-        },
-        "fit_params": {"num_warmup": 10, "num_samples": 10, "num_chains": 1},
-    }
-
-    return params
-
-
-@pytest.fixture
-def config_params():
-    params = {
-        "start_month": 7,
-        "start_day": 1,
-        "forecast_date": datetime.date(2020, 1, 1),
-        "groups": ["season", "geography"],
-    }
-
-    return params
+QUANTILES = [0.025, 0.5, 0.975]
 
 
 def test_index():
@@ -70,20 +50,11 @@ def test_index():
     )
 
 
-def test_preprocess(frame, model_params, config_params):
+def test_preprocess(frame):
     """
     Should produce expected columns, given raw data.
     """
-    model = iup.models.LPLModel(
-        data=frame,
-        forecast_date=config_params["forecast_date"],
-        groups=config_params["groups"],
-        seed=model_params["seed"],
-        model_params=model_params["model_params"],
-        fit_params=model_params["fit_params"],
-        season_start_month=config_params["start_month"],
-        season_start_day=config_params["start_day"],
-    )
+    data = iup.models.LPLModel._preprocess(data=frame)
 
     expected_cols = {
         "geography",
@@ -102,23 +73,19 @@ def test_preprocess(frame, model_params, config_params):
         "season_geo_idx",
     }
 
-    assert expected_cols.issubset(model.data.columns)
+    assert expected_cols == set(data.columns)
 
 
-def test_fit_handles_groups(frame, model_params, config_params):
+def test_fit_handles_groups(frame):
     """
     Model should produce posterior samples for each parameter.
     """
 
     model = iup.models.LPLModel(
         data=frame,
-        forecast_date=config_params["forecast_date"],
-        groups=config_params["groups"],
-        seed=model_params["seed"],
-        model_params=model_params["model_params"],
-        fit_params=model_params["fit_params"],
-        season_start_month=config_params["start_month"],
-        season_start_day=config_params["start_day"],
+        forecast_date=datetime.date(2020, 1, 1),
+        params=PARAMS,
+        quantiles=QUANTILES,
     )
 
     model.fit()
