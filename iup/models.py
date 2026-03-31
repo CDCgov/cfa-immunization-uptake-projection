@@ -59,8 +59,8 @@ class LPLModel(CoverageModel):
         Args:
             data: Cumulative coverage data for fitting and prediction.
             forecast_date: Date to split fit and prediction data.
-            groups: Names of the columns of grouping factors, or `None` for no grouping.
             params: All parameters including parameter names and values to specify prior distributions, Control parameters for MCMC fitting, and season start month and day
+            quantiles: Posterior sample quantiles
             date_column: Name of the date column in the data. Defaults to "time_end".
         """
         self.raw_data = data
