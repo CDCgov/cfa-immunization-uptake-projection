@@ -1,4 +1,3 @@
-# results will be placed in output/RUN_ID/
 run_id: vignette
 
 season:
@@ -7,19 +6,16 @@ season:
   end_month: 4 # April
   end_day: 1
   # use only a few years of data
-  first_year: 2018
-  last_year: 2022
-
-# prediction features
-groups: [season, geography, season_geo]
+  start_year: 2018
+  end_year: 2022
 
 # include only these geographies
 geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
 
 models:
   - name: LPLModel
-    seed: 42
-    model_params:
+    params:
+      seed: 42
       muA_shape1: 100.0
       muA_shape2: 180.0
       sigmaA_rate: 80.0
@@ -32,12 +28,12 @@ models:
       sigmaM_rate: 80.0
       D_shape: 1000
       D_rate: 3.0
+      num_warmup: 500
+      num_samples: 500
+      num_chains: 4
+      progress_bar: false
 
-mcmc:
-  num_warmup: 500
-  num_samples: 500
-  num_chains: 4
-  progress_bar: false
+alpha: 0.05
 
 forecast_dates:
   # run forecasts starting Oct, Nov, Dec
@@ -48,7 +44,6 @@ forecast_dates:
 plots:
   example_season: "2020/2021"
   example_geos: ["New Jersey"]
-  ci_level: 0.95
   n_trajectories: 20
 
 # diagnostics are not produced by default

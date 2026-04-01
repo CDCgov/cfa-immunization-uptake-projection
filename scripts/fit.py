@@ -1,5 +1,7 @@
 import os
 
+import numpyro
+
 # silence Jax CPU warning
 os.environ["JAX_PLATFORMS"] = "cpu"
 
@@ -9,7 +11,6 @@ import pickle as pkl
 from pathlib import Path
 from typing import Any, Tuple
 
-import numpyro
 import polars as pl
 import yaml
 
@@ -31,8 +32,10 @@ def fit_all_models(
         Dictionary of fitted models organized by model name and forecast date.
     """
 
-    all_models = {}
+    alpha = config["alpha"]
+    quantiles = [0.5, alpha / 2, 1.0 - alpha / 2]
 
+    all_models = {}
     for config_model in config["models"]:
         model_name = config_model["name"]
         model_class = getattr(iup.models, model_name)
@@ -44,13 +47,9 @@ def fit_all_models(
         model = model_class(
             data=data,
             forecast_date=forecast_date,
-            groups=config["groups"],
-            seed=config_model["seed"],
-            model_params=config_model["model_params"],
-            mcmc_params=config["mcmc"],
-        )
-
-        model.fit()
+            params=config_model["params"],
+            quantiles=quantiles,
+        ).fit()
 
         label = (model_name, forecast_date)
         all_models[label] = model
@@ -72,7 +71,15 @@ if __name__ == "__main__":
     forecast_date = dt.date.fromisoformat(args.forecast_date)
     data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
 
-    numpyro.set_host_device_count(config["mcmc"]["num_chains"])
+    num_chains = [
+        model["params"]["num_chains"]
+        for model in config["models"]
+        if "num_chains" in model["params"]
+    ]
+
+    if num_chains:
+        numpyro.set_host_device_count(max(num_chains))
+
     all_models = fit_all_models(data=data, forecast_date=forecast_date, config=config)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)

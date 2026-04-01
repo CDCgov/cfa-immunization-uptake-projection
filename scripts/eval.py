@@ -4,7 +4,8 @@ import polars as pl
 import yaml
 
 import iup.eval
-import iup.utils
+import iup.models
+from iup.utils import date_to_season
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -25,14 +26,14 @@ if __name__ == "__main__":
     mspe = iup.eval.mspe(
         obs=data,
         pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
-        grouping_factors=config["groups"],
+        grouping_factors=["season", "geography"],
     )
 
     # score the forecasts proper, only in the season that the forecasts were made
     forecast_season = pred.select(
         pl.col("forecast_date")
         .pipe(
-            iup.utils.date_to_season,
+            date_to_season,
             season_start_month=config["season"]["start_month"],
             season_start_day=config["season"]["start_day"],
         )
@@ -44,7 +45,7 @@ if __name__ == "__main__":
     eos_abs_diff = iup.eval.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
-        grouping_factors=config["groups"],
+        grouping_factors=["season", "geography"],
     )
 
     pl.concat([mspe, eos_abs_diff]).write_parquet(args.output)
