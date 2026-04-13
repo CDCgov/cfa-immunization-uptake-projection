@@ -1,4 +1,4 @@
-run_id: vignette
+run_id: vignette_rf
 
 season:
   start_month: 7 # July
@@ -13,25 +13,43 @@ season:
 geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
 
 models:
-  - name: LPLModel
+  # - name: LPLModel
+  #   params:
+  #     seed: 42
+  #     muA_shape1: 100.0
+  #     muA_shape2: 180.0
+  #     sigmaA_rate: 80.0
+  #     tau_shape1: 100.0
+  #     tau_shape2: 225.0
+  #     K_shape: 150.0
+  #     K_rate: 6.0
+  #     muM_shape: 2.0
+  #     muM_rate: 25.0
+  #     sigmaM_rate: 80.0
+  #     D_shape: 1000
+  #     D_rate: 3.0
+  #     num_warmup: 500
+  #     num_samples: 500
+  #     num_chains: 4
+  #     progress_bar: false
+  #     start_month: 7 # July
+  #     start_day: 1
+  #     end_month: 4 # April
+  #     end_day: 1
+  #     # use only a few years of data
+  #     start_year: 2018
+  #     end_year: 2022
+  - name: RFModel
     params:
-      seed: 42
-      muA_shape1: 100.0
-      muA_shape2: 180.0
-      sigmaA_rate: 80.0
-      tau_shape1: 100.0
-      tau_shape2: 225.0
-      K_shape: 150.0
-      K_rate: 6.0
-      muM_shape: 2.0
-      muM_rate: 25.0
-      sigmaM_rate: 80.0
-      D_shape: 1000
-      D_rate: 3.0
-      num_warmup: 500
-      num_samples: 500
-      num_chains: 4
-      progress_bar: false
+      n_estimators: 100
+      start_month: 7 # July
+      start_day: 1
+      end_month: 4 # April
+      end_day: 1
+      # use only a few years of data
+      start_year: 2018
+      end_year: 2022
+
 
 alpha: 0.05
 
