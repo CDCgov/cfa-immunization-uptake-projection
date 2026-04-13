@@ -15,9 +15,12 @@ import numpyro.distributions as dist
 import polars as pl
 from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
 from typing_extensions import Self
 
 import iup
+from iup.utils import date_to_season, index_to_date, month_order
 
 
 class CoverageModel(abc.ABC):
@@ -86,7 +89,9 @@ class LPLModel(CoverageModel):
         )
 
         # preprocess data
-        self.data = self._preprocess(data=self.raw_data)
+        self.data = self._preprocess(
+            data=self.raw_data, date_column=self.date_column, params=self.params
+        )
 
         # do the indexing
         self.n_group_levels = [
@@ -98,18 +103,24 @@ class LPLModel(CoverageModel):
         self.mcmc = None
 
     @classmethod
-    def _preprocess(cls, data: pl.DataFrame) -> pl.DataFrame:
+    def _preprocess(cls, data: pl.DataFrame, date_column, params) -> pl.DataFrame:
         out = (
             data
             # prepare observation data
             .rename({"sample_size": "N_tot"})
             .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
-            # set up temporal data
-            .with_columns(elapsed=pl.col("t") / 365)
             # add interaction term
             .with_columns(
                 season_geo=pl.concat_str(["season", "geography"], separator="_")
             )
+            .with_columns(
+                t=cls._days_in_season(
+                    pl.col(date_column),
+                    params["start_month"],
+                    params["start_day"],
+                )
+            )
+            .with_columns(elapsed=pl.col("t") / 365)
         )
 
         # add the indices
@@ -141,6 +152,35 @@ class LPLModel(CoverageModel):
             )
 
         return data
+
+    @staticmethod
+    def _days_in_season(
+        date_col: pl.Expr, season_start_month: int, season_start_day: int
+    ) -> pl.Expr:
+        """Extract a time elapsed column from a date column, as polars expressions.
+
+        Args:
+            date_col: Column of dates.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+
+        Returns:
+            number of days elapsed since the first date
+        """
+        # for every date, figure out the season breakpoint in that year
+        season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
+
+        # for dates before the season breakpoint in year, subtract a year
+        year = date_col.dt.year()
+        season_start_year = (
+            pl.when(date_col < season_start).then(year - 1).otherwise(year)
+        )
+
+        # rewrite the season breakpoints to that immediately before each date
+        season_start = pl.date(season_start_year, season_start_month, season_start_day)
+
+        # return the number of days from season start to each date
+        return (date_col - season_start).dt.total_days()
 
     def model(self, data: pl.DataFrame):
         # missing `N_vax` column signals that we are drawing predictions, not fitting
@@ -313,3 +353,209 @@ class LPLModel(CoverageModel):
         )
 
         return iup.QuantileForecast(data_pred.explode(["quantile", "estimate"]))
+
+
+class RFModel(CoverageModel):
+    def __init__(
+        self,
+        data: iup.CumulativeCoverageData,
+        params: dict[str, Any],
+        forecast_date: datetime.date,
+        quantiles: list[float],
+        date_column: str = "time_end",
+    ):
+        self.raw_data = data
+        self.date_column = date_column
+        self.forecast_date = forecast_date
+        self.quantiles = quantiles
+        self.params = params
+        self.months = month_order(self.params["start_month"])
+        self.end_month_index = self.months.index(
+            datetime.date(
+                self.params["end_year"],
+                self.params["end_month"],
+                self.params["end_day"],
+            ).strftime("%b")
+        )
+
+        rf_keys = {"n_estimators"}
+        # other params include max_depth, min_samples_split, min_samples_leaf, can be added later #
+
+        self.rf_params = {k: v for k, v in params.items() if k in rf_keys}
+
+        self.data = self._preprocess(
+            self.raw_data,
+            self.months,
+            self.end_month_index,
+            self.date_column,
+        )
+
+    @classmethod
+    def _preprocess(
+        cls, data: pl.DataFrame, months, end_month_index, date_column
+    ) -> pl.DataFrame:
+        out = (
+            data.with_columns(
+                t=pl.col(date_column)
+                .dt.to_string("%b")
+                .map_elements(lambda x: months.index(x) - end_month_index, pl.Int64)
+            )
+            .filter(pl.col("t").is_between(1 - end_month_index, 0))
+            .select(["season", "geography", "t", "estimate"])
+            .with_columns(pl.format("t={}", pl.col("t")))
+            .pivot(on="t", values="estimate")
+            .drop_nulls()
+            .sort(["season", "geography"])
+        )
+
+        return out
+
+    def fit(self) -> Self:
+        self.enc = CoverageEncoder()
+        self.enc.fit(self.data)
+
+        target_season = date_to_season(
+            pl.lit(self.forecast_date),
+            season_start_month=self.params["start_month"],
+            season_start_day=self.params["start_day"],
+        )
+
+        forecast_t = (
+            self.months.index(self.forecast_date.strftime("%b")) - self.end_month_index
+        )
+
+        end_date = datetime.date(
+            self.params["end_year"], self.params["end_month"], self.params["end_day"]
+        )
+
+        # this is true only when target_season is the last season in the data, which is our case for now
+        data_fit = self.data.filter(pl.col("season") != target_season)
+
+        self.models = {}
+
+        ## fit all the data after forecast_t ##
+        for target_t in range(forecast_t + 1, 1):
+            features = ["season", "geography"] + [
+                f"t={t}"
+                for t in range(
+                    1 - self.months.index(end_date.strftime("%b")), forecast_t + 1
+                )
+            ]
+
+            # always fit the last month of the season given the months before forecast_date
+            X_fit = self.enc.encode(data_fit.select(features))
+            y_fit = data_fit.select(f"t={target_t}").to_series().to_numpy()
+
+            self.models[target_t] = RandomForestRegressor(**self.rf_params).fit(
+                X_fit, y_fit
+            )
+
+        return self
+
+    def predict(self) -> pl.DataFrame:
+        data_pred = self.data.filter(
+            pl.col("season")
+            == date_to_season(
+                pl.lit(self.forecast_date),
+                season_start_month=self.params["start_month"],
+                season_start_day=self.params["start_day"],
+            )
+        )
+
+        start_date = datetime.date(
+            self.params["start_year"],
+            self.params["start_month"],
+            self.params["start_day"],
+        )
+
+        forecast_t = (
+            self.months.index(self.forecast_date.strftime("%b")) - self.end_month_index
+        )
+
+        end_date = datetime.date(
+            self.params["end_year"], self.params["end_month"], self.params["end_day"]
+        )
+
+        features = ["season", "geography"] + [
+            f"t={t}"
+            for t in range(
+                1 - self.months.index(end_date.strftime("%b")), forecast_t + 1
+            )
+        ]
+
+        X_pred = self.enc.encode(data_pred.select(features))
+        quantile_cols = [f"q={k}" for k in self.quantiles]
+        index_cols = ["season", "geography"]
+
+        preds = []
+
+        for target_t, model in self.models.items():
+            pred = np.array([tree.predict(X_pred) for tree in model.estimators_])
+            pred = {f"q={k}": np.quantile(pred, k, axis=0) for k in self.quantiles}
+            pred = pl.DataFrame(pred)
+
+            full_pred = (
+                pl.concat(
+                    [data_pred.select(["season", "geography"]), pred], how="horizontal"
+                )
+                .unpivot(
+                    on=quantile_cols,
+                    index=index_cols,
+                    variable_name="quantile",
+                    value_name="estimate",
+                )
+                .with_columns(
+                    pl.col("quantile").str.replace("q=", "").cast(pl.Float64),
+                    forecast_date=self.forecast_date,
+                    target_index=target_t
+                    + self.end_month_index,  # convert back to month index
+                )
+                .with_columns(
+                    pl.col("target_index")
+                    .map_elements(lambda m: index_to_date(start_date, m))
+                    .alias("time_end")
+                )
+                .drop("target_index")
+            )
+
+            preds.append(full_pred)
+
+        return pl.concat(preds)
+
+
+class CoverageEncoder:
+    def __init__(self, categorical_feature_names: tuple = ("season", "geography")):
+        self.categorical_feature_names = categorical_feature_names
+        self.enc = OneHotEncoder(sparse_output=False)
+        self.categorical_features = None
+
+    def fit(self, data: pl.DataFrame):
+        self.enc.fit(data.select(self.categorical_feature_names).to_numpy())
+
+        self.categorical_features = list(
+            self._iter_features(self.categorical_feature_names, self.enc.categories_)
+        )
+
+    @staticmethod
+    def _iter_features(names, categories):
+        for feature, values in zip(names, categories):
+            for value in values:
+                yield (feature, value)
+
+    def encode(self, data: pl.DataFrame) -> np.ndarray:
+        X_enc = self.enc.transform(
+            data.select(self.categorical_feature_names).to_numpy()
+        )
+        X_pass = data.drop(self.categorical_feature_names).to_numpy()
+
+        assert isinstance(X_enc, np.ndarray)
+        return np.asarray(np.hstack((X_enc, X_pass)))
+
+    def categories(self, data: pl.DataFrame):
+        if self.categorical_features is None:
+            raise RuntimeError
+        else:
+            return self.categorical_features + [
+                ("unencoded", col)
+                for col in data.drop(self.categorical_feature_names).columns
+            ]
