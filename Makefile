@@ -1,3 +1,7 @@
+#
+# Pipeline Targets
+#
+
 CONFIG = scripts/config_vignette.yaml
 RAW_DATA = data/raw.parquet
 
@@ -62,3 +66,38 @@ $(CONFIG_COPY): $(CONFIG)
 
 clean:
 	rm -rf $(OUTPUT_DIR)
+
+#
+# Container and Dagster Targets 
+#
+
+# Container build target for efficient reloading
+
+# Determine container tag from git branch: "main" -> "latest", otherwise use branch name
+GIT_BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
+GIT_COMMIT_SHA := $(shell git rev-parse HEAD)
+
+ifndef CONTAINER_REGISTRY
+CONTAINER_REGISTRY = ghcr.io/cdcgov
+endif
+
+ifndef CONTAINER_NAME
+CONTAINER_NAME = cfa-immunization-uptake-projection
+endif
+
+ifeq ($(GIT_BRANCH_NAME),main)
+CONTAINER_TAG ?= latest
+else
+CONTAINER_TAG ?= $(GIT_BRANCH_NAME)
+endif
+
+ifndef CONTAINER_REMOTE_NAME
+CONTAINER_REMOTE_NAME = $(CONTAINER_REGISTRY)/$(CONTAINER_NAME):$(CONTAINER_TAG)
+endif
+
+container_build:
+	docker build . -t $(CONTAINER_REMOTE_NAME) \
+	--platform linux/amd64
+
+container_explore:
+	docker run -it --rm $(CONTAINER_REMOTE_NAME) bash
