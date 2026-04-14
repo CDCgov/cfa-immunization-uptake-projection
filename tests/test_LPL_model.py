@@ -24,6 +24,13 @@ PARAMS = {
     "num_warmup": 10,
     "num_samples": 10,
     "num_chains": 1,
+    "progress_bar": False,
+    "start_month": 7,  # July
+    "start_day": 1,
+    "end_month": 4,  # April
+    "end_day": 1,
+    "start_year": 2018,
+    "end_year": 2022,
 }
 
 QUANTILES = [0.025, 0.5, 0.975]
@@ -54,7 +61,9 @@ def test_preprocess(frame):
     """
     Should produce expected columns, given raw data.
     """
-    data = iup.models.LPLModel._preprocess(data=frame)
+    data = iup.models.LPLModel._preprocess(
+        data=frame, date_column="time_end", params=PARAMS
+    )
 
     expected_cols = {
         "geography",
