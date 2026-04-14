@@ -35,6 +35,10 @@ class CoverageModel(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def _preprocess(cls) -> pl.DataFrame:
+        pass
+
+    @abc.abstractmethod
     def fit(self):
         pass
 
