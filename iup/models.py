@@ -20,7 +20,7 @@ from sklearn.preprocessing import OneHotEncoder
 from typing_extensions import Self
 
 import iup
-from iup.utils import date_to_season, index_to_date, month_order
+from iup.utils import date_to_season, month_order
 
 
 class CoverageModel(abc.ABC):
@@ -462,12 +462,6 @@ class RFModel(CoverageModel):
             )
         )
 
-        start_date = datetime.date(
-            self.params["start_year"],
-            self.params["start_month"],
-            self.params["start_day"],
-        )
-
         forecast_t = (
             self.months.index(self.forecast_date.strftime("%b")) - self.end_month_index
         )
@@ -507,15 +501,25 @@ class RFModel(CoverageModel):
                 .with_columns(
                     pl.col("quantile").str.replace("q=", "").cast(pl.Float64),
                     forecast_date=self.forecast_date,
-                    target_index=target_t
-                    + self.end_month_index,  # convert back to month index
+                    target_index=(
+                        target_t + self.end_month_index
+                    ),  # convert back to month index
+                    target_year=pl.col("season").str.extract(r"^(\d{4})/\d{4}"),
                 )
                 .with_columns(
-                    pl.col("target_index")
-                    .map_elements(lambda m: index_to_date(start_date, m))
+                    season_start_date=pl.date(
+                        pl.col("target_year"),
+                        self.params["start_month"],
+                        self.params["start_day"],
+                    ),
+                    target_index=pl.col("target_index").cast(pl.String) + "mo",
+                )
+                .with_columns(
+                    pl.col("season_start_date")
+                    .dt.offset_by(pl.col("target_index"))
                     .alias("time_end")
                 )
-                .drop("target_index")
+                .drop(["target_index", "target_year", "season_start_date"])
             )
 
             preds.append(full_pred)
