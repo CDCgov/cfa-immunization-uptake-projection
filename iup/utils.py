@@ -1,5 +1,4 @@
 import calendar
-import datetime
 from typing import List
 
 import polars as pl
@@ -40,21 +39,3 @@ def month_order(season_start_month: int) -> List[str]:
         for i in list(range(season_start_month, 12 + 1))
         + list(range(1, season_start_month))
     ]
-
-
-def index_to_date(start_date: datetime.date, months: int) -> datetime.date:
-    total_months = start_date.year * 12 + (start_date.month - 1) + months
-    target_year, target_month = divmod(total_months, 12)
-    target_month += 1  # convert divisor remainder to month-index
-
-    last_day = (
-        (
-            datetime.date(target_year, target_month % 12 + 1, 1)
-            - datetime.timedelta(days=1)
-        ).day
-        if target_month < 12
-        else 31
-    )
-    target_day = min(start_date.day, last_day)
-
-    return datetime.date(target_year, target_month, target_day)
