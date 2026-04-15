@@ -58,7 +58,7 @@ forecast_dates:
   interval: 1mo
 
 plots:
-  example_season: "2020/2021"
+  example_season: "2021/2022"
   example_geos: ["New Jersey"]
   n_trajectories: 20
 
