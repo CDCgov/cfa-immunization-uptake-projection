@@ -90,7 +90,7 @@ if __name__ == "__main__":
     sis_tick_base = alt.Chart(
         sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
         .sort("score_value")
-        .pipe(gather_n, 5)
+        .pipe(gather_n, 3)
     ).encode(
         enc_x_month,
         alt.Y("score_value"),
