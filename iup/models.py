@@ -408,6 +408,7 @@ class RFModel(CoverageModel):
             .select(["season", "geography", "t", "estimate"])
             .with_columns(pl.format("t={}", pl.col("t")))
             .pivot(on="t", values="estimate")
+            .drop_nulls()
             .sort(["season", "geography"])
         )
 
