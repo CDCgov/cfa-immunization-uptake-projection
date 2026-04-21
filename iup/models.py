@@ -457,14 +457,8 @@ class RFModel(CoverageModel):
     def predict(self) -> pl.DataFrame:
         assert self.model is not None
 
-        data_pred = self.data.filter(
-            pl.col("season")
-            == date_to_season(
-                pl.lit(self.forecast_date),
-                season_start_month=self.params["start_month"],
-                season_start_day=self.params["start_day"],
-            )
-        )
+        # include in-sample and out-of-sample prediction #
+        data_pred = self.data
 
         forecast_t = (
             self.months.index(self.forecast_date.strftime("%b")) - self.end_month_index
