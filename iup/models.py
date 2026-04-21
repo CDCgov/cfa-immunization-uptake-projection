@@ -435,28 +435,28 @@ class RFModel(CoverageModel):
         # this is true only when target_season is the last season in the data, which is our case for now
         data_fit = self.data.filter(pl.col("season") != target_season)
 
-        self.models = {}
+        self.model = None
 
-        ## fit all the data after forecast_t ##
-        for target_t in range(forecast_t + 1, 1):
-            features = ["season", "geography"] + [
-                f"t={t}"
-                for t in range(
-                    1 - self.months.index(end_date.strftime("%b")), forecast_t + 1
-                )
-            ]
-
-            # always fit the last month of the season given the months before forecast_date
-            X_fit = self.enc.encode(data_fit.select(features))
-            y_fit = data_fit.select(f"t={target_t}").to_series().to_numpy()
-
-            self.models[target_t] = RandomForestRegressor(**self.rf_params).fit(
-                X_fit, y_fit
+        ## fit all the data after forecast_t ##\
+        features = ["season", "geography"] + [
+            f"t={t}"
+            for t in range(
+                1 - self.months.index(end_date.strftime("%b")), forecast_t + 1
             )
+        ]
+
+        X_fit = self.enc.encode(data_fit.select(features))
+        y_fit = data_fit.select(
+            [f"t={target_t}" for target_t in range(forecast_t + 1, 1)]
+        ).to_numpy()
+
+        self.model = RandomForestRegressor(**self.rf_params).fit(X_fit, y_fit)
 
         return self
 
     def predict(self) -> pl.DataFrame:
+        assert self.model is not None
+
         data_pred = self.data.filter(
             pl.col("season")
             == date_to_season(
@@ -482,53 +482,57 @@ class RFModel(CoverageModel):
         ]
 
         X_pred = self.enc.encode(data_pred.select(features))
-        quantile_cols = [f"q={k}" for k in self.quantiles]
-        index_cols = ["season", "geography"]
+        t_cols = [f"t={t}" for t in range(forecast_t + 1, 1)]
+        index_cols = ["season", "geography", "quantile"]
 
-        preds = []
+        pred = np.array([tree.predict(X_pred) for tree in self.model.estimators_])
+        pred = {f"q={k}": np.quantile(pred, k, axis=0) for k in self.quantiles}
+        all_pred = pl.DataFrame()
 
-        for target_t, model in self.models.items():
-            pred = np.array([tree.predict(X_pred) for tree in model.estimators_])
-            pred = {f"q={k}": np.quantile(pred, k, axis=0) for k in self.quantiles}
-            pred = pl.DataFrame(pred)
-
-            full_pred = (
-                pl.concat(
-                    [data_pred.select(["season", "geography"]), pred], how="horizontal"
-                )
-                .unpivot(
-                    on=quantile_cols,
-                    index=index_cols,
-                    variable_name="quantile",
-                    value_name="estimate",
-                )
-                .with_columns(
-                    pl.col("quantile").str.replace("q=", "").cast(pl.Float64),
-                    forecast_date=self.forecast_date,
-                    target_index=(
-                        target_t + self.end_month_index
-                    ),  # convert back to month index
-                    target_year=pl.col("season").str.extract(r"^(\d{4})/\d{4}"),
-                )
-                .with_columns(
-                    season_start_date=pl.date(
-                        pl.col("target_year"),
-                        self.params["start_month"],
-                        self.params["start_day"],
-                    ),
-                    target_index=pl.col("target_index").cast(pl.String) + "mo",
-                )
-                .with_columns(
-                    pl.col("season_start_date")
-                    .dt.offset_by(pl.col("target_index"))
-                    .alias("time_end")
-                )
-                .drop(["target_index", "target_year", "season_start_date"])
+        for k, v in pred.items():
+            df = pl.DataFrame(v, schema=[f"t={t}" for t in range(forecast_t + 1, 1)])
+            df = df.with_columns(
+                quantile=pl.lit(k).str.replace("q=", "").cast(pl.Float64)
             )
 
-            preds.append(full_pred)
+            pred_df = pl.concat(
+                [data_pred.select(["season", "geography"]), df], how="horizontal"
+            )
 
-        return iup.QuantileForecast(pl.concat(preds))
+            all_pred = pl.concat([all_pred, pred_df])
+
+        all_pred = (
+            all_pred.unpivot(
+                on=t_cols,
+                index=index_cols,
+                variable_name="target_t",
+                value_name="estimate",
+            )
+            .with_columns(
+                forecast_date=self.forecast_date,
+                target_index=(
+                    pl.col("target_t").str.replace("t=", "").cast(pl.Int8)
+                    + self.end_month_index
+                ),  # convert back to month index
+                target_year=pl.col("season").str.extract(r"^(\d{4})/\d{4}"),
+            )
+            .with_columns(
+                season_start_date=pl.date(
+                    pl.col("target_year"),
+                    self.params["start_month"],
+                    self.params["start_day"],
+                ),
+                target_index=pl.col("target_index").cast(pl.String) + "mo",
+            )
+            .with_columns(
+                pl.col("season_start_date")
+                .dt.offset_by(pl.col("target_index"))
+                .alias("time_end")
+            )
+            .drop(["target_index", "target_year", "season_start_date", "target_t"])
+        )
+
+        return all_pred
 
 
 class CoverageEncoder:
