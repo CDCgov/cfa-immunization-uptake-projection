@@ -1,0 +1,44 @@
+run_id: vignette_rf
+
+season:
+  start_month: 7 # July
+  start_day: 1
+  end_month: 4 # April
+  end_day: 1
+  # use only a few years of data
+  start_year: 2018
+  end_year: 2022
+
+# include only these geographies
+geographies: [Alaska, Connecticut, District of Columbia, Nevada, New Jersey]
+
+models:
+  - name: RFModel
+    params:
+      n_estimators: 100
+      start_month: 7 # July
+      start_day: 1
+      end_month: 4 # April
+      end_day: 1
+      end_year: 2022
+
+
+alpha: 0.05
+
+forecast_dates:
+  # run forecasts starting Oct, Nov, Dec
+  start: 2021-10-01
+  end: 2021-12-01
+  interval: 1mo
+
+plots:
+  example_season: "2021/2022"
+  example_geos: ["New Jersey"]
+  n_trajectories: 20
+
+# diagnostics are not produced by default
+diagnostics:
+  forecast_dates: [2021-07-01]
+  models: [LPLModel]
+  plots: [posterior_density_plot, parameter_trace_plot]
+  tables: [print_posterior_dist, print_model_summary]
