@@ -429,6 +429,7 @@ class RFModel(CoverageModel):
         )
 
         # this is true only when target_season is the last season in the data, which is our case for now
+        assert self.data.select(target_season).item() == self.data["season"].max()
         data_fit = self.data.filter(pl.col("season") != target_season)
 
         self.model = None
@@ -512,7 +513,7 @@ class RFModel(CoverageModel):
                     self.params["start_month"],
                     self.params["start_day"],
                 ),
-                target_index=pl.col("target_index").cast(pl.String) + "mo",
+                target_index=pl.format("{}mo", pl.col("target_index")),
             )
             .with_columns(
                 pl.col("season_start_date")
