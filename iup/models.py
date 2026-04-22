@@ -4,9 +4,10 @@ import os
 os.environ["JAX_PLATFORMS"] = "cpu"
 
 import abc
+import calendar
 import datetime
 import inspect
-from typing import Any
+from typing import Any, List
 
 import jax.numpy as jnp
 import numpy as np
@@ -20,7 +21,6 @@ from sklearn.preprocessing import OneHotEncoder
 from typing_extensions import Self
 
 import iup
-from iup.utils import date_to_season, month_order
 
 
 class CoverageModel(abc.ABC):
@@ -32,10 +32,6 @@ class CoverageModel(abc.ABC):
         params: dict[str, Any],
         quantiles: list[float],
     ):
-        pass
-
-    @abc.abstractmethod
-    def _preprocess(cls) -> pl.DataFrame:
         pass
 
     @abc.abstractmethod
@@ -373,7 +369,7 @@ class RFModel(CoverageModel):
         self.forecast_date = forecast_date
         self.quantiles = quantiles
         self.params = params
-        self.months = month_order(self.params["start_month"])
+        self.months = self._month_order(self.params["start_month"])
         self.end_month_index = self.months.index(
             datetime.date(
                 self.params["end_year"],
@@ -418,7 +414,7 @@ class RFModel(CoverageModel):
         self.enc = CoverageEncoder()
         self.enc.fit(self.data)
 
-        target_season = date_to_season(
+        target_season = self._date_to_season(
             pl.lit(self.forecast_date),
             season_start_month=self.params["start_month"],
             season_start_day=self.params["start_day"],
@@ -527,6 +523,43 @@ class RFModel(CoverageModel):
         )
 
         return all_pred
+
+    @staticmethod
+    def _month_order(season_start_month: int) -> List[str]:
+        return [
+            calendar.month_abbr[i]
+            for i in list(range(season_start_month, 12 + 1))
+            + list(range(1, season_start_month))
+        ]
+
+    @staticmethod
+    def _date_to_season(
+        date: pl.Expr, season_start_month: int, season_start_day: int = 1
+    ) -> pl.Expr:
+        """Extract the overwinter disease season from a date.
+
+        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
+        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
+        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024".
+
+        Args:
+            date: Dates in an coverage data frame.
+            season_start_month: First month of the overwinter disease season.
+            season_start_day: First day of the first month of the overwinter disease season.
+
+        Returns:
+            Seasons for each date.
+        """
+
+        # for every date, figure out the season breakpoint in that year
+        season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
+
+        # what is the first year in the two-year season indicator?
+        date_year = date.dt.year()
+        year1 = pl.when(date < season_start).then(date_year - 1).otherwise(date_year)
+
+        year2 = year1 + 1
+        return pl.format("{}/{}", year1, year2)
 
 
 class CoverageEncoder:
