@@ -17,8 +17,6 @@ def plot_forecast(
         pl.col("geography") == pl.lit(geography),
     )
 
-    print(fc)
-
     # hack: at the last forecast date, we make a forecast for only one date, but we
     # can't show this with .mark_line(), and so it ends up blank. So remove those
     # dates
