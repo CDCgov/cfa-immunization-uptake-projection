@@ -1,12 +1,11 @@
 import argparse
+import calendar
 from pathlib import Path
 
 import altair as alt
 import numpy as np
 import polars as pl
 import yaml
-
-from iup.utils import month_order
 
 AXIS_PERCENT = alt.Axis(format=".0%")
 LINE_OPACITY = 0.25
@@ -56,6 +55,14 @@ def add_medians(
             .with_columns(pl.lit("median").alias(type_col)),
         ]
     )
+
+
+def month_order(season_start_month: int) -> list[str]:
+    return [
+        calendar.month_abbr[i]
+        for i in list(range(season_start_month, 12 + 1))
+        + list(range(1, season_start_month))
+    ]
 
 
 assert month_order(7) == [

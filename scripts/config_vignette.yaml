@@ -1,4 +1,4 @@
-run_id: vignette_rf
+run_id: vignette
 
 season:
   start_month: 7 # July
@@ -32,15 +32,9 @@ models:
       num_samples: 500
       num_chains: 4
       progress_bar: false
-      start_month: 7 # July
-      start_day: 1
-      end_month: 4 # April
-      end_day: 1
-      # use only a few years of data
-      start_year: 2018
-      end_year: 2022
-
-
+  - name: RFModel
+    params:
+      n_estimators: 100
 
 alpha: 0.05
 
