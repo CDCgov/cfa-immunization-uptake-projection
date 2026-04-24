@@ -2,11 +2,10 @@ import polars as pl
 import pytest
 
 import iup
-import iup.utils
 
 
 @pytest.fixture
-def frame(season_start_month=9, season_start_day=1):
+def frame():
     """
     Make a mock data frame to test model building.
     """

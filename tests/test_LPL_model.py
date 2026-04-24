@@ -25,6 +25,8 @@ PARAMS = {
     "num_samples": 10,
     "num_chains": 1,
     "progress_bar": False,
+}
+SEASON = {
     "start_month": 7,  # July
     "start_day": 1,
     "end_month": 4,  # April
@@ -62,7 +64,10 @@ def test_preprocess(frame):
     Should produce expected columns, given raw data.
     """
     data = iup.models.LPLModel._preprocess(
-        data=frame, date_column="time_end", params=PARAMS
+        data=frame,
+        date_column="time_end",
+        season_start_month=SEASON["start_month"],
+        season_start_day=SEASON["start_day"],
     )
 
     expected_cols = {
@@ -75,7 +80,6 @@ def test_preprocess(frame):
         "season",
         "N_vax",
         "season_geo",
-        "t",
         "elapsed",
         "season_idx",
         "geography_idx",
@@ -93,6 +97,7 @@ def test_fit_handles_groups(frame):
     model = iup.models.LPLModel(
         data=frame,
         forecast_date=datetime.date(2020, 1, 1),
+        season=SEASON,
         params=PARAMS,
         quantiles=QUANTILES,
     )
