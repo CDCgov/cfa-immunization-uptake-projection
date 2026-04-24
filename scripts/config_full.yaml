@@ -44,10 +44,3 @@ plots:
   example_season: "2020/2021"
   example_geos: ["New Jersey"]
   n_trajectories: 20
-
-# diagnostics are not produced by default
-diagnostics:
-  forecast_dates: [2021-07-01]
-  models: [LPLModel]
-  plots: [posterior_density_plot, parameter_trace_plot]
-  tables: [print_posterior_dist, print_model_summary]
