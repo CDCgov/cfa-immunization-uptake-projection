@@ -31,9 +31,6 @@ viz:
 	streamlit run scripts/viz.py -- \
 		--data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --config=$(CONFIG)
 
-dx: scripts.diagnostics $(FITS) $(CONFIG)
-	python $< --fit_dir=$(OUTPUT_DIR)/fits --output_dir=$(OUTPUT_DIR)/diagnostics --config=$(CONFIG)
-
 $(PLOT_SCORES): scripts/plot_scores.py $(SCORES) $(CONFIG)
 	python $< --scores=$(SCORES) --config=$(CONFIG) --output=$@
 
