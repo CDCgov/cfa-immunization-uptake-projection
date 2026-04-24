@@ -5,7 +5,6 @@ import yaml
 
 import iup.eval
 import iup.models
-from iup.utils import date_to_season
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -33,7 +32,7 @@ if __name__ == "__main__":
     forecast_season = pred.select(
         pl.col("forecast_date")
         .pipe(
-            date_to_season,
+            iup.date_to_season,
             season_start_month=config["season"]["start_month"],
             season_start_day=config["season"]["start_day"],
         )

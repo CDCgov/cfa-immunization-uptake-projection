@@ -5,8 +5,7 @@ from typing import List, Optional
 import polars as pl
 import yaml
 
-from iup import CumulativeCoverageData
-from iup.utils import date_to_season
+from iup import CumulativeCoverageData, date_to_season
 
 
 def season_filter(
@@ -63,6 +62,7 @@ def preprocess(
     season_end_month: int,
     season_end_day: int,
     geographies: Optional[List[str] | None],
+    date_col: str = "time_end",
 ) -> CumulativeCoverageData:
     """
     Preprocess the raw data (Filter the raw data with certain states and seasons, add season column).
@@ -97,7 +97,7 @@ def preprocess(
         )
         .with_columns(
             season=date_to_season(
-                pl.col("time_end"),
+                pl.col(date_col),
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
             )

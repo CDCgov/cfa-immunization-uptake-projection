@@ -30,6 +30,7 @@ class CoverageModel(abc.ABC):
         data: pl.DataFrame,
         forecast_date: datetime.date,
         params: dict[str, Any],
+        season: dict[str, Any],
         quantiles: list[float],
     ):
         pass
@@ -54,6 +55,7 @@ class LPLModel(CoverageModel):
         data: iup.CumulativeCoverageData,
         forecast_date: datetime.date,
         params: dict[str, Any],
+        season: dict[str, Any],
         quantiles: list[float],
         date_column: str = "time_end",
     ):
@@ -70,6 +72,7 @@ class LPLModel(CoverageModel):
         self.date_column = date_column
         self.quantiles = quantiles
         self.forecast_date = forecast_date
+        self.season = season
 
         # use parameters, separating MCMC and model fitting parameters
         self.params = params
@@ -90,7 +93,10 @@ class LPLModel(CoverageModel):
 
         # preprocess data
         self.data = self._preprocess(
-            data=self.raw_data, date_column=self.date_column, params=self.params
+            data=self.raw_data,
+            date_column=self.date_column,
+            season_start_month=self.season["start_month"],
+            season_start_day=self.season["start_day"],
         )
 
         # do the indexing
@@ -103,7 +109,13 @@ class LPLModel(CoverageModel):
         self.mcmc = None
 
     @classmethod
-    def _preprocess(cls, data: pl.DataFrame, date_column, params) -> pl.DataFrame:
+    def _preprocess(
+        cls,
+        data: pl.DataFrame,
+        date_column: str,
+        season_start_month: int,
+        season_start_day: int,
+    ) -> pl.DataFrame:
         out = (
             data
             # prepare observation data
@@ -114,13 +126,13 @@ class LPLModel(CoverageModel):
                 season_geo=pl.concat_str(["season", "geography"], separator="_")
             )
             .with_columns(
-                t=cls._days_in_season(
+                elapsed=cls._days_in_season(
                     pl.col(date_column),
-                    params["start_month"],
-                    params["start_day"],
+                    season_start_month=season_start_month,
+                    season_start_day=season_start_day,
                 )
+                / 365
             )
-            .with_columns(elapsed=pl.col("t") / 365)
         )
 
         # add the indices
@@ -155,12 +167,12 @@ class LPLModel(CoverageModel):
 
     @staticmethod
     def _days_in_season(
-        date_col: pl.Expr, season_start_month: int, season_start_day: int
+        date: pl.Expr, season_start_month: int, season_start_day: int
     ) -> pl.Expr:
         """Extract a time elapsed column from a date column, as polars expressions.
 
         Args:
-            date_col: Column of dates.
+            date: Dates
             season_start_month: First month of the overwinter disease season.
             season_start_day: First day of the first month of the overwinter disease season.
 
@@ -168,19 +180,17 @@ class LPLModel(CoverageModel):
             number of days elapsed since the first date
         """
         # for every date, figure out the season breakpoint in that year
-        season_start = pl.date(date_col.dt.year(), season_start_month, season_start_day)
+        season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
 
         # for dates before the season breakpoint in year, subtract a year
-        year = date_col.dt.year()
-        season_start_year = (
-            pl.when(date_col < season_start).then(year - 1).otherwise(year)
-        )
+        year = date.dt.year()
+        season_start_year = pl.when(date < season_start).then(year - 1).otherwise(year)
 
         # rewrite the season breakpoints to that immediately before each date
         season_start = pl.date(season_start_year, season_start_month, season_start_day)
 
         # return the number of days from season start to each date
-        return (date_col - season_start).dt.total_days()
+        return (date - season_start).dt.total_days()
 
     def model(self, data: pl.DataFrame):
         # missing `N_vax` column signals that we are drawing predictions, not fitting
@@ -360,6 +370,7 @@ class RFModel(CoverageModel):
         self,
         data: iup.CumulativeCoverageData,
         params: dict[str, Any],
+        season: dict[str, Any],
         forecast_date: datetime.date,
         quantiles: list[float],
         date_column: str = "time_end",
@@ -368,18 +379,19 @@ class RFModel(CoverageModel):
         self.date_column = date_column
         self.forecast_date = forecast_date
         self.quantiles = quantiles
+        self.season = season
         self.params = params
-        self.months = self._month_order(self.params["start_month"])
+        self.months = self._month_order(self.season["start_month"])
         self.end_month_index = self.months.index(
             datetime.date(
-                self.params["end_year"],
-                self.params["end_month"],
-                self.params["end_day"],
+                self.season["end_year"],
+                self.season["end_month"],
+                self.season["end_day"],
             ).strftime("%b")
         )
 
+        # other params include max_depth, min_samples_split, min_samples_leaf
         rf_keys = {"n_estimators"}
-        # other params include max_depth, min_samples_split, min_samples_leaf, can be added later #
 
         self.rf_params = {k: v for k, v in params.items() if k in rf_keys}
 
@@ -414,10 +426,10 @@ class RFModel(CoverageModel):
         self.enc = CoverageEncoder()
         self.enc.fit(self.data)
 
-        target_season = self._date_to_season(
+        target_season = iup.date_to_season(
             pl.lit(self.forecast_date),
-            season_start_month=self.params["start_month"],
-            season_start_day=self.params["start_day"],
+            season_start_month=self.season["start_month"],
+            season_start_day=self.season["start_day"],
         )
 
         forecast_t = (
@@ -425,16 +437,14 @@ class RFModel(CoverageModel):
         )
 
         end_date = datetime.date(
-            self.params["end_year"], self.params["end_month"], self.params["end_day"]
+            self.season["end_year"], self.season["end_month"], self.season["end_day"]
         )
 
         # this is true only when target_season is the last season in the data, which is our case for now
         assert self.data.select(target_season).item() == self.data["season"].max()
         data_fit = self.data.filter(pl.col("season") != target_season)
 
-        self.model = None
-
-        ## fit all the data after forecast_t ##\
+        # fit all the data after forecast_t
         features = ["season", "geography"] + [
             f"t={t}"
             for t in range(
@@ -454,7 +464,7 @@ class RFModel(CoverageModel):
     def predict(self) -> pl.DataFrame:
         assert self.model is not None
 
-        # include in-sample and out-of-sample prediction #
+        # include in-sample and out-of-sample prediction
         data_pred = self.data
 
         forecast_t = (
@@ -462,7 +472,7 @@ class RFModel(CoverageModel):
         )
 
         end_date = datetime.date(
-            self.params["end_year"], self.params["end_month"], self.params["end_day"]
+            self.season["end_year"], self.season["end_month"], self.season["end_day"]
         )
 
         features = ["season", "geography"] + [
@@ -510,8 +520,8 @@ class RFModel(CoverageModel):
             .with_columns(
                 season_start_date=pl.date(
                     pl.col("target_year"),
-                    self.params["start_month"],
-                    self.params["start_day"],
+                    self.season["start_month"],
+                    self.season["start_day"],
                 ),
                 target_index=pl.format("{}mo", pl.col("target_index")),
             )
@@ -532,35 +542,6 @@ class RFModel(CoverageModel):
             for i in list(range(season_start_month, 12 + 1))
             + list(range(1, season_start_month))
         ]
-
-    @staticmethod
-    def _date_to_season(
-        date: pl.Expr, season_start_month: int, season_start_day: int = 1
-    ) -> pl.Expr:
-        """Extract the overwinter disease season from a date.
-
-        Dates in year Y before the season start (e.g., Sep 1) are in the second part of
-        the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
-        season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024".
-
-        Args:
-            date: Dates in an coverage data frame.
-            season_start_month: First month of the overwinter disease season.
-            season_start_day: First day of the first month of the overwinter disease season.
-
-        Returns:
-            Seasons for each date.
-        """
-
-        # for every date, figure out the season breakpoint in that year
-        season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
-
-        # what is the first year in the two-year season indicator?
-        date_year = date.dt.year()
-        year1 = pl.when(date < season_start).then(date_year - 1).otherwise(date_year)
-
-        year2 = year1 + 1
-        return pl.format("{}/{}", year1, year2)
 
 
 class CoverageEncoder:
