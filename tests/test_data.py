@@ -19,13 +19,25 @@ def test_to_cumulative_handles_no_last(frame):
         == pl.Series(
             [
                 0.001,
+                0.003,
+                0.006,
+                0.01,
+                0.015,
+                0.021,
+                0.028,
+                0.036,
+                0.045,
+                0.055,
                 0.001,
-                0.101,
-                0.011,
-                0.401,
-                0.041,
-                0.801,
-                0.081,
+                0.003,
+                0.006,
+                0.01,
+                0.015,
+                0.021,
+                0.028,
+                0.036,
+                0.045,
+                0.055,
             ]
         )
     )
@@ -55,13 +67,15 @@ def test_to_cumulative_handles_last(frame):
         == pl.Series(
             [
                 0.011,
-                0.002,
-                0.111,
-                0.012,
-                0.411,
-                0.042,
-                0.811,
-                0.082,
+                0.013,
+                0.016,
+                0.02,
+                0.025,
+                0.031,
+                0.038,
+                0.046,
+                0.055,
+                0.065,
             ]
         )
     )
@@ -78,7 +92,33 @@ def test_to_cumulative_handles_no_groups(frame):
 
     output = frame.to_cumulative(groups=None)
 
-    assert all(output["estimate"].round(10) == pl.Series([0.001, 0.101, 0.401, 0.801]))
+    assert all(
+        output["estimate"].round(10)
+        == pl.Series(
+            [
+                0.001,
+                0.003,
+                0.006,
+                0.01,
+                0.015,
+                0.021,
+                0.028,
+                0.036,
+                0.045,
+                0.055,
+                0.001,
+                0.003,
+                0.006,
+                0.01,
+                0.015,
+                0.021,
+                0.028,
+                0.036,
+                0.045,
+                0.055,
+            ]
+        )
+    )
 
 
 def test_cumulative_coverage_is_proportion(frame):
@@ -100,7 +140,30 @@ def test_to_incident_handles_groups(frame):
 
     assert all(
         output["estimate"].round(10)
-        == pl.Series([0.0, 0.0, 0.099, 0.009, 0.2, 0.02, 0.1, 0.01])
+        == pl.Series(
+            [
+                0.0,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.0,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+            ]
+        )
     )
 
 
@@ -114,7 +177,33 @@ def test_to_incident_handles_no_groups(frame):
 
     output = frame.to_incident(groups=None)
 
-    assert all(output["estimate"].round(10) == pl.Series([0.0, 0.099, 0.2, 0.1]))
+    assert all(
+        output["estimate"].round(10)
+        == pl.Series(
+            [
+                0.0,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.0,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+                0.001,
+            ]
+        )
+    )
 
 
 def test_quantile_forecast_validation():

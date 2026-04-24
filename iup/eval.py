@@ -42,6 +42,7 @@ def mspe(
         .agg(pl.col("score_value").mean())
         .with_columns(score_fun=pl.lit("mspe"))
         .select(grouping_factors + SCORE_COLS)
+        .drop_nulls()
         .collect()
     )
 
@@ -80,5 +81,6 @@ def eos_abs_diff(
             score_fun=pl.lit("eos_abs_diff"),
         )
         .select(grouping_factors + SCORE_COLS)
+        .drop_nulls()
         .collect()
     )

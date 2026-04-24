@@ -1,7 +1,6 @@
 import argparse
 import calendar
 from pathlib import Path
-from typing import List
 
 import altair as alt
 import numpy as np
@@ -58,7 +57,7 @@ def add_medians(
     )
 
 
-def month_order(season_start_month: int) -> List[str]:
+def month_order(season_start_month: int) -> list[str]:
     return [
         calendar.month_abbr[i]
         for i in list(range(season_start_month, 12 + 1))

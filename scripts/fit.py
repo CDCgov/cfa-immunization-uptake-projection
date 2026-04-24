@@ -48,6 +48,7 @@ def fit_all_models(
             data=data,
             forecast_date=forecast_date,
             params=config_model["params"],
+            season=config["season"],
             quantiles=quantiles,
         ).fit()
 
