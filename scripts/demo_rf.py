@@ -12,7 +12,8 @@ from sklearn.preprocessing import OneHotEncoder
 
 from iup import date_to_season
 
-SEASON_START_MONTH = 7  # July
+SEASON_START_MONTH = 8
+SEASON_DURATION = 9
 
 
 def month_in_season(
@@ -48,6 +49,9 @@ data = (
     )
     # remove partial seasons
     .filter(pl.col("season").is_in(["2008/2009", "2022/2023"]).not_())
+    # don't try to forecase to the end of the season
+    .with_columns(t=pl.col("time_end").map_elements(month_in_season))
+    .filter(pl.col("t") < SEASON_DURATION)
     .select(["season", "geography", "time_end", "estimate"])
 )
 
@@ -107,6 +111,14 @@ def forecast(forecast_date: datetime.date, data=data):
         .unique()
         .with_columns(t=pl.col("time_end").map_elements(month_in_season))
     )
+
+    with pl.Config(tbl_cols=-1):
+        print(
+            data_t.select(["season", "geography", "t", "estimate"])
+            .pivot(on="t", values="estimate", sort_columns=True)
+            .describe()
+        )
+
     # get the wide format data
     data_wide = (
         data_t.select(["season", "geography", "t", "estimate"])
@@ -124,7 +136,9 @@ def forecast(forecast_date: datetime.date, data=data):
         str(t) for t in range(0, fc_month + 1) if str(t) in data_wide.columns
     ]
     y_features = [
-        str(t) for t in range(fc_month + 1, 12) if str(t) in data_wide.columns
+        str(t)
+        for t in range(fc_month + 1, SEASON_DURATION)
+        if str(t) in data_wide.columns
     ]
 
     # fit the model
@@ -197,7 +211,10 @@ print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.pn
 
 # Forecast errors
 errors = (
-    data.filter(pl.col("season") == pl.col("season").max())
+    data.filter(
+        pl.col("season") == pl.col("season").max(),
+        pl.col("time_end") == pl.col("time_end").max(),
+    )
     .join(forecasts, on=["season", "geography", "time_end"], how="left")
     .with_columns(error=pl.col("pred") - pl.col("estimate"))
 )
