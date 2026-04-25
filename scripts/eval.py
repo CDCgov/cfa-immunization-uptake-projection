@@ -4,7 +4,6 @@ import polars as pl
 import yaml
 
 import iup.eval
-import iup.models
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -19,31 +18,21 @@ if __name__ == "__main__":
 
     season = config["season"]
 
-    pred = pl.scan_parquet(args.preds)
+    pred = pl.read_parquet(args.preds)
     data = pl.read_parquet(args.data)
-
-    # score each season/state fit, using all available data (i.e., only the last
-    # forecast date)
-    mspe = iup.eval.mspe(
-        obs=data,
-        pred=pred.filter(pl.col("forecast_date") == pl.col("forecast_date").max()),
-        grouping_factors=["season", "geography"],
-    )
 
     # score the forecasts proper, only in the season that the forecasts were made
     forecast_season = pred.select(
-        pl.col("forecast_date")
-        .pipe(
-            iup.to_season,
+        iup.to_season(
+            pl.col("forecast_date"),
             season_start_month=season["start_month"],
             season_start_day=season["start_day"],
             season_end_month=season["end_month"],
             season_end_day=season["end_day"],
-        )
-        .unique()
-    ).collect()
-    assert forecast_season.height == 1
-    forecast_season = forecast_season.item()
+        ).unique()
+    ).to_series()
+    assert len(forecast_season) == 1, "Can only score forecasts from one season"
+    forecast_season = forecast_season[0]
 
     eos_abs_diff = iup.eval.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
@@ -51,4 +40,4 @@ if __name__ == "__main__":
         grouping_factors=["season", "geography"],
     )
 
-    pl.concat([mspe, eos_abs_diff]).write_parquet(args.output)
+    eos_abs_diff.write_parquet(args.output)

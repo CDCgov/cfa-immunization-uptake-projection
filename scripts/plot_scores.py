@@ -4,11 +4,6 @@ from pathlib import Path
 import altair as alt
 import polars as pl
 import yaml
-from plot_data import (
-    TICK_KWARGS,
-    gather_n,
-    month_order,
-)
 
 LINE_OPACITY = 0.4
 NUMBER_HIGHLIGHT = 2
@@ -33,66 +28,33 @@ if __name__ == "__main__":
     out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    fit_scores = scores.filter(
-        pl.col("forecast_date") == pl.col("forecast_date").max(),
-        pl.col("score_fun") == pl.lit("mspe"),
-    ).with_columns(pl.col("score_value").log())
-
-    sort_month = month_order(config["season"]["start_month"])
-    enc_x_month = alt.X("month:N", title=None, sort=sort_month)
-
-    enc_y_mspe = alt.Y(
-        "score_value", title="Score (Log(MSPE))", scale=alt.Scale(zero=False)
-    )
-
-    alt.Chart(fit_scores).mark_point().encode(
-        alt.X("season", title=None),
-        alt.Color("model"),
-        enc_y_mspe,
-    ).save(out_dir / "score_by_season.svg")
-
-    alt.Chart(fit_scores).mark_point().encode(
-        alt.X(
-            "geography",
-            title=None,
-            sort=alt.EncodingSortField("score_value", "median", "descending"),
-        ),
-        enc_y_mspe,
-        alt.Color("model"),
-    ).save(out_dir / "score_by_geo.svg")
-
     # sis = score in season
-    sis_data = scores.filter(
-        pl.col("score_fun") == pl.lit("eos_abs_diff"),
-        pl.col("season") == pl.col("season").max(),
-    ).with_columns(month=pl.col("forecast_date").dt.to_string("%b"))
+    data = scores.filter(pl.col("score_fun") == pl.lit("eos_abs_diff"))
 
-    line_encodings = [
-        enc_x_month,
-        alt.Y("score_value:Q", title="Score (abs. end-of-season diff.)"),
-        alt.Detail("geography:Q"),
+    base = alt.Chart(data).encode(
+        alt.X("forecast_date", type="temporal", axis=alt.Axis(format="%b"))
+    )
+    line_chart = base.mark_line(point=True, opacity=LINE_OPACITY).encode(
+        alt.Y("score_value", title="Score (abs. end-of-season diff.)"),
+        alt.Detail("geography"),
         alt.Color("model"),
-    ]
-
-    sis_line = (
-        alt.Chart(sis_data)
-        .mark_line(color="black", opacity=LINE_OPACITY)
-        .encode(*line_encodings)
     )
 
-    sis_tick_base = alt.Chart(
-        sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
-        .sort("score_value")
-        .pipe(gather_n, 3)
-    ).encode(
-        enc_x_month,
-        alt.Y("score_value"),
-        alt.Text("geography"),
-    )
+    # tick_base = alt.Chart(
+    #     sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
+    #     .sort("score_value")
+    #     .pipe(gather_n, 3)
+    # ).encode(
+    #     enc_x_month,
+    #     alt.Y("score_value"),
+    #     alt.Text("geography"),
+    # )
 
-    sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
-    sis_text = sis_tick_base.mark_text(align="left", dx=15)
+    # sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
+    # sis_text = sis_tick_base.mark_text(align="left", dx=15)
 
-    (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
+    # (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
+
+    line_chart.save(out_dir / "scores.svg")
 
     out_flag.touch()
