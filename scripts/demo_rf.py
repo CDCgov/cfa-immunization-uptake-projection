@@ -10,10 +10,10 @@ import polars as pl
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder
 
-from iup import date_to_season
+from iup import to_season
 
 SEASON_START_MONTH = 8
-SEASON_DURATION = 9
+SEASON_END_MONTH = 4
 
 
 def month_in_season(
@@ -45,13 +45,16 @@ data = (
     pl.read_parquet("data/raw.parquet")
     .filter(pl.col("geography_type") == pl.lit("admin1"))
     .with_columns(
-        season=date_to_season(pl.col("time_end"), season_start_month=SEASON_START_MONTH)
+        season=to_season(
+            pl.col("time_end"),
+            season_start_month=SEASON_START_MONTH,
+            season_end_month=SEASON_END_MONTH,
+        )
     )
+    .filter(pl.col("season").is_null().not_())
     # remove partial seasons
     .filter(pl.col("season").is_in(["2008/2009", "2022/2023"]).not_())
-    # don't try to forecase to the end of the season
     .with_columns(t=pl.col("time_end").map_elements(month_in_season))
-    .filter(pl.col("t") < SEASON_DURATION)
     .select(["season", "geography", "time_end", "estimate"])
 )
 
@@ -113,13 +116,6 @@ def forecast(forecast_date: datetime.date, data=data):
         .with_columns(t=pl.col("time_end").map_elements(month_in_season))
     )
 
-    with pl.Config(tbl_cols=-1):
-        print(
-            data_t.select(["season", "geography", "t", "estimate"])
-            .pivot(on="t", values="estimate", sort_columns=True)
-            .describe()
-        )
-
     # get the wide format data
     data_wide = (
         data_t.select(["season", "geography", "t", "estimate"])
@@ -131,7 +127,11 @@ def forecast(forecast_date: datetime.date, data=data):
     )
 
     fc_season = pl.select(
-        date_to_season(pl.lit(forecast_date), season_start_month=SEASON_START_MONTH)
+        to_season(
+            pl.lit(forecast_date),
+            season_start_month=SEASON_START_MONTH,
+            season_end_month=SEASON_END_MONTH,
+        )
     ).item()
     fc_month = month_in_season(forecast_date)
 
@@ -139,9 +139,7 @@ def forecast(forecast_date: datetime.date, data=data):
         str(t) for t in range(0, fc_month + 1) if str(t) in data_wide.columns
     ]
     y_features = [
-        str(t)
-        for t in range(fc_month + 1, SEASON_DURATION)
-        if str(t) in data_wide.columns
+        str(t) for t in range(fc_month + 1, 12) if str(t) in data_wide.columns
     ]
 
     # fit the model

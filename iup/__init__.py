@@ -160,30 +160,44 @@ class SampleForecast(Data):
         )
 
 
-def date_to_season(
-    date: pl.Expr, season_start_month: int, season_start_day: int = 1
+def to_season(
+    date: pl.Expr,
+    season_start_month: int,
+    season_end_month: int,
+    season_start_day: int = 1,
+    season_end_day: int = 1,
 ) -> pl.Expr:
-    """Extract the overwinter disease season from a date.
+    """
+    Identify the overwinter season from a date.
 
-    Dates in year Y before the season start (e.g., Sep 1) are in the second part of
-    the season (i.e., in season Y-1/Y). Dates in year Y after the season start are in
-    season Y/Y+1. E.g., 2023-10-07 and 2024-04-18 are both in "2023/2024".
+    Every year, there is a season end (e.g., May 1) and a season start (e.g., Sep 1).
+    Dates before the season end are associated with the prior season (e.g., Feb 1, 2020
+    belongs to 2019/2020 season). Dates after the season start are associated with the
+    next season (e.g., Oct 1, 2020 belongs to 2020/2021). Dates between the season end
+    and season start are not in any season (e.g., June 1).
 
     Args:
-        date: Dates in an coverage data frame.
-        season_start_month: First month of the overwinter disease season.
-        season_start_day: First day of the first month of the overwinter disease season.
+        date: dates
+        season_start_month: first month
+        season_end_month: last month
+        season_start_day: first day
+        season_end_day: last day
 
     Returns:
-        Seasons for each date.
+        season like "2020/2021"
     """
+    assert (season_start_month, season_start_day) > (
+        season_end_month,
+        season_end_day,
+    ), "Only overwinter seasons are supported"
 
-    # for every date, figure out the season breakpoint in that year
-    season_start = pl.date(date.dt.year(), season_start_month, season_start_day)
+    # year of this date
+    y = date.dt.year()
+    # start and end dates of seasons in this year
+    end = pl.date(y, season_end_month, season_end_day)
+    start = pl.date(y, season_start_month, season_start_day)
 
-    # what is the first year in the two-year season indicator?
-    date_year = date.dt.year()
-    year1 = pl.when(date < season_start).then(date_year - 1).otherwise(date_year)
+    # first year of the two-year season
+    sy1 = pl.when(date <= end).then(y - 1).when(date >= start).then(y).otherwise(None)
 
-    year2 = year1 + 1
-    return pl.format("{}/{}", year1, year2)
+    return pl.when(sy1.is_null()).then(None).otherwise(pl.format("{}/{}", sy1, sy1 + 1))

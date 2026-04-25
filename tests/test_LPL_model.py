@@ -48,7 +48,6 @@ def test_index():
     )
 
     out = iup.models.LPLModel._index(df, groups=["first_name", "last_name"])
-    print(out)
 
     polars.testing.assert_frame_equal(
         out,

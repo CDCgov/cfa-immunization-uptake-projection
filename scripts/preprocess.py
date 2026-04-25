@@ -5,60 +5,15 @@ from typing import List, Optional
 import polars as pl
 import yaml
 
-from iup import CumulativeCoverageData, date_to_season
-
-
-def season_filter(
-    df: pl.LazyFrame,
-    start_year: int,
-    start_month: int,
-    start_day: int,
-    end_year: int,
-    end_month: int,
-    end_day: int,
-    col_name="time_end",
-) -> pl.LazyFrame:
-    """Filter a data frame for dates that are before the season end or after the season start.
-
-    Args:
-        df: Data frame to filter.
-        start_year: Start year of the first season.
-        start_month: First month of the season.
-        start_day: First day of the season.
-        end_year: End year of the last season.
-        end_month: Last month of the season.
-        end_day: Last day of the season.
-        col_name: Name of the column containing dates. Defaults to "time_end".
-
-    Returns:
-        Filtered data frame (assumes summer months are "out of season").
-    """
-    assert (end_month, end_day) < (start_month, start_day), (
-        "Only summer-ending seasons are supported"
-    )
-
-    col = pl.col(col_name)
-    year = col.dt.year()
-    month = col.dt.month()
-    day = col.dt.day()
-
-    return (
-        df.filter(
-            (year > start_year)
-            | ((year == start_year) & (month >= start_month) & (day >= start_day))
-        ).filter(
-            (year < end_year)
-            | ((year == end_year) & (month <= end_month) & (day <= end_day))
-        )  # remove partial season
-    )
+from iup import CumulativeCoverageData, to_season
 
 
 def preprocess(
     raw_data: pl.LazyFrame,
-    season_start_year: int,
+    start_year: int,
+    end_year: int,
     season_start_month: int,
     season_start_day: int,
-    season_end_year: int,
     season_end_month: int,
     season_end_day: int,
     geographies: Optional[List[str] | None],
@@ -96,20 +51,19 @@ def preprocess(
             .not_(),
         )
         .with_columns(
-            season=date_to_season(
+            season=to_season(
                 pl.col(date_col),
                 season_start_month=season_start_month,
                 season_start_day=season_start_day,
+                season_end_month=season_end_month,
+                season_end_day=season_end_day,
             )
         )
-        .pipe(
-            season_filter,
-            start_year=season_start_year,
-            start_month=season_start_month,
-            start_day=season_start_day,
-            end_year=season_end_year,
-            end_month=season_end_month,
-            end_day=season_end_day,
+        .filter(
+            # drop dates before or after the outermost season
+            pl.col(date_col).dt.year().is_between(start_year, end_year),
+            # drop out-of-season dates between seasons
+            pl.col("season").is_null().not_(),
         )
         .pipe(geo_filter)
         .collect()
@@ -135,10 +89,10 @@ if __name__ == "__main__":
 
     clean_data = preprocess(
         raw_data,
-        season_start_year=config["season"]["start_year"],
+        start_year=config["season"]["start_year"],
+        end_year=config["season"]["end_year"],
         season_start_month=config["season"]["start_month"],
         season_start_day=config["season"]["start_day"],
-        season_end_year=config["season"]["end_year"],
         season_end_month=config["season"]["end_month"],
         season_end_day=config["season"]["end_day"],
         geographies=geographies,
