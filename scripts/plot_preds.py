@@ -11,60 +11,6 @@ import iup
 LINE_OPACITY = 0.4
 
 
-def plot_forecast(
-    obs: pl.DataFrame, preds: pl.DataFrame, geography: str
-) -> alt.FacetChart:
-    assert preds["season"].unique().len() == 1, (
-        "Can only plot forecasts from one season"
-    )
-    assert obs["season"].unique().len() == 1, "Can only plot data from one season"
-
-    fc = preds.filter(
-        pl.col("time_end") > pl.col("forecast_date"),
-        pl.col("geography") == pl.lit(geography),
-    ).drop("season", "geography")
-
-    # hack: at the last forecast date, we make a forecast for only one date, but we
-    # can't show this with .mark_line(), and so it ends up blank. So remove those
-    # dates
-    good_fc_dates = (
-        fc.filter(pl.col("pred_estimate").is_not_null())
-        .group_by("forecast_date")
-        .agg(n=pl.col("time_end").unique().len())
-        .filter(pl.col("n") >= 2)
-        .select("forecast_date")
-        .to_series()
-        .to_list()
-    )
-
-    chart_data = (
-        obs.filter(pl.col("geography") == pl.lit(geography))
-        .drop("season", "geography")
-        .join(pl.DataFrame({"forecast_date": good_fc_dates}), how="cross")
-        .join(fc, on=["forecast_date", "time_end"], how="left")
-    )
-
-    base = alt.Chart(chart_data).encode(
-        alt.X("time_end", title=None, axis=alt.Axis(format="%b"))
-    )
-    fc_cone = base.mark_area(opacity=0.25).encode(
-        alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT),
-        alt.Y2("pred_uci"),
-        alt.Color("model"),
-    )
-    fc_points = base.mark_line(opacity=0.75).encode(
-        alt.Y("pred_estimate"), alt.Color("model")
-    )
-    data_points = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
-    data_error = base.mark_rule(color="black").encode(
-        alt.X2("time_end"), alt.Y("obs_lci"), alt.Y2("obs_uci")
-    )
-
-    return (fc_cone + fc_points + data_points + data_error).facet(
-        column=alt.Column("forecast_date", header=None)
-    )
-
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
@@ -104,9 +50,11 @@ if __name__ == "__main__":
 
     preds = (
         preds_raw.filter(
+            pl.col("time_end") > pl.col("forecast_date"),
             pl.col("season") == pl.lit(forecast_season),
             pl.col("quantile").is_in(quantiles),
         )
+        .drop("season")
         .with_columns(
             pl.col("quantile").replace_strict(
                 {
@@ -122,14 +70,43 @@ if __name__ == "__main__":
     obs = (
         pl.read_parquet(args.data)
         .filter(pl.col("season") == pl.lit(forecast_season))
-        .select(["season", "geography", "time_end", "estimate", "lci", "uci"])
+        .select(["geography", "time_end", "estimate", "lci", "uci"])
         .rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
     )
 
-    # example fits and forecasts
-    for geo in config["plots"]["example_geos"]:
-        plot_forecast(obs=obs, preds=preds, geography=geo).save(
-            out_dir / f"forecast_{geo}.svg"
-        )
+    # hack: at the last forecast date, we make a forecast for only one date, but we
+    # can't show this with .mark_line(), and so it ends up blank. So remove those
+    # dates
+    good_fcs = (
+        preds.filter(pl.col("pred_estimate").is_not_null())
+        .group_by("model", "forecast_date")
+        .agg(n=pl.col("time_end").unique().len())
+        .filter(pl.col("n") >= 2)
+        .select("model", "forecast_date")
+    )
+
+    chart_data = obs.join(good_fcs, how="cross").join(
+        preds, on=["model", "geography", "forecast_date", "time_end"], how="left"
+    )
+
+    base = alt.Chart(chart_data).encode(
+        alt.X("time_end", title=None, axis=alt.Axis(format="%b"))
+    )
+    fc_cone = base.mark_area(opacity=0.25).encode(
+        alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT),
+        alt.Y2("pred_uci"),
+        alt.Color("model"),
+    )
+    fc_points = base.mark_line(opacity=0.75).encode(
+        alt.Y("pred_estimate"), alt.Color("model")
+    )
+    data_points = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
+    data_error = base.mark_rule(color="black").encode(
+        alt.X2("time_end"), alt.Y("obs_lci"), alt.Y2("obs_uci")
+    )
+
+    (fc_cone + fc_points + data_points + data_error).facet(
+        column="forecast_date", row="geography"
+    ).save(out_dir / "forecast.svg")
 
     out_flag.touch()
