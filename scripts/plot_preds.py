@@ -136,7 +136,12 @@ if __name__ == "__main__":
     sort_month = month_order(config["season"]["start_month"])
 
     # example fits and forecasts
-    for geo in config["plots"]["example_geos"]:
+    if "example_geos" in config["plots"] and config["plots"]["example_geos"]:
+        geos = config["plots"]["example_geos"]
+    else:
+        geos = config["geographies"]
+
+    for geo in geos:
         plot_fit(
             obs=obs,
             pred_cones=pred_cones,
