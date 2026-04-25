@@ -13,15 +13,6 @@ from sklearn.preprocessing import OneHotEncoder
 import iup.models
 from iup import date_to_season
 
-
-def to_inc(t: pl.Expr, estimate: pl.Expr) -> pl.Expr:
-    return pl.struct(
-        start=pl.lit(None).append(t.reverse().slice(1).reverse()),
-        end=t,
-        inc=estimate.diff(),
-    )
-
-
 # Create output directory
 OUTPUT_DIR = Path("output/demo_rf")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,9 +37,9 @@ data = (
     # remove partial seasons
     .filter(pl.col("season").is_in(["2008/2009", "2022/2023"]).not_())
     # convert to incident coverage
-    .sort(["season", "geography"])
+    .sort(["season", "geography", "time_end"])
     .with_columns(inc=pl.col("estimate").diff())
-    .select(["season", "geography", "time_end", "estimate", "start", "end", "inc"])
+    .select(["season", "geography", "time_end", "estimate", "t", "inc"])
 )
 
 print("Data shape:", data.shape)
@@ -100,7 +91,7 @@ def forecast(forecast_date: date, data=data) -> pl.DataFrame:
 
     # fit the model
     data_fit = data.drop_nulls().filter(pl.col("time_end") <= forecast_date)
-    X_fit = enc.encode(data_fit.select(["season", "geography", "start", "end"]))
+    X_fit = enc.encode(data_fit.select(["season", "geography", "t"]))
     y_fit = data_fit["inc"]
 
     rf = RandomForestRegressor()
@@ -108,7 +99,7 @@ def forecast(forecast_date: date, data=data) -> pl.DataFrame:
 
     # make the forecast
     data_pred = data.drop_nulls().filter(pl.col("time_end") > forecast_date)
-    X_pred = enc.encode(data_pred.select(["season", "geography", "start", "end"]))
+    X_pred = enc.encode(data_pred.select(["season", "geography", "t"]))
     y_pred = rf.predict(X_pred)
 
     # assemble the cumulative coverage based on incremental values
@@ -137,12 +128,13 @@ print("\nGenerating forecasts...")
 fc_dates = (
     data.filter(pl.col("season") == pl.col("season").max())
     .select(pl.col("time_end").unique())
-    .sample(3)
     .to_series()
+    .sort()
+    # don't perform forecasts on the first or last dates
+    .tail(-1)
+    .head(-1)
 )
 forecasts = pl.concat([forecast(x) for x in fc_dates])
-
-print(forecasts)
 
 # Forecast visualization by geography
 chart_data = (
