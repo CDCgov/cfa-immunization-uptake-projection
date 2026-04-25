@@ -55,6 +55,7 @@ data = (
     .select(["season", "geography", "time_end", "estimate"])
 )
 
+
 print("Data shape:", data.shape)
 print("\nData description:")
 print(data.describe())
@@ -123,7 +124,9 @@ def forecast(forecast_date: datetime.date, data=data):
     data_wide = (
         data_t.select(["season", "geography", "t", "estimate"])
         .pivot(on="t", values="estimate", sort_columns=True)
-        # warning: this is a kludge
+        # impute zero uptake at start of season
+        .with_columns(pl.coalesce(pl.col("0"), 0.0))
+        # drop season/geo's with any other missing values
         .drop_nulls()
     )
 
