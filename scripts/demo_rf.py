@@ -1,50 +1,60 @@
 """Random Forest demonstration script for immunization uptake projection."""
 
+import datetime
 from pathlib import Path
 from typing import Tuple
 
 import altair as alt
 import numpy as np
 import polars as pl
-from plot_data import month_order
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder
 
-from iup.utils import date_to_season
+from iup import date_to_season
+
+SEASON_START_MONTH = 8
+SEASON_DURATION = 9
+
+
+def month_in_season(
+    date: datetime.date,
+    season_start_month: int = SEASON_START_MONTH,
+    season_start_day: int = 1,
+) -> int:
+    assert date.day == 1
+    year = date.year
+    # start of a season that's in this year
+    ssiy = datetime.date(year, season_start_month, season_start_day)
+
+    # season start year
+    if date < ssiy:
+        ssy = year - 1
+    else:
+        ssy = year
+
+    return (year - ssy) * 12 + (date.month - season_start_month)
+
 
 # Create output directory
 OUTPUT_DIR = Path("output/demo_rf")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Configuration
-SEASON_START_MONTH = 7  # July
-END_MONTH = 9  # 9 months after July, i.e., April
-MIN_T = 1 - END_MONTH
-months = month_order(season_start_month=SEASON_START_MONTH)
 
 # Load and prepare data
 data = (
     pl.read_parquet("data/raw.parquet")
     .filter(pl.col("geography_type") == pl.lit("admin1"))
     .with_columns(
-        season=date_to_season(
-            pl.col("time_end"), season_start_month=SEASON_START_MONTH
-        ),
-        t=pl.col("time_end")
-        .dt.to_string("%b")
-        .map_elements(lambda x: months.index(x) - END_MONTH, pl.Int64),
+        season=date_to_season(pl.col("time_end"), season_start_month=SEASON_START_MONTH)
     )
-    .filter(pl.col("t").is_between(MIN_T, 0))
     # remove partial seasons
     .filter(pl.col("season").is_in(["2008/2009", "2022/2023"]).not_())
-    .select(["season", "geography", "t", "estimate"])
-    # go to long format
-    .with_columns(pl.format("t={}", pl.col("t")))
-    .pivot(on="t", values="estimate")
-    # this is a kludge: really should impute these values
-    .drop_nulls()
-    .sort(["season", "geography"])
+    # don't try to forecase to the end of the season
+    .with_columns(t=pl.col("time_end").map_elements(month_in_season))
+    .filter(pl.col("t") < SEASON_DURATION)
+    .select(["season", "geography", "time_end", "estimate"])
 )
+
 
 print("Data shape:", data.shape)
 print("\nData description:")
@@ -89,115 +99,127 @@ class CoverageEncoder:
             ]
 
 
-# Train initial model
-rf = RandomForestRegressor(oob_score=True)
-enc = CoverageEncoder()
-
-fit_data = data.drop("t=0")
-enc.fit(fit_data)
-
-X = enc.encode(fit_data)
-y = data.select("t=0").to_series().to_numpy()
-
-rf.fit(X, y)
-
-# Feature importance analysis
-features = pl.from_records(
-    enc.categories(fit_data), orient="row", schema=["feature", "value"]
-).with_columns(importance=rf.feature_importances_)
-
-print("\nFeature importances:")
-print(features)
-print("\nFeature importance by group:")
-print(features.group_by("feature").agg(pl.col("importance").sum()))
-
-# Post hoc (but OOB) comparison of end-of-season predictions
-chart1 = (
-    alt.Chart(data.with_columns(pred=rf.oob_prediction_))
-    .mark_point()
-    .encode(alt.X("t=0"), alt.Y("pred"))
-)
-chart1.save(str(OUTPUT_DIR / "oob_predictions.png"))
-print(f"\nSaved OOB predictions chart to {OUTPUT_DIR / 'oob_predictions.png'}")
-
-# Distribution of end-of-season errors
-chart2 = (
-    alt.Chart(
-        data.with_columns(pred=rf.oob_prediction_).with_columns(
-            error=pl.col("pred") - pl.col("t=0")
-        )
-    )
-    .mark_bar()
-    .encode(alt.X("error", bin=True), alt.Y("count()"))
-)
-chart2.save(str(OUTPUT_DIR / "error_distribution.png"))
-print(f"Saved error distribution chart to {OUTPUT_DIR / 'error_distribution.png'}")
-
-
 # Forecasting function
-def forecast(
-    forecast_t: int, target_t: int = 0, target_season: str = "2021/2022", data=data
-):
-    assert forecast_t >= MIN_T
-
+def forecast(forecast_date: datetime.date, data=data):
     enc = CoverageEncoder()
     enc.fit(data)
 
-    # fit the model
-    data_fit = data.filter(pl.col("season") != pl.lit(target_season))
-    features = ["season", "geography"] + [
-        f"t={t}" for t in range(MIN_T, forecast_t + 1)
+    # add month in season
+    data_t = data.with_columns(t=pl.col("time_end").map_elements(month_in_season))
+    # keep track of season, month in season <-> date
+    date_crosswalk = (
+        data_t.select(["season", "time_end"])
+        .unique()
+        .with_columns(t=pl.col("time_end").map_elements(month_in_season))
+    )
+
+    with pl.Config(tbl_cols=-1):
+        print(
+            data_t.select(["season", "geography", "t", "estimate"])
+            .pivot(on="t", values="estimate", sort_columns=True)
+            .describe()
+        )
+
+    # get the wide format data
+    data_wide = (
+        data_t.select(["season", "geography", "t", "estimate"])
+        .pivot(on="t", values="estimate", sort_columns=True)
+        # impute zero uptake at start of season
+        .with_columns(pl.coalesce(pl.col("0"), 0.0))
+        # drop season/geo's with any other missing values
+        .drop_nulls()
+    )
+
+    fc_season = pl.select(
+        date_to_season(pl.lit(forecast_date), season_start_month=SEASON_START_MONTH)
+    ).item()
+    fc_month = month_in_season(forecast_date)
+
+    X_features = ["season", "geography"] + [
+        str(t) for t in range(0, fc_month + 1) if str(t) in data_wide.columns
+    ]
+    y_features = [
+        str(t)
+        for t in range(fc_month + 1, SEASON_DURATION)
+        if str(t) in data_wide.columns
     ]
 
-    X_fit = enc.encode(data_fit.select(features))
-    y_fit = data_fit.select(f"t={target_t}").to_series().to_numpy()
+    # fit the model
+    data_fit = data_wide.filter(pl.col("season") <= fc_season)
+    X_fit = enc.encode(data_fit.select(X_features))
+    y_fit = data_fit.select(y_features).to_numpy()
+
+    # sklearn complains if you pass a column vector rather than a 1d array
+    if y_fit.shape[1] == 1:
+        y_fit = y_fit.ravel()
 
     rf = RandomForestRegressor()
     rf.fit(X_fit, y_fit)
 
     # make the forecast
-    data_pred = data.filter(pl.col("season") == pl.lit(target_season))
-    X_pred = enc.encode(data_pred.select(features))
+    data_pred = data_wide.filter(pl.col("season") >= fc_season)
+
+    X_pred = enc.encode(data_pred.select(X_features))
     y_pred = rf.predict(X_pred)
 
-    preds = data_pred.select(["season", "geography"]).with_columns(
-        forecast_t=forecast_t, pred=y_pred
+    if len(y_pred.shape) == 1:
+        y_pred = y_pred.reshape(-1, 1)
+
+    return (
+        data_pred.select(["season", "geography"])
+        .hstack(pl.DataFrame(y_pred, schema=y_features))
+        .unpivot(
+            on=y_features,
+            index=["season", "geography"],
+            variable_name="t",
+            value_name="pred",
+        )
+        .with_columns(pl.col("t").cast(pl.Int64))
+        .join(date_crosswalk, on=["season", "t"], how="left")
+        .drop("t")
+        .with_columns(forecast_date=forecast_date)
     )
-
-    features = pl.from_records(
-        enc.categories(data_fit.select(features)),
-        orient="row",
-        schema=["feature", "value"],
-    ).with_columns(forecast_t=forecast_t, importance=rf.feature_importances_)
-
-    return preds, features
 
 
 # Generate forecasts
 print("\nGenerating forecasts...")
-results = [forecast(x) for x in range(MIN_T, 0 + 1)]
-forecasts = pl.concat([x[0] for x in results])
-importances = pl.concat([x[1] for x in results])
+
+fc_dates = (
+    data.filter(pl.col("season") == pl.col("season").max())
+    .select(pl.col("time_end").unique().sort())
+    .to_series()
+    # don't forecast at the last timepoint
+    .head(-1)
+)
+
+forecasts = pl.concat([forecast(x) for x in fc_dates])
+
+chart_data = (
+    data.filter(pl.col("season") == pl.col("season").max())
+    .join(pl.DataFrame({"forecast_date": fc_dates}), how="cross")
+    .join(
+        forecasts, on=["forecast_date", "season", "geography", "time_end"], how="left"
+    )
+    .with_columns(error=pl.col("pred") - pl.col("estimate"))
+)
 
 # Forecast visualization by geography
-chart3 = (
-    alt.Chart(forecasts)
-    .mark_line(point=True)
-    .encode(alt.X("forecast_t"), alt.Y("pred"), alt.Facet("geography", columns=5))
+base = alt.Chart(chart_data).encode(alt.X("time_end"))
+data_points = base.mark_point().encode(alt.Y("estimate"))
+fc_line = base.mark_line().encode(alt.Y("pred"), alt.Color("forecast_date:O"))
+(fc_line + data_points).facet("geography", columns=5).save(
+    str(OUTPUT_DIR / "forecasts_by_geography.png")
 )
-chart3.save(str(OUTPUT_DIR / "forecasts_by_geography.png"))
 print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.png'}")
 
 # Forecast errors
 errors = (
-    forecasts.filter(pl.col("forecast_t") != 0)
-    .join(
-        forecasts.filter(pl.col("forecast_t") == 0)
-        .drop("forecast_t")
-        .rename({"pred": "true"}),
-        on=["season", "geography"],
+    data.filter(
+        pl.col("season") == pl.col("season").max(),
+        pl.col("time_end") == pl.col("time_end").max(),
     )
-    .with_columns(error=pl.col("pred") - pl.col("true"))
+    .join(forecasts, on=["season", "geography", "time_end"], how="left")
+    .with_columns(error=pl.col("pred") - pl.col("estimate"))
 )
 
 chart4 = (
@@ -206,24 +228,8 @@ chart4 = (
     .encode(
         alt.X("error", bin=alt.Bin(step=0.01)),
         alt.Y("count()"),
-        alt.Facet("forecast_t"),
+        alt.Facet("forecast_date"),
     )
 )
 chart4.save(str(OUTPUT_DIR / "forecast_errors.png"))
 print(f"Saved forecast errors to {OUTPUT_DIR / 'forecast_errors.png'}")
-
-# Feature importance over time
-chart5 = (
-    alt.Chart(
-        importances.group_by(
-            pl.col("forecast_t"),
-            pl.col("feature").replace({"unencoded": "in-season coverage"}),
-        ).agg(pl.col("importance").sum())
-    )
-    .mark_line()
-    .encode(alt.X("forecast_t"), alt.Y("importance"), alt.Color("feature"))
-)
-chart5.save(str(OUTPUT_DIR / "feature_importance_over_time.png"))
-print(
-    f"Saved feature importance over time to {OUTPUT_DIR / 'feature_importance_over_time.png'}"
-)
