@@ -6,8 +6,6 @@ import polars as pl
 import yaml
 
 LINE_OPACITY = 0.4
-NUMBER_HIGHLIGHT = 2
-HIGHLIGHT_MONTH = "Jul"
 
 # scores across seasons & states
 
@@ -40,20 +38,8 @@ if __name__ == "__main__":
         alt.Color("model"),
     )
 
-    # tick_base = alt.Chart(
-    #     sis_data.filter(pl.col("forecast_date") == pl.col("forecast_date").max())
-    #     .sort("score_value")
-    #     .pipe(gather_n, 3)
-    # ).encode(
-    #     enc_x_month,
-    #     alt.Y("score_value"),
-    #     alt.Text("geography"),
-    # )
-
-    # sis_tick = sis_tick_base.mark_point(**TICK_KWARGS)
-    # sis_text = sis_tick_base.mark_text(align="left", dx=15)
-
-    # (sis_line + sis_tick + sis_text).save(out_dir / "scores_increasing.svg")
+    # Filter for the final forecast date and use the gather_n function to
+    # make plots with ticks
 
     line_chart.save(out_dir / "scores.svg")
 
