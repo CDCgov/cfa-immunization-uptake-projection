@@ -122,38 +122,28 @@ fc_dates = (
 forecasts = pl.concat([forecast(x) for x in fc_dates])
 
 # Forecast visualization by geography
-chart_data = data.filter(pl.col("season") == pl.col("season").max()).join(
-    forecasts, on=["season", "geography", "time_end"], how="left"
+chart_data = (
+    data.filter(pl.col("season") == pl.col("season").max())
+    .join(forecasts, on=["season", "geography", "time_end"], how="left")
+    .with_columns(error=pl.col("pred") - pl.col("estimate"))
 )
 base = alt.Chart(chart_data)
-data = base.mark_point().encode(alt.X("time_end"), alt.Y("estimate"))
+points_data = base.mark_point().encode(alt.X("time_end"), alt.Y("estimate"))
 fc = base.mark_line().encode(
     alt.X("time_end"), alt.Y("pred"), alt.Color("forecast_date", type="nominal")
 )
-chart3 = (fc + data).facet("geography", columns=5)
+chart3 = (fc + points_data).facet("geography", columns=5)
 chart3.save(str(OUTPUT_DIR / "forecasts_by_geography.png"))
 print(f"Saved forecasts by geography to {OUTPUT_DIR / 'forecasts_by_geography.png'}")
 
 # Forecast errors
-errors = (
-    forecasts.filter(pl.col("forecast_t") != 0)
-    .join(
-        forecasts.filter(pl.col("forecast_t") == 0)
-        .drop("forecast_t")
-        .rename({"pred": "true"}),
-        on=["season", "geography"],
-    )
-    .with_columns(error=pl.col("pred") - pl.col("true"))
-)
-
-chart4 = (
-    alt.Chart(errors)
+(
+    alt.Chart(chart_data)
     .mark_bar()
     .encode(
         alt.X("error", bin=alt.Bin(step=0.01)),
         alt.Y("count()"),
-        alt.Facet("forecast_t"),
+        alt.Facet("forecast_date"),
     )
-)
-chart4.save(str(OUTPUT_DIR / "forecast_errors.png"))
+).save(str(OUTPUT_DIR / "forecast_errors.png"))
 print(f"Saved forecast errors to {OUTPUT_DIR / 'forecast_errors.png'}")
