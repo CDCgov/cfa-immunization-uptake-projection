@@ -7,12 +7,20 @@ from typing import Tuple
 import altair as alt
 import numpy as np
 import polars as pl
-from plot_data import month_order
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder
 
 import iup.models
 from iup import date_to_season
+
+
+def to_inc(t: pl.Expr, estimate: pl.Expr) -> pl.Expr:
+    return pl.struct(
+        start=pl.lit(None).append(t.reverse().slice(1).reverse()),
+        end=t,
+        inc=estimate.diff(),
+    )
+
 
 # Create output directory
 OUTPUT_DIR = Path("output/demo_rf")
@@ -20,9 +28,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Configuration
 SEASON_START_MONTH = 7  # July
-END_MONTH = 9  # 9 months after July, i.e., April
-MIN_T = 1 - END_MONTH
-months = month_order(season_start_month=SEASON_START_MONTH)
 
 # Load and prepare data
 data = (
@@ -40,8 +45,10 @@ data = (
     )
     # remove partial seasons
     .filter(pl.col("season").is_in(["2008/2009", "2022/2023"]).not_())
-    .select(["season", "geography", "time_end", "t", "estimate"])
+    # convert to incident coverage
     .sort(["season", "geography"])
+    .with_columns(inc=pl.col("estimate").diff())
+    .select(["season", "geography", "time_end", "estimate", "start", "end", "inc"])
 )
 
 print("Data shape:", data.shape)
@@ -92,20 +99,34 @@ def forecast(forecast_date: date, data=data) -> pl.DataFrame:
     enc.fit(data)
 
     # fit the model
-    data_fit = data.filter(pl.col("time_end") <= forecast_date)
-    X_fit = enc.encode(data_fit.select(["season", "geography", "t"]))
-    y_fit = data_fit["estimate"]
+    data_fit = data.drop_nulls().filter(pl.col("time_end") <= forecast_date)
+    X_fit = enc.encode(data_fit.select(["season", "geography", "start", "end"]))
+    y_fit = data_fit["inc"]
 
     rf = RandomForestRegressor()
     rf.fit(X_fit, y_fit)
 
     # make the forecast
-    data_pred = data.filter(pl.col("time_end") > forecast_date)
-    X_pred = enc.encode(data_pred.select(["season", "geography", "t"]))
+    data_pred = data.drop_nulls().filter(pl.col("time_end") > forecast_date)
+    X_pred = enc.encode(data_pred.select(["season", "geography", "start", "end"]))
     y_pred = rf.predict(X_pred)
 
-    preds = data_pred.select(["season", "geography", "time_end"]).with_columns(
-        forecast_date=forecast_date, pred=y_pred
+    # assemble the cumulative coverage based on incremental values
+    data_start = (
+        data.filter(pl.col("time_end") == forecast_date)
+        .select("season", "geography", "estimate")
+        .rename({"estimate": "start_estimate"})
+    )
+
+    preds = (
+        data_pred.select(["season", "geography", "time_end"])
+        .join(data_start, on=["season", "geography"], how="left")
+        .with_columns(forecast_date=forecast_date, pred_inc=y_pred)
+        .sort(["season", "geography", "time_end"])
+        .with_columns(
+            pred=pl.col("start_estimate")
+            + pl.col("pred_inc").cum_sum().over(["season", "geography"])
+        )
     )
 
     return preds
@@ -120,6 +141,8 @@ fc_dates = (
     .to_series()
 )
 forecasts = pl.concat([forecast(x) for x in fc_dates])
+
+print(forecasts)
 
 # Forecast visualization by geography
 chart_data = (
