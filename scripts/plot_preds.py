@@ -4,18 +4,25 @@ from pathlib import Path
 import altair as alt
 import polars as pl
 import yaml
-from plot_data import AXIS_PERCENT, month_order
+from plot_data import AXIS_PERCENT
+
+import iup
 
 LINE_OPACITY = 0.4
 
 
 def plot_forecast(
-    obs: pl.DataFrame, pred_cones: pl.DataFrame, geography: str, sort_month: list[str]
+    obs: pl.DataFrame, preds: pl.DataFrame, geography: str
 ) -> alt.FacetChart:
-    fc = pred_cones.filter(
+    assert preds["season"].unique().len() == 1, (
+        "Can only plot forecasts from one season"
+    )
+    assert obs["season"].unique().len() == 1, "Can only plot data from one season"
+
+    fc = preds.filter(
         pl.col("time_end") > pl.col("forecast_date"),
         pl.col("geography") == pl.lit(geography),
-    )
+    ).drop("season", "geography")
 
     # hack: at the last forecast date, we make a forecast for only one date, but we
     # can't show this with .mark_line(), and so it ends up blank. So remove those
@@ -32,11 +39,14 @@ def plot_forecast(
 
     chart_data = (
         obs.filter(pl.col("geography") == pl.lit(geography))
+        .drop("season", "geography")
         .join(pl.DataFrame({"forecast_date": good_fc_dates}), how="cross")
         .join(fc, on=["forecast_date", "time_end"], how="left")
     )
 
-    base = alt.Chart(chart_data).encode(alt.X("month", title=None, sort=sort_month))
+    base = alt.Chart(chart_data).encode(
+        alt.X("time_end", title=None, axis=alt.Axis(format="%b"))
+    )
     fc_cone = base.mark_area(opacity=0.25).encode(
         alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT),
         alt.Y2("pred_uci"),
@@ -47,42 +57,12 @@ def plot_forecast(
     )
     data_points = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
     data_error = base.mark_rule(color="black").encode(
-        alt.X2("month"), alt.Y("obs_lci"), alt.Y2("obs_uci")
+        alt.X2("time_end"), alt.Y("obs_lci"), alt.Y2("obs_uci")
     )
 
     return (fc_cone + fc_points + data_points + data_error).facet(
         column=alt.Column("forecast_date", header=None)
     )
-
-
-def plot_fit(
-    obs: pl.DataFrame,
-    pred_cones: pl.DataFrame,
-    geography: str,
-    season: str,
-    sort_month: list[str],
-) -> alt.LayerChart:
-    chart_data = pred_cones.filter(
-        pl.col("forecast_date") == pl.col("forecast_date").max(),
-        pl.col("geography") == pl.lit(geography),
-        pl.col("season") == pl.lit(season),
-    ).join(obs, on=["season", "geography", "time_end"], how="left")
-
-    base = alt.Chart(chart_data).encode(alt.X("month", title=None, sort=sort_month))
-    cone = base.mark_area(opacity=0.25).encode(
-        alt.Y("pred_lci", title="Coverage", axis=AXIS_PERCENT),
-        alt.Y2("pred_uci"),
-        alt.Color("model"),
-    )
-    fit_points = base.mark_line(opacity=0.75).encode(
-        alt.Y("pred_estimate"), alt.Color("model")
-    )
-    obs_points = base.mark_point(color="black").encode(alt.Y("obs_estimate"))
-    obs_error = base.mark_rule(color="black").encode(
-        alt.X2("month"), alt.Y("obs_lci"), alt.Y2("obs_uci")
-    )
-
-    return cone + fit_points + obs_points + obs_error
 
 
 if __name__ == "__main__":
@@ -96,31 +76,37 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
+    season = config["season"]
+
     out_flag = Path(args.output)
     out_dir = out_flag.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    obs = (
-        pl.read_parquet(args.data)
-        .filter(pl.col("season") == pl.col("season").max())
-        .select(["season", "geography", "time_end", "estimate", "lci", "uci"])
-        .rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
-        .with_columns(month=pl.col("time_end").dt.to_string("%b"))
-    )
-    preds = pl.read_parquet(args.preds).filter(
-        pl.col("season") == pl.col("season").max()
-    )
+    preds_raw = pl.read_parquet(args.preds)
 
     # get the prediction cones
     half_alpha = config["alpha"] / 2
     quantiles = {half_alpha, 0.5, 1.0 - half_alpha}
 
     # check that quantiles are present in the data
-    all_quantiles = preds.select(pl.col("quantile").unique()).to_series()
+    all_quantiles = preds_raw.select(pl.col("quantile").unique()).to_series()
     assert quantiles.issubset(all_quantiles)
 
-    pred_cones = (
-        preds.filter(pl.col("quantile").is_in(quantiles))
+    forecast_season = preds_raw.select(
+        iup.to_season(
+            pl.col("forecast_date"),
+            season_start_month=season["start_month"],
+            season_end_month=season["end_month"],
+        ).unique()
+    ).to_series()
+    assert len(forecast_season) == 1, "Can only plot forecasts from one season"
+    forecast_season = forecast_season[0]
+
+    preds = (
+        preds_raw.filter(
+            pl.col("season") == pl.lit(forecast_season),
+            pl.col("quantile").is_in(quantiles),
+        )
         .with_columns(
             pl.col("quantile").replace_strict(
                 {
@@ -133,20 +119,17 @@ if __name__ == "__main__":
         .pivot(on="quantile", values="estimate")
     )
 
-    sort_month = month_order(config["season"]["start_month"])
+    obs = (
+        pl.read_parquet(args.data)
+        .filter(pl.col("season") == pl.lit(forecast_season))
+        .select(["season", "geography", "time_end", "estimate", "lci", "uci"])
+        .rename({"estimate": "obs_estimate", "lci": "obs_lci", "uci": "obs_uci"})
+    )
 
     # example fits and forecasts
     for geo in config["plots"]["example_geos"]:
-        plot_fit(
-            obs=obs,
-            pred_cones=pred_cones,
-            geography=geo,
-            season=config["plots"]["example_season"],
-            sort_month=sort_month,
-        ).save(out_dir / f"fit_{geo}.svg")
-
-        plot_forecast(
-            obs=obs, pred_cones=pred_cones, geography=geo, sort_month=sort_month
-        ).save(out_dir / f"forecast_{geo}.svg")
+        plot_forecast(obs=obs, preds=preds, geography=geo).save(
+            out_dir / f"forecast_{geo}.svg"
+        )
 
     out_flag.touch()

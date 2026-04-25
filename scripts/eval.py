@@ -17,6 +17,8 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
+    season = config["season"]
+
     pred = pl.scan_parquet(args.preds)
     data = pl.read_parquet(args.data)
 
@@ -32,9 +34,11 @@ if __name__ == "__main__":
     forecast_season = pred.select(
         pl.col("forecast_date")
         .pipe(
-            iup.date_to_season,
-            season_start_month=config["season"]["start_month"],
-            season_start_day=config["season"]["start_day"],
+            iup.to_season,
+            season_start_month=season["start_month"],
+            season_start_day=season["start_day"],
+            season_end_month=season["end_month"],
+            season_end_day=season["end_day"],
         )
         .unique()
     ).collect()
