@@ -1,26 +1,27 @@
 # Logistic plus linear (LPL) Model
 
-These are the mathematical details of the models used to capture and forecast vaccination coverage. There are currently just one model: a mixture of a logistic and linear function. This model proposes a latent true coverage curve, which is subject to observation error. A hierarchy accounts for the unique effects of grouping factors (e.g. season, geography, age) on model parameters.
+This model proposes a latent true coverage curve, which is subject to observation error. A hierarchy accounts for the effects of categorical features.
 
-## Notation
+## Terminology and notation
 
-The following notation will be used for the LPL model:
-
+- _feature_: A categorical feature of the data (e.g., season, geography) that partially determines coverage
+- _level_: A value taken on by a feature (e.g., New Jersey, or 2018/2019)
+- _group_: A unique combination of features (e.g., New Jersey in 2018/2019)
 - $t$: time since the start of the season, measured in $\text{year}^{-1}$
-- $n_{gt}$: number of people in group $g$, surveyed at time $t$. Drawn from the `sample_size` column of the NIS data.
+- $n_{gt}$: number of people in group $g$, surveyed at time $t$. Drawn from the `sample_size` column of the NIS data; called `N_tot` in the codebase.
 - $x_{gt}$: number of people in group $g$, surveyed at time $t$, who are vaccinated. Approximated as $\mathrm{round}(\hat{v}_{gt}, n_{gt})$, where $\hat{v}_{gt}$ is the `estimate` column.
 - $v_g(t)$: latent true coverage among group $g$ at time $t$
-- $z_{gj}$: integer index indicating the level of the $j$-th feature (e.g., season, geography) for group $g$.
+- $z_{gj}$: integer index indicating the level of the $j$-th feature for group $g$.
 
-For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season (say, 2018/2019) and the third geography (say, Alaska). Then $z_{51} = 4$ and $z_{52} = 3$.
+For example, let the features be season and geography, in that order. Let group 5 be associated with the fourth season and the third geography. Then $z_{51} = 4$ and $z_{52} = 3$.
 
 ## Model overview
 
-For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
+For each group $g$, the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve and a line with intercept at $t=0$. The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups. The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. In fact, the model uses a third interaction term season-geography, so there is also an Alaska-in-2018/2019 term.
 
 The slopes $M_g$ follow a similar pattern.
 
-The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $v_g(t) \cdot n_{gt}$, with variance modified by an extra parameter $D$.
+The observations $x_{gt}$ are beta binomial-distributed around the mean $v_g(t) \cdot n_{gt}$, with variance modified by an extra parameter $D$.
 
 ## Model equations
 

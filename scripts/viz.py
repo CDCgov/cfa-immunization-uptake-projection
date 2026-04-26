@@ -60,7 +60,7 @@ def plot_summary(obs: pl.DataFrame, preds: pl.DataFrame, config: Dict[str, Any])
     """Plot the 95% PI with mean estimate of forecasts with data.
 
     User options to select the dimensions to group the data, including:
-    row, column, and color. Other grouping factors that haven't been
+    row, column, and color. Other features that haven't been
     selected will be used to filter the data.
 
     Args:
@@ -68,7 +68,7 @@ def plot_summary(obs: pl.DataFrame, preds: pl.DataFrame, config: Dict[str, Any])
         preds_path: Path to predictions data.
         config: Configuration dictionary.
     """
-    # summarize sample predictions by grouping factors
+    # summarize sample predictions by selected features
     groups_to_include = ["model", "forecast_date", "time_end", "season", "geography"]
 
     encodings = {}
@@ -184,7 +184,7 @@ def plot_evaluation(scores: pl.DataFrame, config: Dict[str, Any]):
     """Plot the evaluation scores over forecast start.
 
     User can select the dimensions to group the data, including: row, column,
-    and color. Other grouping factors that haven't been selected will be used
+    and color. Other features that haven't been selected will be used
     to filter the data.
 
     Args:
