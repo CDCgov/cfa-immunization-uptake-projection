@@ -2,7 +2,6 @@ import polars as pl
 import polars.testing
 
 import iup
-import iup.models
 
 PARAMS = {
     "seed": 42,
@@ -44,7 +43,7 @@ def test_index():
         }
     )
 
-    out = iup.models.LPLModel._index(df, groups=["first_name", "last_name"])
+    out = iup.LPLModel._index(df, groups=["first_name", "last_name"])
 
     polars.testing.assert_frame_equal(
         out,
@@ -59,7 +58,7 @@ def test_preprocess(frame):
     """
     Should produce expected columns, given raw data.
     """
-    data = iup.models.LPLModel._preprocess(
+    data = iup.LPLModel._preprocess(
         data=frame,
         date_column="time_end",
         season_start_month=SEASON["start_month"],
