@@ -5,11 +5,11 @@ from typing import List, Optional
 import polars as pl
 import yaml
 
-from iup import CumulativeCoverageData, to_season
+from iup import to_season
 
 
 def preprocess(
-    raw_data: pl.LazyFrame,
+    raw_data: pl.DataFrame,
     start_year: int,
     end_year: int,
     season_start_month: int,
@@ -18,7 +18,7 @@ def preprocess(
     season_end_day: int,
     geographies: Optional[List[str] | None],
     date_col: str = "time_end",
-) -> CumulativeCoverageData:
+) -> pl.DataFrame:
     """
     Preprocess the raw data (Filter the raw data with certain states and seasons, add season column).
 
@@ -37,13 +37,13 @@ def preprocess(
 
     """
 
-    def geo_filter(df: pl.LazyFrame) -> pl.LazyFrame:
+    def geo_filter(df: pl.DataFrame) -> pl.DataFrame:
         if geographies is None:
             return df
         else:
             return df.filter(pl.col("geography").is_in(geographies))
 
-    data = (
+    return (
         raw_data.filter(
             pl.col("geography_type") == pl.lit("admin1"),
             pl.col("geography")
@@ -66,10 +66,7 @@ def preprocess(
             pl.col("season").is_null().not_(),
         )
         .pipe(geo_filter)
-        .collect()
     )
-
-    return CumulativeCoverageData(data)
 
 
 if __name__ == "__main__":
@@ -82,7 +79,7 @@ if __name__ == "__main__":
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    raw_data = pl.scan_parquet(args.input)
+    raw_data = pl.read_parquet(args.input)
 
     assert isinstance(config, dict)
     geographies = config.get("geographies", None)

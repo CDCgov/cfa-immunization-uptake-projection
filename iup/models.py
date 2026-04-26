@@ -51,7 +51,7 @@ class LPLModel(CoverageModel):
 
     def __init__(
         self,
-        data: iup.CumulativeCoverageData,
+        data: pl.DataFrame,
         forecast_date: datetime.date,
         params: dict[str, Any],
         season: dict[str, Any],
@@ -361,13 +361,13 @@ class LPLModel(CoverageModel):
             )
         )
 
-        return iup.QuantileForecast(data_pred.explode(["quantile", "estimate"]))
+        return data_pred.explode(["quantile", "estimate"])
 
 
 class RFModel(CoverageModel):
     def __init__(
         self,
-        data: iup.CumulativeCoverageData,
+        data: pl.DataFrame,
         params: dict[str, Any],
         season: dict[str, Any],
         forecast_date: datetime.date,
@@ -465,17 +465,15 @@ class RFModel(CoverageModel):
         # make predictions using each tree
         y_tree = np.stack([tree.predict(X_pred) for tree in self.model.estimators_])
 
-        return iup.QuantileForecast(
-            pl.concat(
-                [
-                    self._postprocess(
-                        data_pred=data_pred,
-                        y_pred=np.quantile(y_tree, q=q, axis=0),
-                        quantile=q,
-                    )
-                    for q in self.quantiles
-                ]
-            )
+        return pl.concat(
+            [
+                self._postprocess(
+                    data_pred=data_pred,
+                    y_pred=np.quantile(y_tree, q=q, axis=0),
+                    quantile=q,
+                )
+                for q in self.quantiles
+            ]
         )
 
     def _postprocess(

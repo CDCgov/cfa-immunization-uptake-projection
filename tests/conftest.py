@@ -1,8 +1,6 @@
 import polars as pl
 import pytest
 
-import iup
-
 
 @pytest.fixture
 def frame():
@@ -79,7 +77,5 @@ def frame():
         },
         schema_overrides={"time_end": pl.Date},
     )
-
-    frame = iup.CumulativeCoverageData(frame)
 
     return frame
