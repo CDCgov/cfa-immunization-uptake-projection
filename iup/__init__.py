@@ -14,7 +14,7 @@ import numpyro
 import numpyro.distributions as dist
 import polars as pl
 from jax import random
-from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
+from numpyro.infer import MCMC, NUTS, init_to_sample
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from typing_extensions import Self
@@ -171,7 +171,6 @@ class LPLModel(CoverageModel):
         self.data = (
             self.raw_data
             # prepare observation data
-            .rename({"sample_size": "N_tot"})
             .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
             # add interaction term
             .with_columns(
@@ -225,7 +224,6 @@ class LPLModel(CoverageModel):
         return (date - season_start).dt.total_days()
 
     def model(self, data: pl.DataFrame):
-        # missing `N_vax` column signals that we are drawing predictions, not fitting
         if "N_vax" in data.columns:
             N_vax = jnp.array(data["N_vax"])
         else:
@@ -236,20 +234,18 @@ class LPLModel(CoverageModel):
             t=jnp.array(data["t"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
-            groups=jnp.array(self.enc.transform(data.select(self.groups).to_numpy())),
-            n_groups=len(self.groups),
-            n_group_levels=self.n_group_levels,
+            group_levels=jnp.array(
+                self.enc.transform(data.select(self.groups).to_numpy())
+            ),
             **self.model_params,
         )
 
-    @staticmethod
     def _logistic_plus_linear(
+        self,
         N_vax: jnp.ndarray | None,
         t: jnp.ndarray,
         N_tot: jnp.ndarray,
-        groups: jnp.ndarray,
-        n_groups: int,
-        n_group_levels: list[int],
+        group_levels: jnp.ndarray,
         muA_shape1: float,
         muA_shape2: float,
         sigmaA_rate: float,
@@ -263,15 +259,14 @@ class LPLModel(CoverageModel):
         D_shape: float,
         D_rate: float,
     ):
-        """Fit a mixed Logistic Plus Linear model on training data.
+        """
+        Logistic Plus Linear model
 
         Args:
             t: Fraction of a year elapsed since the start of season at each data point.
             N_vax: Number of people vaccinated at each data point, or `None`.
             N_tot: Total number of people in the population at each data point.
-            groups: Numeric codes for groups: row = data point, col = grouping factor.
-            n_groups: Number of grouping factors.
-            n_group_levels: Number of unique levels of each grouping factor.
+            group_levels: Numeric codes for groups: row = data point, col = group.
             muA_shape1: Beta distribution shape1 parameter for muA prior.
             muA_shape2: Beta distribution shape2 parameter for muA prior.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
@@ -290,30 +285,45 @@ class LPLModel(CoverageModel):
         muM = numpyro.sample("muM", dist.Gamma(muM_shape, muM_rate))
         tau = numpyro.sample("tau", dist.Beta(tau_shape1, tau_shape2))
         K = numpyro.sample("K", dist.Gamma(K_shape, K_rate))
-        D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
+        D = numpyro.sample("D", dist.Gamma(D_shape, D_rate))
 
         sigmaA = numpyro.sample(
-            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
+            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(len(self.groups),)
         )
         sigmaM = numpyro.sample(
-            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
+            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(len(self.groups),)
         )
         zA = numpyro.sample(
-            "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+            "zA", dist.Normal(0, 1), sample_shape=(sum(self.n_group_levels),)
         )
         zM = numpyro.sample(
-            "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
+            "zM", dist.Normal(0, 1), sample_shape=(sum(self.n_group_levels),)
         )
-        deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
-        deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
 
-        A = muA + np.sum(deltaA[groups], axis=1)
-        M = muM + np.sum(deltaM[groups], axis=1)
-
-        # Calculate latent true coverage at each datum
-        v = A / (1 + jnp.exp(-K * (t - tau))) + (M * t)  # type: ignore
+        v = self._vgt(
+            t=t,
+            group_levels=group_levels,
+            muA=muA,
+            sigmaA=sigmaA,
+            zA=zA,
+            muM=muM,
+            sigmaM=sigmaM,
+            zM=zM,
+            K=K,
+            tau=tau,
+        )
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
+
+    def _vgt(self, t, group_levels, muA, sigmaA, zA, muM, sigmaM, zM, K, tau):
+        """Latent coverage v_g(t)"""
+        deltaA = zA * np.repeat(sigmaA, np.array(self.n_group_levels))
+        deltaM = zM * np.repeat(sigmaM, np.array(self.n_group_levels))
+
+        A = muA + np.sum(deltaA[group_levels], axis=1)
+        M = muM + np.sum(deltaM[group_levels], axis=1)
+
+        return A / (1 + jnp.exp(-K * (t - tau))) + (M * t)  # type: ignore
 
     def fit(self) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
@@ -348,49 +358,35 @@ class LPLModel(CoverageModel):
             Sample forecast data frame with predictions for dates after forecast_date.
         """
 
-        assert self.mcmc is not None, f"Need to fit() first; mcmc is {self.mcmc}"
+        assert self.mcmc is not None, "Need to fit() first"
 
-        predictive = Predictive(self.model, self.mcmc.get_samples())
-        # run the predictions, not using the observations
-        pred = predictive(self.pred_key, self.data.drop("N_vax"))
+        quantile_preds = [
+            pl.DataFrame({"quantile": q, "estimate": self._predict_quantile(q)})
+            for q in self.quantiles
+        ]
 
-        # observations are rows; posterior samples are columns
-        pred = np.array(pred["obs"]).transpose()
-
-        # put predictions into a dataframe
-        sample_cols = [f"_sample_{i}" for i in range(pred.shape[1])]
-        pred = pl.DataFrame(pred, schema=sample_cols)
-
-        index_cols = [self.date_column, "N_tot", "season", "geography", "season_geo"]
-
-        data_pred = (
-            pl.concat([self.data, pred], how="horizontal")
-            .unpivot(
-                on=sample_cols,
-                index=index_cols,
-                variable_name="sample_id",
-                value_name="estimate",
-            )
-            .with_columns(
-                forecast_date=self.forecast_date,
-                # convert from sample_id strings to integers
-                sample_id=pl.col("sample_id")
-                .replace_strict({name: i for i, name in enumerate(sample_cols)})
-                .cast(pl.UInt64),
-                estimate=pl.col("estimate") / pl.col("N_tot"),
-            )
-            .group_by(
-                ["season", "geography", "season_geo", "time_end", "forecast_date"]
-            )
-            .agg(
-                quantile=pl.concat_arr(self.quantiles),
-                estimate=pl.concat_arr(
-                    [pl.quantile("estimate", q).alias(str(q)) for q in self.quantiles]
-                ),
-            )
+        out_data = self.data.select("geography", "season", "time_end").with_columns(
+            forecast_date=self.forecast_date
         )
 
-        return data_pred.explode(["quantile", "estimate"])
+        return pl.concat(
+            [pl.concat([out_data, qp], how="horizontal") for qp in quantile_preds],
+            how="vertical",
+        )
+
+    def _predict_quantile(self, q: float) -> np.ndarray:
+        assert self.mcmc is not None
+        # pull posterior samples for all parameters (except D) and get the desired quantile
+        samples = self.mcmc.get_samples()
+        args = {k: np.quantile(v, q=q, axis=0) for k, v in samples.items() if k != "D"}
+
+        v = self._vgt(
+            t=self.data["t"].to_numpy(),
+            group_levels=self.enc.transform(self.data.select(self.groups).to_numpy()),
+            **args,
+        )
+
+        return np.array(v, dtype=np.float64)
 
 
 class RFModel(CoverageModel):

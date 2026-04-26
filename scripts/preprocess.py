@@ -66,6 +66,9 @@ def preprocess(
             pl.col("season").is_null().not_(),
         )
         .pipe(geo_filter)
+        # drop geography type, data confidence intervals
+        .rename({"sample_size": "N_tot"})
+        .select(["geography", "season", "time_end", "estimate", "N_tot"])
     )
 
 
