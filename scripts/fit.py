@@ -14,12 +14,12 @@ from typing import Any, Tuple
 import polars as pl
 import yaml
 
-import iup
+import vcf
 
 
 def fit_all_models(
     data: pl.DataFrame, forecast_date: dt.date, config: dict[str, Any]
-) -> dict[Tuple[str, dt.date], iup.CoverageModel]:
+) -> dict[Tuple[str, dt.date], vcf.CoverageModel]:
     """Run all forecasts.
 
     Args:
@@ -37,9 +37,9 @@ def fit_all_models(
     all_models = {}
     for config_model in config["models"]:
         model_name = config_model["name"]
-        model_class = getattr(iup, model_name)
+        model_class = getattr(vcf, model_name)
 
-        assert issubclass(model_class, iup.CoverageModel), (
+        assert issubclass(model_class, vcf.CoverageModel), (
             f"{model_name} is not a valid model type!"
         )
 

@@ -3,7 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
-import iup
+import vcf
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     # score the forecasts proper, only in the season that the forecasts were made
     forecast_season = pred.select(
-        iup.to_season(
+        vcf.to_season(
             pl.col("forecast_date"),
             season_start_month=season["start_month"],
             season_start_day=season["start_day"],
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     assert len(forecast_season) == 1, "Can only score forecasts from one season"
     forecast_season = forecast_season[0]
 
-    eos_abs_diff = iup.eos_abs_diff(
+    eos_abs_diff = vcf.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
         features=["season", "geography"],

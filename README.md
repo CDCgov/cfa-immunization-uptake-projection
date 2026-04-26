@@ -1,12 +1,12 @@
 # Vaccination coverage forecasting
 
-_Formerly known as Immunization Uptake Projections, or `iup`._
+_Formerly known as Immunization Uptake Projections, or `vcf`._
 
 This repo represents an experimental prototype for forecasting the coverage of vaccinations.
 
 ## Getting started
 
-1. Read the docs at <https://cdcgov.github.io/cfa-immunization-uptake-projection>, or build them locally with `mkdocs serve`
+1. Read the docs at <https://cdcgov.github.io/cfa-vaccination-coverage-forecasting>, or build them locally with `mkdocs serve`
 1. This project uses [`uv`](https://docs.astral.sh/uv/) for environment and dependency management. Ensure you can `uv sync`. Use the uv-managed virtual environment (e.g., by prepending `uv run`).
 1. Run the [vignette](#vignette).
 
@@ -20,7 +20,7 @@ The vignette demonstrates a workflow using this package:
 
 ### Data source
 
-For convenience, the raw data are tracked in this repo under `data/`, which includes the script `get_nis.py`, used to collect that data with [`nis-py-api`](https://github.com/CDCgov/nis-py-api). These are estimates of season flu vaccination coverage, tracked monthly from the 2009/2010 to 2022/2023 seasons, from the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html).
+For convenience, the raw data are tracked in this repo under `data/`, which includes the script `get_nis.py`, used to collect that data with [`nis-py-api`](https://github.com/CDCgov/nis-py-api). These are estimates of season flu vaccination coverage, tracked monthly from the 2009/2010 to 2022/2023 seasons, from the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html) and [Behavioral Risk Factor Surveillance System](https://www.cdc.gov/brfss/index.html).
 
 ### Running the vignette
 
@@ -58,12 +58,6 @@ data --> viz;
 pred --> viz;
 scores --> viz;
 ```
-
-## Project admins
-
-- Scott Olesen (CDC/CFA/Predict) <ulp7@cdc.gov>
-
----
 
 ## Disclaimers
 

@@ -6,7 +6,7 @@ import polars as pl
 import yaml
 from plot_data import AXIS_PERCENT
 
-import iup
+import vcf
 
 LINE_OPACITY = 0.4
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     assert quantiles.issubset(all_quantiles)
 
     forecast_season = preds_raw.select(
-        iup.to_season(
+        vcf.to_season(
             pl.col("forecast_date"),
             season_start_month=season["start_month"],
             season_end_month=season["end_month"],
