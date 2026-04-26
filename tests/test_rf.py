@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from sklearn.ensemble import RandomForestRegressor
 
-import iup
+import vcf
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def frame():
 
 @pytest.fixture
 def rf(frame):
-    return iup.RFModel(
+    return vcf.RFModel(
         data=frame,
         season={"start_month": 9, "start_day": 1, "end_month": 4, "end_day": 1},
         params={"n_estimators": 10},

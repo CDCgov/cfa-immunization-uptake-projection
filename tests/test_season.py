@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from iup import to_season
+from vcf import to_season
 
 
 def test_before():

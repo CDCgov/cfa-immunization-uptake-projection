@@ -1,6 +1,6 @@
 # Vaccination coverage forecasting
 
-_Formerly known as Immunization Uptake Projections, or `iup`._
+_Formerly known as Immunization Uptake Projections, or `vcf`._
 
 This repo represents an experimental prototype for forecasting the coverage of vaccinations.
 

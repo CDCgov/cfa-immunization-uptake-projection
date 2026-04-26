@@ -10,7 +10,7 @@ import polars as pl
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder
 
-from iup import to_season
+from vcf import to_season
 
 SEASON_START_MONTH = 8
 SEASON_END_MONTH = 4

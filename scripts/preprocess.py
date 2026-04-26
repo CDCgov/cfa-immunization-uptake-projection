@@ -5,7 +5,7 @@ from typing import List, Optional
 import polars as pl
 import yaml
 
-from iup import to_season
+from vcf import to_season
 
 
 def preprocess(
