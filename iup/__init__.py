@@ -42,3 +42,39 @@ def to_season(
     sy1 = pl.when(date <= end).then(y - 1).when(date >= start).then(y).otherwise(None)
 
     return pl.when(sy1.is_null()).then(None).otherwise(pl.format("{}/{}", sy1, sy1 + 1))
+
+
+def eos_abs_diff(
+    obs: pl.DataFrame, pred: pl.DataFrame, grouping_factors: list[str]
+) -> pl.DataFrame:
+    """Calculate the absolute difference between observed data and prediction for the last date in a season.
+
+    Args:
+        obs: Observed data.
+        pred: Predicted data.
+        grouping_factors: Grouping factor column names (must include 'season').
+
+    Returns:
+        Data frame with absolute difference scores for end-of-season dates.
+    """
+    assert "season" in grouping_factors
+
+    return (
+        pred.filter(pl.col("quantile") == 0.5)
+        .join(
+            obs.filter(
+                (pl.col("time_end") == pl.col("time_end").max()).over(grouping_factors)
+            ),
+            on=["time_end"] + grouping_factors,
+            how="right",
+        )
+        .rename({"estimate_right": "obs", "estimate": "pred"})
+        .with_columns(
+            score_value=(pl.col("pred") - pl.col("obs")).abs(),
+            score_fun=pl.lit("eos_abs_diff"),
+        )
+        .select(
+            grouping_factors + ["model", "forecast_date", "score_fun", "score_value"]
+        )
+        .drop_nulls()
+    )

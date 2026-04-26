@@ -3,7 +3,7 @@ import argparse
 import polars as pl
 import yaml
 
-import iup.eval
+import iup
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     assert len(forecast_season) == 1, "Can only score forecasts from one season"
     forecast_season = forecast_season[0]
 
-    eos_abs_diff = iup.eval.eos_abs_diff(
+    eos_abs_diff = iup.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
         grouping_factors=["season", "geography"],
