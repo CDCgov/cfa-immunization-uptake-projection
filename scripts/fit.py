@@ -70,7 +70,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     forecast_date = dt.date.fromisoformat(args.forecast_date)
-    data = iup.CumulativeCoverageData(pl.read_parquet(args.data))
+    data = pl.read_parquet(args.data)
 
     num_chains = [
         model["params"]["num_chains"]
