@@ -65,27 +65,25 @@ def to_season(
 
 
 def eos_abs_diff(
-    obs: pl.DataFrame, pred: pl.DataFrame, grouping_factors: list[str]
+    obs: pl.DataFrame, pred: pl.DataFrame, features: list[str]
 ) -> pl.DataFrame:
     """Calculate the absolute difference between observed data and prediction for the last date in a season.
 
     Args:
         obs: Observed data.
         pred: Predicted data.
-        grouping_factors: Grouping factor column names (must include 'season').
+        features: Feature column names (must include 'season').
 
     Returns:
         Data frame with absolute difference scores for end-of-season dates.
     """
-    assert "season" in grouping_factors
+    assert "season" in features
 
     return (
         pred.filter(pl.col("quantile") == 0.5)
         .join(
-            obs.filter(
-                (pl.col("time_end") == pl.col("time_end").max()).over(grouping_factors)
-            ),
-            on=["time_end"] + grouping_factors,
+            obs.filter((pl.col("time_end") == pl.col("time_end").max()).over(features)),
+            on=["time_end"] + features,
             how="right",
         )
         .rename({"estimate_right": "obs", "estimate": "pred"})
@@ -93,9 +91,7 @@ def eos_abs_diff(
             score_value=(pl.col("pred") - pl.col("obs")).abs(),
             score_fun=pl.lit("eos_abs_diff"),
         )
-        .select(
-            grouping_factors + ["model", "forecast_date", "score_fun", "score_value"]
-        )
+        .select(features + ["model", "forecast_date", "score_fun", "score_value"])
         .drop_nulls()
     )
 
@@ -188,11 +184,11 @@ class LPLModel(CoverageModel):
         )
 
         # set up encoder
-        self.groups = ("season", "geography", "season_geo")
+        self.features = ("season", "geography", "season_geo")
         self.enc = OrdinalEncoder(dtype=np.int64).fit(
-            self.data.select(self.groups).to_numpy()
+            self.data.select(self.features).to_numpy()
         )
-        self.n_group_levels = [len(x) for x in self.enc.categories_]  # type: ignore
+        self.n_feature_levels = [len(x) for x in self.enc.categories_]  # type: ignore
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
@@ -235,8 +231,8 @@ class LPLModel(CoverageModel):
             t=jnp.array(data["t"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
-            group_levels=jnp.array(
-                self.enc.transform(data.select(self.groups).to_numpy())
+            feature_levels=jnp.array(
+                self.enc.transform(data.select(self.features).to_numpy())
             ),
             **self.model_params,
         )
@@ -246,7 +242,7 @@ class LPLModel(CoverageModel):
         N_vax: jnp.ndarray | None,
         t: jnp.ndarray,
         N_tot: jnp.ndarray,
-        group_levels: jnp.ndarray,
+        feature_levels: jnp.ndarray,
         muA_shape1: float,
         muA_shape2: float,
         sigmaA_rate: float,
@@ -267,7 +263,7 @@ class LPLModel(CoverageModel):
             t: Fraction of a year elapsed since the start of season at each data point.
             N_vax: Number of people vaccinated at each data point, or `None`.
             N_tot: Total number of people in the population at each data point.
-            group_levels: Numeric codes for groups: row = data point, col = group.
+            feature_levels: Numeric codes for feature levels: row = data point, col = feature.
             muA_shape1: Beta distribution shape1 parameter for muA prior.
             muA_shape2: Beta distribution shape2 parameter for muA prior.
             sigmaA_rate: Exponential distribution rate parameter for sigmaA prior.
@@ -289,21 +285,21 @@ class LPLModel(CoverageModel):
         D = numpyro.sample("D", dist.Gamma(D_shape, D_rate))
 
         sigmaA = numpyro.sample(
-            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(len(self.groups),)
+            "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(len(self.features),)
         )
         sigmaM = numpyro.sample(
-            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(len(self.groups),)
+            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(len(self.features),)
         )
         zA = numpyro.sample(
-            "zA", dist.Normal(0, 1), sample_shape=(sum(self.n_group_levels),)
+            "zA", dist.Normal(0, 1), sample_shape=(sum(self.n_feature_levels),)
         )
         zM = numpyro.sample(
-            "zM", dist.Normal(0, 1), sample_shape=(sum(self.n_group_levels),)
+            "zM", dist.Normal(0, 1), sample_shape=(sum(self.n_feature_levels),)
         )
 
         v = self._vgt(
             t=t,
-            group_levels=group_levels,
+            feature_levels=feature_levels,
             muA=muA,
             sigmaA=sigmaA,
             zA=zA,
@@ -316,24 +312,24 @@ class LPLModel(CoverageModel):
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
-    def _vgt(self, t, group_levels, muA, sigmaA, zA, muM, sigmaM, zM, K, tau):
+    def _vgt(self, t, feature_levels, muA, sigmaA, zA, muM, sigmaM, zM, K, tau):
         """Latent coverage v_g(t)"""
-        deltaA = zA * np.repeat(sigmaA, np.array(self.n_group_levels))
-        deltaM = zM * np.repeat(sigmaM, np.array(self.n_group_levels))
+        deltaA = zA * np.repeat(sigmaA, np.array(self.n_feature_levels))
+        deltaM = zM * np.repeat(sigmaM, np.array(self.n_feature_levels))
 
-        A = muA + np.sum(deltaA[group_levels], axis=1)
-        M = muM + np.sum(deltaM[group_levels], axis=1)
+        A = muA + np.sum(deltaA[feature_levels], axis=1)
+        M = muM + np.sum(deltaM[feature_levels], axis=1)
 
         return A / (1 + jnp.exp(-K * (t - tau))) + (M * t)  # type: ignore
 
     def fit(self) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
 
-        If grouping factors are specified, a hierarchical model will be built with
-        group-specific parameters for the logistic maximum and linear slope,
-        drawn from a shared distribution. Other parameters are non-hierarchical.
+        A hierarchical model is built with feature-level effects for logistic
+        maximum and linear slope, which induce group-specific trajectories.
+        Other parameters are non-hierarchical.
 
-        Uses the data, groups, model_params, and mcmc_params specified during
+        Uses the data, features, model_params, and mcmc_params specified during
         initialization.
 
         Returns:
@@ -385,8 +381,8 @@ class LPLModel(CoverageModel):
             [
                 self._vgt(
                     t=self.data["t"].to_numpy(),
-                    group_levels=self.enc.transform(
-                        self.data.select(self.groups).to_numpy()
+                    feature_levels=self.enc.transform(
+                        self.data.select(self.features).to_numpy()
                     ),
                     **{k: v[i,] for k, v in samples.items() if k != "D"},
                 )

@@ -37,7 +37,7 @@ if __name__ == "__main__":
     eos_abs_diff = iup.eos_abs_diff(
         obs=data.filter(pl.col("season") == pl.lit(forecast_season)),
         pred=pred.filter(pl.col("season") == pl.lit(forecast_season)),
-        grouping_factors=["season", "geography"],
+        features=["season", "geography"],
     )
 
     eos_abs_diff.write_parquet(args.output)
