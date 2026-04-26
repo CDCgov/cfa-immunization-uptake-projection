@@ -202,7 +202,7 @@ class LPLModel(CoverageModel):
                 season_geo=pl.concat_str(["season", "geography"], separator="_")
             )
             .with_columns(
-                elapsed=cls._days_in_season(
+                t=cls._days_in_season(
                     pl.col(date_column),
                     season_start_month=season_start_month,
                     season_start_day=season_start_day,
@@ -277,7 +277,7 @@ class LPLModel(CoverageModel):
 
         return self._logistic_plus_linear(
             N_vax=N_vax,
-            elapsed=jnp.array(data["elapsed"]),
+            t=jnp.array(data["t"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
             groups=jnp.array(
@@ -293,7 +293,7 @@ class LPLModel(CoverageModel):
     @staticmethod
     def _logistic_plus_linear(
         N_vax: jnp.ndarray | None,
-        elapsed: jnp.ndarray,
+        t: jnp.ndarray,
         N_tot: jnp.ndarray,
         groups: jnp.ndarray,
         n_groups: int,
@@ -314,7 +314,7 @@ class LPLModel(CoverageModel):
         """Fit a mixed Logistic Plus Linear model on training data.
 
         Args:
-            elapsed: Fraction of a year elapsed since the start of season at each data point.
+            t: Fraction of a year elapsed since the start of season at each data point.
             N_vax: Number of people vaccinated at each data point, or `None`.
             N_tot: Total number of people in the population at each data point.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
@@ -359,7 +359,7 @@ class LPLModel(CoverageModel):
         M = muM + np.sum(deltaM[groups], axis=1)
 
         # Calculate latent true coverage at each datum
-        v = A / (1 + jnp.exp(-K * (elapsed - tau))) + (M * elapsed)  # type: ignore
+        v = A / (1 + jnp.exp(-K * (t - tau))) + (M * t)  # type: ignore
 
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 

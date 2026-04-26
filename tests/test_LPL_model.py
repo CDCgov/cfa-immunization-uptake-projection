@@ -75,7 +75,7 @@ def test_preprocess(frame):
         "season",
         "N_vax",
         "season_geo",
-        "elapsed",
+        "t",
         "season_idx",
         "geography_idx",
         "season_geo_idx",
