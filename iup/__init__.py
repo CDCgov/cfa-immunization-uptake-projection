@@ -484,7 +484,7 @@ class RFModel(CoverageModel):
         data_pred = self.data.filter(pl.col("season") >= self.forecast_season)
 
         X_data = data_pred.select(self.X_features)
-        assert X_data.shape[0] > 0, f"RF prediction for {self.forecast_date} failed"
+        assert X_data.shape[0] > 0, f"RF prediction for {self.forecast_date} failed."
         X_pred = self.enc.encode(X_data)
 
         # make predictions using each tree
