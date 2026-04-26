@@ -5,6 +5,7 @@ This model proposes a latent true coverage curve, which is subject to observatio
 ## Terminology and notation
 
 - _feature_: A categorical feature of the data (e.g., season, geography) that partially determines coverage
+- _level_: A value taken on by a feature (e.g., New Jersey, or 2018/2019)
 - _group_: A unique combination of features (e.g., New Jersey in 2018/2019)
 - $t$: time since the start of the season, measured in $\text{year}^{-1}$
 - $n_{gt}$: number of people in group $g$, surveyed at time $t$. Drawn from the `sample_size` column of the NIS data; called `N_tot` in the codebase.
