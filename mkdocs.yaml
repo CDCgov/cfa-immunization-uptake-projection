@@ -5,7 +5,7 @@ nav:
   - lpl.md
   - api.md
 
-repo_url: https://github.com/CDCgov/cfa-immunization-uptake-projection
+repo_url: https://github.com/CDCgov/cfa-vaccination-coverage-forecasting
 repo_name: repo
 
 # advanced configuration ------------------------------------------------------

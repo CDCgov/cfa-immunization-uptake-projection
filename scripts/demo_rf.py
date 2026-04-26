@@ -1,5 +1,3 @@
-"""Random Forest demonstration script for immunization uptake projection."""
-
 import datetime
 from pathlib import Path
 from typing import Tuple
