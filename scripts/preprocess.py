@@ -66,6 +66,7 @@ def preprocess(
             pl.col("season").is_null().not_(),
         )
         .pipe(geo_filter)
+        .rename({"sample_size": "N_tot"})
     )
 
 
