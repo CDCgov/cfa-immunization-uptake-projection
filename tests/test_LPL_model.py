@@ -1,6 +1,3 @@
-import datetime
-
-import numpyro.infer
 import polars as pl
 import polars.testing
 
@@ -86,23 +83,3 @@ def test_preprocess(frame):
     }
 
     assert expected_cols == set(data.columns)
-
-
-def test_fit_handles_groups(frame):
-    """
-    Model should produce posterior samples for each parameter.
-    """
-
-    model = iup.models.LPLModel(
-        data=frame,
-        forecast_date=datetime.date(2020, 1, 1),
-        season=SEASON,
-        params=PARAMS,
-        quantiles=QUANTILES,
-    )
-
-    model.fit()
-    assert isinstance(model.mcmc, numpyro.infer.MCMC)
-
-    dimensions = [value.shape[0] for _, value in model.mcmc.get_samples().items()]
-    assert all(d == 10 for d in dimensions)

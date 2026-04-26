@@ -4,7 +4,6 @@ nav:
   - index.md
   - lpl.md
   - api.md
-  - gam.md
 
 repo_url: https://github.com/CDCgov/cfa-immunization-uptake-projection
 repo_name: repo
