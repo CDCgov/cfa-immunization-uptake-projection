@@ -4,12 +4,12 @@ import polars as pl
 import pytest
 from sklearn.ensemble import RandomForestRegressor
 
-from iup.models import RFModel
+import iup
 
 
 @pytest.fixture
 def rf(frame):
-    return RFModel(
+    return iup.RFModel(
         data=frame,
         season={
             "start_month": 7,

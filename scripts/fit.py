@@ -15,12 +15,11 @@ import polars as pl
 import yaml
 
 import iup
-import iup.models
 
 
 def fit_all_models(
     data: pl.DataFrame, forecast_date: dt.date, config: dict[str, Any]
-) -> dict[Tuple[str, dt.date], iup.models.CoverageModel]:
+) -> dict[Tuple[str, dt.date], iup.CoverageModel]:
     """Run all forecasts.
 
     Args:
@@ -38,9 +37,9 @@ def fit_all_models(
     all_models = {}
     for config_model in config["models"]:
         model_name = config_model["name"]
-        model_class = getattr(iup.models, model_name)
+        model_class = getattr(iup, model_name)
 
-        assert issubclass(model_class, iup.models.CoverageModel), (
+        assert issubclass(model_class, iup.CoverageModel), (
             f"{model_name} is not a valid model type!"
         )
 
