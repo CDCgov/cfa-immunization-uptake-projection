@@ -16,7 +16,7 @@ import polars as pl
 from jax import random
 from numpyro.infer import MCMC, NUTS, Predictive, init_to_sample
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from typing_extensions import Self
 
 
@@ -168,32 +168,8 @@ class LPLModel(CoverageModel):
         )
 
         # preprocess data
-        self.data = self._preprocess(
-            data=self.raw_data,
-            date_column=self.date_column,
-            season_start_month=self.season["start_month"],
-            season_start_day=self.season["start_day"],
-        )
-
-        # do the indexing
-        self.n_group_levels = [
-            self.data.select(pl.col(group).unique()).height
-            for group in ["season", "geography", "season_geo"]
-        ]
-
-        # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
-        self.mcmc = None
-
-    @classmethod
-    def _preprocess(
-        cls,
-        data: pl.DataFrame,
-        date_column: str,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> pl.DataFrame:
-        out = (
-            data
+        self.data = (
+            self.raw_data
             # prepare observation data
             .rename({"sample_size": "N_tot"})
             .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
@@ -202,44 +178,24 @@ class LPLModel(CoverageModel):
                 season_geo=pl.concat_str(["season", "geography"], separator="_")
             )
             .with_columns(
-                t=cls._days_in_season(
+                t=self._days_in_season(
                     pl.col(date_column),
-                    season_start_month=season_start_month,
-                    season_start_day=season_start_day,
+                    season_start_month=self.season["start_month"],
+                    season_start_day=self.season["start_day"],
                 )
                 / 365
             )
         )
 
-        # add the indices
-        out = cls._index(out, groups=["season", "geography", "season_geo"])
+        # set up encoder
+        self.groups = ("season", "geography", "season_geo")
+        self.enc = OrdinalEncoder(dtype=np.int64).fit(
+            self.data.select(self.groups).to_numpy()
+        )
+        self.n_group_levels = [len(x) for x in self.enc.categories_]
 
-        return out
-
-    @staticmethod
-    def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
-        """
-        For each column in `groups` (e.g., `"season"`), add a new column `"{group}_idx"`
-        (e.g., `"season_idx"`) that has the values in the original column replaced by
-        integer indices.
-
-        Args:
-            data: dataframe
-            groups: names of columns
-
-        Returns: dataframe with additional columns like `"{group}_idx"`
-        """
-        for group in groups:
-            unique_values = (
-                data.select(pl.col(group).unique().sort()).get_column(group).to_list()
-            )
-            indices = list(range(len(unique_values)))
-            replace_map = {value: index for value, index in zip(unique_values, indices)}
-            data = data.with_columns(
-                pl.col(group).replace_strict(replace_map).alias(f"{group}_idx")
-            )
-
-        return data
+        # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
+        self.mcmc = None
 
     @staticmethod
     def _days_in_season(
@@ -280,12 +236,8 @@ class LPLModel(CoverageModel):
             t=jnp.array(data["t"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
-            groups=jnp.array(
-                data.select(
-                    [f"{group}_idx" for group in ["season", "geography", "season_geo"]]
-                )
-            ),
-            n_groups=3,
+            groups=jnp.array(self.enc.transform(data.select(self.groups).to_numpy())),
+            n_groups=len(self.groups),
             n_group_levels=self.n_group_levels,
             **self.model_params,
         )
@@ -505,7 +457,7 @@ class RFModel(CoverageModel):
         return (year - ssy) * 12 + (date.month - self.season["start_month"])
 
     def fit(self) -> Self:
-        self.enc = Encoder().fit(self.data)
+        self.enc = RFEncoder().fit(self.data)
 
         self.X_features = ["season", "geography"] + [
             str(t)
@@ -575,7 +527,7 @@ class RFModel(CoverageModel):
         )
 
 
-class Encoder:
+class RFEncoder:
     def __init__(self, categorical_features: tuple = ("season", "geography")):
         self.categorical_features = categorical_features
         self.enc = OneHotEncoder(sparse_output=False)
