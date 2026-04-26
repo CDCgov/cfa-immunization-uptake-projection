@@ -191,7 +191,7 @@ class LPLModel(CoverageModel):
         self.enc = OrdinalEncoder(dtype=np.int64).fit(
             self.data.select(self.groups).to_numpy()
         )
-        self.n_group_levels = [len(x) for x in self.enc.categories_]
+        self.n_group_levels = [len(x) for x in self.enc.categories_]  # type: ignore
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
@@ -378,15 +378,22 @@ class LPLModel(CoverageModel):
         assert self.mcmc is not None
         # pull posterior samples for all parameters (except D) and get the desired quantile
         samples = self.mcmc.get_samples()
-        args = {k: np.quantile(v, q=q, axis=0) for k, v in samples.items() if k != "D"}
+        n_samples = len(samples["K"])
 
-        v = self._vgt(
-            t=self.data["t"].to_numpy(),
-            group_levels=self.enc.transform(self.data.select(self.groups).to_numpy()),
-            **args,
+        preds = np.stack(
+            [
+                self._vgt(
+                    t=self.data["t"].to_numpy(),
+                    group_levels=self.enc.transform(
+                        self.data.select(self.groups).to_numpy()
+                    ),
+                    **{k: v[i,] for k, v in samples.items() if k != "D"},
+                )
+                for i in range(n_samples)
+            ]
         )
 
-        return np.array(v, dtype=np.float64)
+        return np.quantile(preds, q=q, axis=0).astype(np.float64)
 
 
 class RFModel(CoverageModel):
