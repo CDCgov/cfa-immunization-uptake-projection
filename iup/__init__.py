@@ -16,6 +16,7 @@ import polars as pl
 from jax import random
 from numpyro.infer import MCMC, NUTS, init_to_sample
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import KNNImputer
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from typing_extensions import Self
 
@@ -427,11 +428,8 @@ class RFModel(CoverageModel):
         self.data = (
             data_t.select(["season", "geography", "t", "estimate"])
             .pivot(on="t", values="estimate", sort_columns=True)
-            # impute zero uptake at start of season
-            .with_columns(pl.coalesce(pl.col("0"), 0.0))
-            # drop season/geo's with any other missing values
-            .drop_nulls()
             .sort(["season", "geography"])
+            .pipe(self._impute)
         )
 
         self.forecast_season = pl.select(
@@ -444,6 +442,24 @@ class RFModel(CoverageModel):
             )
         ).item()
         self.forecast_month = self._month_in_season(self.forecast_date)
+
+    @staticmethod
+    def _impute(
+        df: pl.DataFrame, index_cols: tuple[str, ...] = ("season", "geography")
+    ):
+        to_impute_df = df.drop(index_cols)
+        imputed_np = KNNImputer(n_neighbors=2).fit_transform(to_impute_df.to_numpy())
+        imputed_df = pl.concat(
+            [
+                df.select(index_cols),
+                pl.DataFrame(imputed_np, schema=to_impute_df.columns),
+            ],
+            how="horizontal",
+        )
+        assert imputed_df.null_count().sum_horizontal().item() == 0, (
+            "Null remaining in data"
+        )
+        return imputed_df
 
     def _month_in_season(self, date: datetime.date) -> int:
         assert date.day == 1
