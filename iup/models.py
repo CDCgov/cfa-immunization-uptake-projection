@@ -91,11 +91,23 @@ class LPLModel(CoverageModel):
         )
 
         # preprocess data
-        self.data = self._preprocess(
-            data=self.raw_data,
-            date_column=self.date_column,
-            season_start_month=self.season["start_month"],
-            season_start_day=self.season["start_day"],
+        self.data = (
+            self.raw_data
+            # prepare observation data
+            .rename({"sample_size": "N_tot"})
+            .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
+            # add interaction term
+            .with_columns(
+                season_geo=pl.concat_str(["season", "geography"], separator="_")
+            )
+            .with_columns(
+                t=self._days_in_season(
+                    pl.col(date_column),
+                    season_start_month=self.season["start_month"],
+                    season_start_day=self.season["start_day"],
+                )
+            )
+            .pipe(self._index, groups=["season", "geography", "season_geo"])
         )
 
         # do the indexing
@@ -106,38 +118,6 @@ class LPLModel(CoverageModel):
 
         # initialize MCMC. `None` is a placeholder indicating fitting has not occurred
         self.mcmc = None
-
-    @classmethod
-    def _preprocess(
-        cls,
-        data: pl.DataFrame,
-        date_column: str,
-        season_start_month: int,
-        season_start_day: int,
-    ) -> pl.DataFrame:
-        out = (
-            data
-            # prepare observation data
-            .rename({"sample_size": "N_tot"})
-            .with_columns(N_vax=(pl.col("N_tot") * pl.col("estimate")).round(0))
-            # add interaction term
-            .with_columns(
-                season_geo=pl.concat_str(["season", "geography"], separator="_")
-            )
-            .with_columns(
-                elapsed=cls._days_in_season(
-                    pl.col(date_column),
-                    season_start_month=season_start_month,
-                    season_start_day=season_start_day,
-                )
-                / 365
-            )
-        )
-
-        # add the indices
-        out = cls._index(out, groups=["season", "geography", "season_geo"])
-
-        return out
 
     @staticmethod
     def _index(data: pl.DataFrame, groups: list[str]) -> pl.DataFrame:
@@ -200,7 +180,7 @@ class LPLModel(CoverageModel):
 
         return self._logistic_plus_linear(
             N_vax=N_vax,
-            elapsed=jnp.array(data["elapsed"]),
+            t=jnp.array(data["t"]),
             # jax runs into a problem if you don't specify this type
             N_tot=jnp.array(data["N_tot"], dtype=jnp.int32),
             groups=jnp.array(
@@ -216,7 +196,7 @@ class LPLModel(CoverageModel):
     @staticmethod
     def _logistic_plus_linear(
         N_vax: jnp.ndarray | None,
-        elapsed: jnp.ndarray,
+        t: jnp.ndarray,
         N_tot: jnp.ndarray,
         groups: jnp.ndarray,
         n_groups: int,
@@ -228,16 +208,16 @@ class LPLModel(CoverageModel):
         tau_shape2: float,
         K_shape: float,
         K_rate: float,
-        muM_shape: float,
-        muM_rate: float,
-        sigmaM_rate: float,
+        f_shape1: float,
+        f_shape2: float,
         D_shape: float,
         D_rate: float,
+        T: float,
     ):
         """Fit a mixed Logistic Plus Linear model on training data.
 
         Args:
-            elapsed: Fraction of a year elapsed since the start of season at each data point.
+            t: Days since the start of season
             N_vax: Number of people vaccinated at each data point, or `None`.
             N_tot: Total number of people in the population at each data point.
             groups: Numeric codes for groups: row = data point, col = grouping factor.
@@ -258,33 +238,27 @@ class LPLModel(CoverageModel):
         """
         # Sample the overall average value for each parameter
         muA = numpyro.sample("muA", dist.Beta(muA_shape1, muA_shape2))
-        muM = numpyro.sample("muM", dist.Gamma(muM_shape, muM_rate))
         tau = numpyro.sample("tau", dist.Beta(tau_shape1, tau_shape2))
         K = numpyro.sample("K", dist.Gamma(K_shape, K_rate))
-        D = numpyro.sample("d", dist.Gamma(D_shape, D_rate))
+        D = numpyro.sample("D", dist.Gamma(D_shape, D_rate))
 
         sigmaA = numpyro.sample(
             "sigmaA", dist.Exponential(sigmaA_rate), sample_shape=(n_groups,)
         )
-        sigmaM = numpyro.sample(
-            "sigmaM", dist.Exponential(sigmaM_rate), sample_shape=(n_groups,)
-        )
-        zA = numpyro.sample(
-            "zA", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
-        )
-        zM = numpyro.sample(
-            "zM", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),)
-        )
-        deltaA = zA * np.repeat(sigmaA, np.array(n_group_levels))
-        deltaM = zM * np.repeat(sigmaM, np.array(n_group_levels))
+        z = numpyro.sample("z", dist.Normal(0, 1), sample_shape=(sum(n_group_levels),))
+        a = z * np.repeat(sigmaA, np.array(n_group_levels))
+        A = muA + np.sum(a[groups], axis=1)
 
-        A = muA + np.sum(deltaA[groups], axis=1)
-        M = muM + np.sum(deltaM[groups], axis=1)
+        f = numpyro.sample("f", dist.Beta(f_shape1, f_shape2))
 
         # Calculate latent true coverage at each datum
-        v = A / (1 + jnp.exp(-K * (elapsed - tau))) + (M * elapsed)  # type: ignore
+        v = A * (
+            (1.0 + jnp.exp(-K * T * (1.0 - tau)))
+            / (1 + jnp.exp(-K * T * (t / T - tau)))
+            + f * t / T
+        )
 
-        numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
+        numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)
 
     def fit(self) -> Self:
         """Fit a mixed Logistic Plus Linear model on training data.
@@ -308,6 +282,11 @@ class LPLModel(CoverageModel):
 
         if "progress_bar" in self.mcmc_params and self.mcmc_params["progress_bar"]:
             self.mcmc.print_summary()
+
+        import pickle
+
+        with open("tmp_model.pkl", "wb") as f:
+            pickle.dump(self.mcmc, f)
 
         return self
 

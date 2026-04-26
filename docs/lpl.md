@@ -16,9 +16,7 @@ For example, let the features be season and geography, in that order. Let group 
 
 ## Model overview
 
-For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a sum of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$). The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups (including across seasons). The height $A_g$ of the logistic curve is a grand mean $\mu_A$ plus effects $\delta_{A,j,z_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
-
-The slopes $M_g$ follow a similar pattern.
+For each group $g$ (e.g., season and geography), the latent coverage $v_g(t)$ is assumed to be a mixture of a logistic curve (i.e., the rate incident vaccination looks like a bell curve) and a linear increase (with intercept fixed at $t=0$), reaching coverage $A_g$ at time $T$. The shape parameter $K$ and midpoint $\tau$ of the logistic curve are assumed to be common to all groups. The coverage $A_g$ is a grand mean $\mu_A$ plus effects $a_{jz_{gj}}$ for each feature $j$ and value $z_{gj}$ of that feature for that group. For example, the $A_g$ for Alaska in 2018/2019 will be the grand mean $\mu_A$, plus the Alaska effect, plus the 2018/2019 effect. There are no cross-terms.
 
 The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $v_g(t) \cdot n_{gt}$, with variance modified by an extra parameter $D$.
 
@@ -27,18 +25,16 @@ The actual observations $x_{gt}$ are beta-binomial-distributed around the mean $
 ```math
 \begin{align*}
 x_{gt} &\sim \mathrm{BetaBinom}\big(v_g(t) \cdot D, [1-v_g(t)] \cdot D, n_{gt}\big) \\
-v_g(t) &= \frac{A_g}{1 + \exp\{- K \cdot (t - \tau)\}} + M_g t \\
-A_g &= \mu_A + \sum_j \delta_{Aj z_{gj}} \\
-M_g &= \mu_M + \sum_j \delta_{Mj z_{gj}} \\
+v_g(t) &= A_g \left[ (1-f) \frac{1+ \exp\{-K \cdot (T-\tau)\}}{1 + \exp\{-K \cdot (t-\tau)\}} + f \frac{t}{T} \right] \\
+A_g &= \mu_A + \sum_j a_{j z_{gj}} \\
 \mu_A &\sim \text{Beta}(100.0, 180.0) \\
-\mu_M &\sim \text{Gamma}(\text{shape} = 1.0, \text{rate} = 10.0) \\
-\delta_{Ajk} &\sim \mathcal{N}(0, \sigma_{Aj}) \\
-\delta_{Mjk} &\sim \mathcal{N}(0, \sigma_{Mj}) \\
-\sigma_{Aj} &\sim \text{Exp}(40.0) \\
-\sigma_{Mj} &\sim \text{Exp}(40.0) \\
+a_{jk} &\sim \mathcal{N}(0, \sigma_j) \\
+\sigma_j &\sim \text{Exp}(40.0) \\
+f &\sim \text{Beta}(1.0, 1.0) \\
 K &\sim \text{Gamma}(\text{shape} = 25.0, \text{rate} = 1.0) \\
 \tau &\sim \text{Beta}(100.0, 225.0) \\
 D &\sim \text{Gamma}(\text{shape} = 350.0, \text{rate} = 1.0) \\
+T &= 275.0
 \end{align*}
 ```
 
