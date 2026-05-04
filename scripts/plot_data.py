@@ -45,6 +45,17 @@ def add_medians(
     value_col: str = "estimate",
     type_col: str = "type",
 ) -> pl.DataFrame:
+    """Append group medians to raw values for median-overlay plots.
+
+    Args:
+        df: Input long-format data.
+        group_by: Column used to compute medians.
+        value_col: Numeric value column. Defaults to "estimate".
+        type_col: Marker column identifying datum vs median rows.
+
+    Returns:
+        Data frame containing original points and one median per group.
+    """
     return pl.concat(
         [
             df.with_columns(pl.lit("datum").alias(type_col)).select(
@@ -58,6 +69,14 @@ def add_medians(
 
 
 def month_order(season_start_month: int) -> list[str]:
+    """Return month abbreviations ordered by the configured season start.
+
+    Args:
+        season_start_month: First month of the season as an integer from 1 to 12.
+
+    Returns:
+        List of 12 month abbreviations in seasonal order.
+    """
     return [
         calendar.month_abbr[i]
         for i in list(range(season_start_month, 12 + 1))
@@ -93,7 +112,18 @@ def gather_n(df: pl.DataFrame, n: int, col_name="_idx") -> pl.DataFrame:
 
 
 def hightlight_state(df, month, order_n, value="score_value", state_var="geography"):
-    """Return a dic with a list of states (n = order_n) that has lowest score(best) and highest score(worst) at a given month"""
+    """Select best and worst states for a month based on score values.
+
+    Args:
+        df: Score data with month and geography columns.
+        month: Month to filter on.
+        order_n: Number of states to include per group.
+        value: Score column used for ranking (lower is better).
+        state_var: Column containing state or geography labels.
+
+    Returns:
+        Dictionary with keys "best" and "worst" containing state lists.
+    """
     sorted_state = (
         df.filter(pl.col("month") == month)
         .sort(pl.col(value))
