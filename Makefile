@@ -27,9 +27,6 @@ EQ = =
 .PHONY: clean viz dx
 
 all: $(CONFIG_COPY) $(PLOT_DATA) $(PLOT_PREDS) $(PLOT_SCORES) $(FITS)
-viz:
-	streamlit run scripts/viz.py -- \
-		--data=$(DATA) --preds=$(PRED_DIR) --scores=$(SCORES) --config=$(CONFIG)
 
 $(PLOT_SCORES): scripts/plot_scores.py $(SCORES) $(CONFIG)
 	python $< --scores=$(SCORES) --config=$(CONFIG) --output=$@
