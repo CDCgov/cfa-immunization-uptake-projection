@@ -30,10 +30,10 @@ For convenience, the raw data are tracked in this repo under `data/`, which incl
 2. Inspect `output/vignette/`:
    - `config.yaml`: a copy of the input config
    - `data.parquet`: the preprocessed, observed data
-   - `fits/`: pickled model fits, organized by forecast date
-   - `pred/`: model predictions, in Hive-partitioned parquet files
    - `scores.parquet`: model scores
-3. Run `make viz` for interactive visualization of those results.
+   - `fits/`: pickled model fits, organized by forecast date
+   - `plots/`: visualizations
+   - `pred/`: model predictions, in Hive-partitioned parquet files
 
 ### Vignette workflow
 
@@ -47,7 +47,6 @@ preprocess[/scripts/preprocess.py/];
 fit[/scripts/fit.py/];
 predict[/scripts/predict.py/];
 eval[/scripts/eval.py/];
-viz[/Streamlit and other viz/];
 
 data/raw.parquet --> preprocess --> data --> fit --> output/RUN_ID/fits/fit_DATE.pkl --> predict --> pred;
 
