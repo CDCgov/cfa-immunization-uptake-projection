@@ -151,7 +151,7 @@ class LPLModel(CoverageModel):
         quantiles: list[float],
         date_column: str = "time_end",
     ):
-        """Initialize Logistic Plus Linear model and preprocessing pipeline.
+        """Initialize Logistic Plus Linear model.
 
         Args:
             data: Cumulative coverage data for fitting and prediction.
@@ -249,9 +249,6 @@ class LPLModel(CoverageModel):
         Args:
             data: Preprocessed data with columns t, N_tot, feature columns, and
                 optionally N_vax for observed likelihood evaluation.
-
-        Returns:
-            NumPyro model trace contribution from logistic-plus-linear likelihood.
         """
         if "N_vax" in data.columns:
             N_vax = jnp.array(data["N_vax"])
@@ -501,7 +498,7 @@ class RFModel(CoverageModel):
     def _impute(
         df: pl.DataFrame, index_cols: tuple[str, ...] = ("season", "geography")
     ):
-        """Impute missing month-level estimates using nearest-neighbor imputation.
+        """Impute missing estimates using nearest-neighbor imputation.
 
         Args:
             df: Wide data frame to impute.
@@ -552,7 +549,7 @@ class RFModel(CoverageModel):
         Returns:
             Self with fitted encoder and random forest model.
         """
-        self.enc = RFEncoder().fit(self.data)
+        self.enc = _RFEncoder().fit(self.data)
 
         self.X_features = ["season", "geography"] + [
             str(t)
@@ -637,8 +634,8 @@ class RFModel(CoverageModel):
         )
 
 
-class RFEncoder:
-    """One-hot encoder wrapper for random-forest categorical predictors."""
+class _RFEncoder:
+    """One-hot encoder wrapper for random forest categorical predictors."""
 
     def __init__(self, categorical_features: tuple = ("season", "geography")):
         """Configure categorical features for encoding.
