@@ -2,8 +2,6 @@
 
 _Formerly known as Immunization Uptake Projections, or `vcf`._
 
-This repo represents an experimental prototype for forecasting the coverage of vaccinations.
-
 ## Getting started
 
 1. Read the docs at <https://cdcgov.github.io/cfa-vaccination-coverage-forecasting>, or build them locally with `mkdocs serve`
@@ -12,21 +10,21 @@ This repo represents an experimental prototype for forecasting the coverage of v
 
 ## Vignette
 
-The vignette demonstrates a workflow using this package:
+The vignette demonstrates an analytical pipeline:
 
-1. Fit a model to coverage data from past seasons
-1. Use it to forecast future coverage data in the latest season
+1. Fit models to coverage data from past seasons
+1. Use those trained models to forecast future coverage data in the latest season
 1. Evaluate forecasts against observed values
 
 ### Data source
 
-For convenience, the raw data are tracked in this repo under `data/`, which includes the script `get_nis.py`, used to collect that data with [`nis-py-api`](https://github.com/CDCgov/nis-py-api). These are estimates of season flu vaccination coverage, tracked monthly from the 2009/2010 to 2022/2023 seasons, from the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html) and [Behavioral Risk Factor Surveillance System](https://www.cdc.gov/brfss/index.html).
+The vignette uses monthly estimates of season flu vaccination coverage, from the 2009/2010 season through the 2022/2023 season, as reported by the [National Immunization Survey](https://www.cdc.gov/nis/about/index.html) and [Behavioral Risk Factor Surveillance System](https://www.cdc.gov/brfss/index.html) and cleaned using [`nis-py-api`](https://github.com/CDCgov/nis-py-api) in December 2025.
 
 ### Running the vignette
 
 1. Run the pipeline with `make`. (You can run steps in parallel with, e.g., `make -j4`.)
    - By default, `make` will use `scripts/config_vignette.yaml` for its configuration.
-   - You can use different configs by running `make CONFIG=/path/to/config.yaml`
+   - You can use different configs by running `make CONFIG=/path/to/config.yaml`.
 2. Inspect `output/vignette/`:
    - `config.yaml`: a copy of the input config
    - `data.parquet`: the preprocessed, observed data
@@ -35,7 +33,7 @@ For convenience, the raw data are tracked in this repo under `data/`, which incl
    - `plots/`: visualizations
    - `pred/`: model predictions, in Hive-partitioned parquet files
 
-### Vignette workflow
+### Analysis pipeline
 
 ```mermaid
 flowchart TB;
@@ -47,6 +45,8 @@ preprocess[/scripts/preprocess.py/];
 fit[/scripts/fit.py/];
 predict[/scripts/predict.py/];
 eval[/scripts/eval.py/];
+viz[/scripts/plot_*.py/];
+plots[/output/RUN_ID/plots/*.svg/]
 
 data/raw.parquet --> preprocess --> data --> fit --> output/RUN_ID/fits/fit_DATE.pkl --> predict --> pred;
 
@@ -56,6 +56,7 @@ pred--> eval -->scores;
 data --> viz;
 pred --> viz;
 scores --> viz;
+viz --> plots;
 ```
 
 ## Disclaimers

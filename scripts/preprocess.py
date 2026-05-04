@@ -20,24 +20,33 @@ def preprocess(
     date_col: str = "time_end",
 ) -> pl.DataFrame:
     """
-    Preprocess the raw data (Filter the raw data with certain states and seasons, add season column).
+    Filter and standardize raw coverage data for modeling.
+
+    This function:
+    - keeps admin1 geographies (excluding specified territories),
+    - derives a season label from dates,
+    - keeps rows within [start_year, end_year] and in-season only,
+    - optionally filters to a geography subset,
+    - renames sample_size to N_tot.
 
     Args:
-        raw_data: Raw Lazy data frame
-        season_start_year: The year of the first season to include in the data.
+        raw_data: Input data with geography, geography_type, date, and sample_size columns.
+        start_year: First calendar year to retain.
+        end_year: Last calendar year to retain.
         season_start_month: The month of the first season to include in the data.
         season_start_day: The day of the first season to include in the data.
-        season_end_year: The year of the last season to include in the data.
         season_end_month: The month of the last season to include in the data.
         season_end_day: The day of the last season to include in the data.
         geographies: List of geographies to include in the data. If None, include all geographies.
+        date_col: Name of the date column. Defaults to "time_end".
 
     Returns:
-        Preprocessed data frame ready for downstreamed process for two models.
+        Preprocessed data frame ready for model fitting and prediction.
 
     """
 
     def geo_filter(df: pl.DataFrame) -> pl.DataFrame:
+        """Optionally retain rows belonging to selected geographies."""
         if geographies is None:
             return df
         else:

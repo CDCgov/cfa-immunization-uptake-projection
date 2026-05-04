@@ -106,14 +106,33 @@ class CoverageModel(abc.ABC):
         season: dict[str, Any],
         quantiles: list[float],
     ):
+        """Initialize a coverage forecasting model.
+
+        Args:
+            data: Input observations used for fitting and/or prediction.
+            forecast_date: Training cutoff date.
+            params: Model-specific parameter configuration.
+            season: Seasonal boundary configuration (start/end month/day).
+            quantiles: Quantiles to return during prediction.
+        """
         pass
 
     @abc.abstractmethod
-    def fit(self):
+    def fit(self) -> Self:
+        """Fit model parameters using available training data.
+
+        Returns:
+            Fitted model instance.
+        """
         pass
 
     @abc.abstractmethod
     def predict(self) -> pl.DataFrame:
+        """Generate predictions for configured quantiles.
+
+        Returns:
+            Data frame containing forecasts and identifying metadata.
+        """
         pass
 
 
@@ -132,13 +151,17 @@ class LPLModel(CoverageModel):
         quantiles: list[float],
         date_column: str = "time_end",
     ):
-        """Initialize with a seed and the model structure.
+        """Initialize Logistic Plus Linear model and preprocessing pipeline.
 
         Args:
             data: Cumulative coverage data for fitting and prediction.
-            forecast_date: Date to split fit and prediction data.
-            params: All parameters including parameter names and values to specify prior distributions, Control parameters for MCMC fitting, and season start month and day
-            quantiles: Posterior sample quantiles
+            forecast_date: Date used to split training and forecast periods.
+            params: Model and sampler settings. Includes prior hyperparameters
+                consumed by _logistic_plus_linear and MCMC controls such as
+                num_warmup, num_samples, num_chains, progress_bar, and seed.
+            season: Seasonal settings with start_month, start_day, end_month,
+                and end_day.
+            quantiles: Posterior quantiles to report.
             date_column: Name of the date column in the data. Defaults to "time_end".
         """
         self.raw_data = data
@@ -221,6 +244,15 @@ class LPLModel(CoverageModel):
         return (date - season_start).dt.total_days()
 
     def model(self, data: pl.DataFrame):
+        """Build the NumPyro model call for a given data slice.
+
+        Args:
+            data: Preprocessed data with columns t, N_tot, feature columns, and
+                optionally N_vax for observed likelihood evaluation.
+
+        Returns:
+            NumPyro model trace contribution from logistic-plus-linear likelihood.
+        """
         if "N_vax" in data.columns:
             N_vax = jnp.array(data["N_vax"])
         else:
@@ -313,7 +345,23 @@ class LPLModel(CoverageModel):
         numpyro.sample("obs", dist.BetaBinomial(v * D, (1 - v) * D, N_tot), obs=N_vax)  # type: ignore
 
     def _vgt(self, t, feature_levels, muA, sigmaA, zA, muM, sigmaM, zM, K, tau):
-        """Latent coverage v_g(t)"""
+        """Compute latent coverage trajectory v_g(t) for each row.
+
+        Args:
+            t: Time since season start in years.
+            feature_levels: Encoded feature-level indices for each row.
+            muA: Global intercept mean.
+            sigmaA: Feature-level intercept scales.
+            zA: Standard-normal offsets for intercept effects.
+            muM: Global linear slope mean.
+            sigmaM: Feature-level slope scales.
+            zM: Standard-normal offsets for slope effects.
+            K: Logistic growth rate.
+            tau: Logistic midpoint.
+
+        Returns:
+            Vector of latent coverage means for each row.
+        """
         deltaA = zA * np.repeat(sigmaA, np.array(self.n_feature_levels))
         deltaM = zM * np.repeat(sigmaM, np.array(self.n_feature_levels))
 
@@ -403,6 +451,16 @@ class RFModel(CoverageModel):
         quantiles: list[float],
         date_column: str = "time_end",
     ):
+        """Initialize random-forest forecasting model and feature matrices.
+
+        Args:
+            data: Input coverage data with season, geography, date, and estimate.
+            params: Random forest settings and auxiliary configuration.
+            season: Seasonal settings used to compute month index.
+            forecast_date: Cutoff date for train/predict split.
+            quantiles: Quantiles to compute from tree-level predictions.
+            date_column: Date column name. Defaults to "time_end".
+        """
         self.raw_data = data
         self.date_column = date_column
         self.forecast_date = forecast_date
@@ -443,6 +501,15 @@ class RFModel(CoverageModel):
     def _impute(
         df: pl.DataFrame, index_cols: tuple[str, ...] = ("season", "geography")
     ):
+        """Impute missing month-level estimates using nearest-neighbor imputation.
+
+        Args:
+            df: Wide data frame to impute.
+            index_cols: Non-numeric identifying columns to preserve.
+
+        Returns:
+            Data frame with missing numeric values imputed.
+        """
         to_impute_df = df.drop(index_cols)
         imputed_np = KNNImputer(n_neighbors=2).fit_transform(to_impute_df.to_numpy())
         imputed_df = pl.concat(
@@ -458,6 +525,14 @@ class RFModel(CoverageModel):
         return imputed_df
 
     def _month_in_season(self, date: datetime.date) -> int:
+        """Convert a date into zero-based month index within the season.
+
+        Args:
+            date: First day of a month.
+
+        Returns:
+            Month offset from season start.
+        """
         assert date.day == 1
         year = date.year
         # start of a season that's in this year
@@ -472,6 +547,11 @@ class RFModel(CoverageModel):
         return (year - ssy) * 12 + (date.month - self.season["start_month"])
 
     def fit(self) -> Self:
+        """Fit random forest on seasons before the forecast season.
+
+        Returns:
+            Self with fitted encoder and random forest model.
+        """
         self.enc = RFEncoder().fit(self.data)
 
         self.X_features = ["season", "geography"] + [
@@ -499,6 +579,11 @@ class RFModel(CoverageModel):
         return self
 
     def predict(self) -> pl.DataFrame:
+        """Generate quantile forecasts using fitted random forest trees.
+
+        Returns:
+            Long-format forecast data frame with quantile-specific estimates.
+        """
         # make the forecast
         data_pred = self.data.filter(pl.col("season") >= self.forecast_season)
 
@@ -523,6 +608,16 @@ class RFModel(CoverageModel):
     def _postprocess(
         self, data_pred: pl.DataFrame, y_pred: np.ndarray, quantile: float
     ) -> pl.DataFrame:
+        """Reshape RF output into standardized forecast schema.
+
+        Args:
+            data_pred: Input rows being forecast.
+            y_pred: Predicted month values in wide numeric array form.
+            quantile: Quantile label attached to the prediction.
+
+        Returns:
+            Long-format forecast data frame with season/date metadata.
+        """
         if len(y_pred.shape) == 1:
             y_pred = y_pred.reshape(-1, 1)
 
@@ -543,15 +638,38 @@ class RFModel(CoverageModel):
 
 
 class RFEncoder:
+    """One-hot encoder wrapper for random-forest categorical predictors."""
+
     def __init__(self, categorical_features: tuple = ("season", "geography")):
+        """Configure categorical features for encoding.
+
+        Args:
+            categorical_features: Columns to one-hot encode.
+        """
         self.categorical_features = categorical_features
         self.enc = OneHotEncoder(sparse_output=False)
 
     def fit(self, data: pl.DataFrame) -> Self:
+        """Fit encoder categories from training data.
+
+        Args:
+            data: Training data containing categorical feature columns.
+
+        Returns:
+            Self with fitted OneHotEncoder.
+        """
         self.enc.fit(data.select(self.categorical_features).to_numpy())
         return self
 
     def encode(self, data: pl.DataFrame) -> np.ndarray:
+        """Encode categorical features and append non-categorical features.
+
+        Args:
+            data: Input data to transform.
+
+        Returns:
+            Numpy design matrix for model inference or fitting.
+        """
         X_enc = self.enc.transform(data.select(self.categorical_features).to_numpy())
         X_pass = data.drop(self.categorical_features).to_numpy()
 
