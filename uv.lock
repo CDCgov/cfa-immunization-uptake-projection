@@ -1392,7 +1392,6 @@ dependencies = [
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "typing-extensions" },
     { name = "vl-convert-python" },
 ]
 
@@ -1418,7 +1417,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "scikit-learn", specifier = ">=1.5.2,<2" },
     { name = "scipy", specifier = ">=1.15.3" },
-    { name = "typing-extensions", specifier = ">=4.12.2,<5" },
     { name = "vl-convert-python", specifier = ">=1.7.0,<2" },
 ]
 
